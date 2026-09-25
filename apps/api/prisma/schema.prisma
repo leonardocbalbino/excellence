@@ -48,6 +48,11 @@ model Company {
   workSchedules       WorkSchedule[]
   holidays            Holiday[]
   scheduleAssignments EmployeeScheduleAssignment[]
+  clockSettings       ClockSettings?
+  nsrCounter          NsrCounter?
+  timeEntries         TimeEntry[]
+  adjustmentRequests  TimeAdjustmentRequest[]
+  idempotencyKeys     IdempotencyKey[]
 
   @@map("companies")
 }
@@ -319,6 +324,7 @@ model Unit {
   employees   Employee[]
   roleScopes  RoleScope[]
   holidays    Holiday[]
+  timeEntries TimeEntry[]
 
   @@unique([companyId, code])
   @@unique([id, companyId])
@@ -419,6 +425,8 @@ model Employee {
   manager             Employee?                    @relation("EmployeeManager", fields: [managerId, companyId], references: [id, companyId], onDelete: Restrict)
   reports             Employee[]                   @relation("EmployeeManager")
   scheduleAssignments EmployeeScheduleAssignment[]
+  timeEntries         TimeEntry[]
+  adjustmentRequests  TimeAdjustmentRequest[]
 
   @@unique([userId, companyId])
   @@unique([companyId, cpf])
@@ -558,4 +566,168 @@ model EmployeeScheduleAssignment {
   @@index([companyId, employeeId, startDate])
   @@index([scheduleId])
   @@map("employee_schedule_assignments")
+}
+
+// ─── Ponto — ADR 0012 ───────────────────────────────────────────────────────────────
+
+enum ClockOutsideGeofence {
+  allow
+  block
+
+  @@map("clock_outside_geofence")
+}
+
+/// Parâmetros do ponto por empresa (regras que dependem de decisão: pendências P-008/P-015).
+model ClockSettings {
+  companyId         String               @id @map("company_id") @db.Uuid
+  // Marcação fora da cerca virtual: aceitar e sinalizar, ou recusar.
+  outsideGeofence   ClockOutsideGeofence @default(allow) @map("outside_geofence")
+  requireLocation   Boolean              @default(false) @map("require_location")
+  requireSelfie     Boolean              @default(false) @map("require_selfie")
+  // Janela (minutos) após o fim de um turno que vira a meia-noite em que a marcação ainda
+  // pertence ao dia de trabalho anterior (atribuição ao dia no espelho).
+  overnightGraceMin Int                  @default(240) @map("overnight_grace_minutes") @db.SmallInt
+  updatedAt         DateTime             @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  company Company @relation(fields: [companyId], references: [id])
+
+  @@map("clock_settings")
+}
+
+/// Contador de NSR (número sequencial de registro) por empresa.
+model NsrCounter {
+  companyId String @id @map("company_id") @db.Uuid
+  lastNsr   BigInt @default(0) @map("last_nsr")
+
+  company Company @relation(fields: [companyId], references: [id])
+
+  @@map("nsr_counters")
+}
+
+enum TimeEntryKind {
+  // Marcação feita pelo funcionário.
+  clock
+  // Marcação incluída por ajuste aprovado.
+  inclusion
+  // Desconsideração de uma marcação anterior (que continua gravada).
+  disregard
+
+  @@map("time_entry_kind")
+}
+
+enum GeofenceStatus {
+  inside
+  outside
+  no_location
+  no_fence
+
+  @@map("geofence_status")
+}
+
+/// Marcações de ponto. Append-only (trigger): correção é um novo registro que referencia o
+/// original. Hash encadeado por funcionário (regra 3). Horário oficial = servidor, UTC.
+model TimeEntry {
+  id                  String         @id @default(uuid(7)) @db.Uuid
+  companyId           String         @map("company_id") @db.Uuid
+  employeeId          String         @map("employee_id") @db.Uuid
+  unitId              String         @map("unit_id") @db.Uuid
+  nsr                 BigInt
+  kind                TimeEntryKind
+  // Horário oficial (servidor, UTC). Na inclusão, o horário aprovado no ajuste.
+  recordedAt          DateTime       @map("recorded_at") @db.Timestamptz(6)
+  // Horário informado pelo dispositivo: só para auditoria.
+  deviceRecordedAt    DateTime?      @map("device_recorded_at") @db.Timestamptz(6)
+  // Marcação desconsiderada (kind = disregard).
+  referencesEntryId   String?        @map("references_entry_id") @db.Uuid
+  adjustmentRequestId String?        @map("adjustment_request_id") @db.Uuid
+  latitude            Float?
+  longitude           Float?
+  accuracyMeters      Float?         @map("accuracy_meters")
+  distanceMeters      Float?         @map("distance_meters")
+  geofenceStatus      GeofenceStatus @map("geofence_status")
+  selfieFileId        String?        @map("selfie_file_id") @db.Uuid
+  source              String
+  ipAddress           String?        @map("ip_address")
+  userAgent           String?        @map("user_agent")
+  createdBy           String         @map("created_by") @db.Uuid
+  previousHash        String?        @map("previous_hash")
+  hash                String         @unique
+  createdAt           DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  company    Company     @relation(fields: [companyId], references: [id])
+  employee   Employee    @relation(fields: [employeeId, companyId], references: [id, companyId], onDelete: Restrict)
+  unit       Unit        @relation(fields: [unitId, companyId], references: [id, companyId], onDelete: Restrict)
+  references TimeEntry?  @relation("EntryReference", fields: [referencesEntryId, companyId], references: [id, companyId], onDelete: Restrict)
+  disregards TimeEntry[] @relation("EntryReference")
+
+  @@unique([companyId, nsr])
+  @@unique([id, companyId])
+  @@index([companyId, employeeId, recordedAt])
+  @@map("time_entries")
+}
+
+enum AdjustmentType {
+  // Incluir marcação que faltou.
+  include
+  // Desconsiderar marcação existente.
+  disregard
+
+  @@map("adjustment_type")
+}
+
+enum AdjustmentStatus {
+  pending
+  approved
+  rejected
+  cancelled
+
+  @@map("adjustment_status")
+}
+
+/// Solicitação de ajuste de ponto. Aprovada, gera a marcação correspondente em time_entries.
+model TimeAdjustmentRequest {
+  id            String           @id @default(uuid(7)) @db.Uuid
+  companyId     String           @map("company_id") @db.Uuid
+  employeeId    String           @map("employee_id") @db.Uuid
+  type          AdjustmentType
+  // Inclusão: horário proposto (UTC).
+  proposedAt    DateTime?        @map("proposed_at") @db.Timestamptz(6)
+  // Desconsideração: marcação alvo.
+  targetEntryId String?          @map("target_entry_id") @db.Uuid
+  reason        String
+  status        AdjustmentStatus @default(pending)
+  requestedBy   String           @map("requested_by") @db.Uuid
+  decidedBy     String?          @map("decided_by") @db.Uuid
+  decidedAt     DateTime?        @map("decided_at") @db.Timestamptz(6)
+  decisionNote  String?          @map("decision_note")
+  resultEntryId String?          @map("result_entry_id") @db.Uuid
+  createdAt     DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime         @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  company  Company  @relation(fields: [companyId], references: [id])
+  employee Employee @relation(fields: [employeeId, companyId], references: [id, companyId], onDelete: Restrict)
+
+  @@index([companyId, status])
+  @@index([companyId, employeeId])
+  @@map("time_adjustment_requests")
+}
+
+/// Respostas guardadas por Idempotency-Key (regra 5): repetir a requisição devolve a mesma
+/// resposta, sem repetir o efeito.
+model IdempotencyKey {
+  id             String   @id @default(uuid(7)) @db.Uuid
+  companyId      String   @map("company_id") @db.Uuid
+  userId         String   @map("user_id") @db.Uuid
+  key            String
+  route          String
+  requestHash    String   @map("request_hash")
+  responseStatus Int      @map("response_status")
+  responseBody   Json     @map("response_body")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  company Company @relation(fields: [companyId], references: [id])
+
+  @@unique([companyId, userId, key])
+  @@index([createdAt])
+  @@map("idempotency_keys")
 }

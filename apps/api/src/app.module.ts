@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { APP_FILTER, APP_INTERCEPTOR } from '@nestjs/core';
 import { RequestContextInterceptor } from './common/context/request-context.interceptor';
+import { IdempotencyInterceptor } from './common/idempotency/idempotency';
 import { ProblemDetailsFilter } from './common/errors/problem-details.filter';
 import { LoggingModule } from './common/logging/logging.module';
 import { AppConfigModule } from './config/config.module';
@@ -23,6 +24,7 @@ import { DomainModule } from './modules/domain.module';
   providers: [
     { provide: APP_FILTER, useClass: ProblemDetailsFilter },
     { provide: APP_INTERCEPTOR, useClass: RequestContextInterceptor },
+    { provide: APP_INTERCEPTOR, useClass: IdempotencyInterceptor },
   ],
 })
 export class AppModule {}

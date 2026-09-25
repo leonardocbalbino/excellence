@@ -1,4 +1,4 @@
 {
   "$comment": "Objetos criados só em SQL nas migrations (o schema.prisma não os representa). O script db:new-migration não gera DROP para eles.",
-  "indexes": ["role_scopes_unique"]
+  "indexes": ["role_scopes_unique", "time_entries_single_disregard"]
 }
