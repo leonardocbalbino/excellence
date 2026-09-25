@@ -38,7 +38,7 @@ export interface CatalogItem {
 export interface CatalogField {
   name: string;
   label: string;
-  kind: 'text' | 'number' | 'select';
+  kind: 'text' | 'number' | 'select' | 'time';
   options?: { value: string; label: string }[];
   hint?: string;
   /** Vazio vira null. */
@@ -255,6 +255,7 @@ function CatalogForm<T extends CatalogItem>({
                     {...props}
                     {...register}
                     inputMode={field.kind === 'number' ? 'numeric' : undefined}
+                    {...(field.kind === 'time' ? { type: 'time' } : {})}
                   />
                 )
               }

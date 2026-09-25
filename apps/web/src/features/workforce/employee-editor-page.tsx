@@ -32,6 +32,7 @@ import {
   unionsQueryKey,
   unitsQueryKey,
 } from '../organization/query-keys';
+import { EmployeeSchedulePanel } from '../scheduling/employee-schedule-panel';
 import { employeesQueryKey } from './query-keys';
 
 export function EmployeeEditorPage() {
@@ -74,6 +75,7 @@ export function EmployeeEditorPage() {
           )}
         </CardContent>
       </Card>
+      {employee.data ? <EmployeeSchedulePanel employeeId={employee.data.id} /> : null}
       {employee.data ? <AccountPanel employee={employee.data} /> : null}
     </div>
   );

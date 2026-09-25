@@ -11,6 +11,10 @@ import {
   ShieldCheckIcon,
   UserRoundIcon,
   UsersIcon,
+  CalendarClockIcon,
+  CalendarDaysIcon,
+  CalendarRangeIcon,
+  PartyPopperIcon,
 } from 'lucide-react';
 
 export interface NavItem {
@@ -24,6 +28,7 @@ export interface NavItem {
 /** Itens do menu. Cada módulo acrescenta os seus nas próximas etapas. */
 export const NAV_ITEMS: readonly NavItem[] = [
   { label: 'Início', to: '/', icon: HomeIcon },
+  { label: 'Minha escala', to: '/minha-escala', icon: CalendarDaysIcon },
   { label: 'Funcionários', to: '/pessoas', icon: UserRoundIcon, permission: 'employees:read' },
   { label: 'Unidades', to: '/cadastros/unidades', icon: MapPinIcon, permission: 'units:read' },
   {
@@ -38,6 +43,19 @@ export const NAV_ITEMS: readonly NavItem[] = [
     to: '/cadastros/sindicatos',
     icon: HandshakeIcon,
     permission: 'unions:read',
+  },
+  { label: 'Turnos', to: '/jornada/turnos', icon: CalendarClockIcon, permission: 'schedules:read' },
+  {
+    label: 'Escalas',
+    to: '/jornada/escalas',
+    icon: CalendarRangeIcon,
+    permission: 'schedules:read',
+  },
+  {
+    label: 'Feriados',
+    to: '/jornada/feriados',
+    icon: PartyPopperIcon,
+    permission: 'schedules:read',
   },
   { label: 'Empresa', to: '/empresa', icon: Building2Icon, permission: 'company:manage' },
   {

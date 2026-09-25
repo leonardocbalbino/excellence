@@ -79,6 +79,52 @@ export const routes: RouteObject[] = [
             ),
           },
           {
+            path: 'minha-escala',
+            ...page(
+              async () => (await import('@/features/scheduling/my-schedule-page')).MySchedulePage,
+            ),
+          },
+          {
+            path: 'jornada/turnos',
+            ...page(
+              async () => (await import('@/features/scheduling/shifts-page')).ShiftsPage,
+              'schedules:read',
+            ),
+          },
+          {
+            path: 'jornada/escalas',
+            ...page(
+              async () =>
+                (await import('@/features/scheduling/work-schedules-page')).WorkSchedulesPage,
+              'schedules:read',
+            ),
+          },
+          {
+            path: 'jornada/escalas/nova',
+            ...page(
+              async () =>
+                (await import('@/features/scheduling/work-schedule-editor-page'))
+                  .WorkScheduleEditorPage,
+              'schedules:manage',
+            ),
+          },
+          {
+            path: 'jornada/escalas/:id',
+            ...page(
+              async () =>
+                (await import('@/features/scheduling/work-schedule-editor-page'))
+                  .WorkScheduleEditorPage,
+              'schedules:read',
+            ),
+          },
+          {
+            path: 'jornada/feriados',
+            ...page(
+              async () => (await import('@/features/scheduling/holidays-page')).HolidaysPage,
+              'schedules:read',
+            ),
+          },
+          {
             path: 'empresa',
             ...page(
               async () => (await import('@/features/organization/company-page')).CompanyPage,
