@@ -1,0 +1,7 @@
+packages:
+  - apps/api
+  - apps/web
+  - packages/*
+allowBuilds:
+  '@swc/core': true
+  esbuild: true
