@@ -18,6 +18,13 @@ export const ProblemType = {
   InvalidMfaCode: 'urn:excellence:problem:invalid-mfa-code',
   MfaAlreadyEnabled: 'urn:excellence:problem:mfa-already-enabled',
   MfaSetupNotStarted: 'urn:excellence:problem:mfa-setup-not-started',
+  // Autorização
+  Forbidden: 'urn:excellence:problem:forbidden',
+  MfaSetupRequired: 'urn:excellence:problem:mfa-setup-required',
+  PrivilegeEscalation: 'urn:excellence:problem:privilege-escalation',
+  LastAdministrator: 'urn:excellence:problem:last-administrator',
+  RoleInUse: 'urn:excellence:problem:role-in-use',
+  SystemRole: 'urn:excellence:problem:system-role',
 } as const;
 
 export type ProblemType = (typeof ProblemType)[keyof typeof ProblemType];
