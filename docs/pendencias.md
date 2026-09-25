@@ -11,6 +11,8 @@ código**: viram parâmetro configurável e são registradas aqui até que algu�
 | P-002 | Política de senha                      | Tamanho mínimo, complexidade, expiração e histórico de senhas. Há norma interna ou exigência de cliente?                            | A definir no cadastro e na troca de senha (1A.1)             | Segurança/RH | aberta |
 | P-003 | Primeiro acesso e recuperação de senha | Canal (e-mail, SMS ou RH redefine), validade do link e se o primeiro acesso exige troca de senha.                                   | A definir                                                    | Produto      | aberta |
 | P-004 | Duração máxima da sessão               | O refresh token tem validade deslizante de 30 dias. Perfis administrativos devem ter limite absoluto (ex.: 12 h) ou validade menor? | `REFRESH_TOKEN_TTL_DAYS`                                     | Segurança    | aberta |
+| P-005 | Retenção da trilha de auditoria        | Por quanto tempo guardar `audit_logs` (LGPD, prazos trabalhistas e prescricionais)? Pode ser anonimizada depois de um prazo?        | A definir (hoje é mantida indefinidamente)                   | Jurídico/DPO | aberta |
+| P-006 | Retenção de arquivos                   | Prazos de guarda por finalidade (atestados, selfies de ponto, fotos de ocorrência, documentos) e o que fazer ao fim do prazo.       | A definir por finalidade (`FILE_PURPOSES`)                   | Jurídico/DPO | aberta |
 
 Exemplo de preenchimento:
 
