@@ -34,6 +34,12 @@ export const PERMISSIONS = {
     sensitive: false,
   },
   'employees:import': { description: 'Importar funcionários por planilha', sensitive: false },
+  'schedules:read': { description: 'Ver turnos, escalas e feriados', sensitive: false },
+  'schedules:manage': { description: 'Cadastrar turnos, escalas e feriados', sensitive: false },
+  'schedules:assign': {
+    description: 'Vincular funcionários às escalas',
+    sensitive: false,
+  },
   // A trilha de auditoria revela quem acessou dados sensíveis: sua leitura também é auditada.
   'audit:read': { description: 'Consultar a trilha de auditoria', sensitive: true },
 } as const satisfies Record<string, PermissionDefinition>;

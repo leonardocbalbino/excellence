@@ -36,6 +36,8 @@ export const ProblemType = {
   PasswordChangeRequired: 'urn:excellence:problem:password-change-required',
   WeakPassword: 'urn:excellence:problem:weak-password',
   WrongPassword: 'urn:excellence:problem:wrong-password',
+  // Jornada
+  AssignmentOverlap: 'urn:excellence:problem:assignment-overlap',
 } as const;
 
 export type ProblemType = (typeof ProblemType)[keyof typeof ProblemType];

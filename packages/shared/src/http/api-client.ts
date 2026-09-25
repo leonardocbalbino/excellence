@@ -68,6 +68,19 @@ import {
   employeePageSchema,
   employeeSchema,
 } from '../workforce/employees.schemas.js';
+import {
+  type HolidayInput,
+  holidayInputSchema,
+  holidaySchema,
+  plannedDaySchema,
+  type ScheduleAssignmentInput,
+  scheduleAssignmentInputSchema,
+  scheduleAssignmentSchema,
+  shiftInputSchema,
+  shiftSchema,
+  workScheduleInputSchema,
+  workScheduleSchema,
+} from '../scheduling/scheduling.schemas.js';
 
 /** Erro HTTP da API, com o Problem Details (RFC 7807) já interpretado. */
 export class ApiError extends Error {
@@ -244,6 +257,57 @@ export function createApiClient(options: ApiClientOptions) {
     departments: crud('/departments', departmentSchema, departmentInputSchema),
     positions: crud('/positions', positionSchema, positionInputSchema),
     unions: crud('/unions', laborUnionSchema, laborUnionInputSchema),
+    shifts: crud('/shifts', shiftSchema, shiftInputSchema),
+    workSchedules: crud('/work-schedules', workScheduleSchema, workScheduleInputSchema),
+    holidays: {
+      list: (year: number) =>
+        request('GET', '/holidays', { query: { year }, schema: z.array(holidaySchema) }),
+      suggestions: (year: number) =>
+        request('GET', '/holidays/national-suggestions', {
+          query: { year },
+          schema: z.array(z.object({ date: z.string(), name: z.string(), legalBasis: z.string() })),
+        }),
+      create: (input: HolidayInput) =>
+        request('POST', '/holidays', {
+          body: input,
+          bodySchema: holidayInputSchema,
+          schema: holidaySchema,
+        }),
+      update: (id: string, input: HolidayInput) =>
+        request('PUT', `/holidays/${encodeURIComponent(id)}`, {
+          body: input,
+          bodySchema: holidayInputSchema,
+          schema: holidaySchema,
+        }),
+      remove: (id: string) => request('DELETE', `/holidays/${encodeURIComponent(id)}`),
+    },
+    schedule: {
+      assignments: (employeeId: string) =>
+        request('GET', `/employees/${encodeURIComponent(employeeId)}/schedule-assignments`, {
+          schema: z.array(scheduleAssignmentSchema),
+        }),
+      assign: (employeeId: string, input: ScheduleAssignmentInput) =>
+        request('POST', `/employees/${encodeURIComponent(employeeId)}/schedule-assignments`, {
+          body: input,
+          bodySchema: scheduleAssignmentInputSchema,
+          schema: scheduleAssignmentSchema,
+        }),
+      unassign: (employeeId: string, assignmentId: string) =>
+        request(
+          'DELETE',
+          `/employees/${encodeURIComponent(employeeId)}/schedule-assignments/${encodeURIComponent(assignmentId)}`,
+        ),
+      planned: (employeeId: string, from: string, to: string) =>
+        request('GET', `/employees/${encodeURIComponent(employeeId)}/planned-schedule`, {
+          query: { from, to },
+          schema: z.array(plannedDaySchema),
+        }),
+      mine: (from: string, to: string) =>
+        request('GET', '/me/planned-schedule', {
+          query: { from, to },
+          schema: z.array(plannedDaySchema),
+        }),
+    },
     employees: {
       list: async (query: EmployeeListQuery = {}) => {
         const { search, unitId, departmentId, status, page, pageSize } =
