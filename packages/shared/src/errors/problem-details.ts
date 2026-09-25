@@ -10,6 +10,14 @@ export const ProblemType = {
   Validation: 'urn:excellence:problem:validation-error',
   UniqueViolation: 'urn:excellence:problem:unique-violation',
   ReferenceViolation: 'urn:excellence:problem:reference-violation',
+  // Autenticação
+  Unauthenticated: 'urn:excellence:problem:unauthenticated',
+  InvalidCredentials: 'urn:excellence:problem:invalid-credentials',
+  TooManyAttempts: 'urn:excellence:problem:too-many-attempts',
+  InvalidRefreshToken: 'urn:excellence:problem:invalid-refresh-token',
+  InvalidMfaCode: 'urn:excellence:problem:invalid-mfa-code',
+  MfaAlreadyEnabled: 'urn:excellence:problem:mfa-already-enabled',
+  MfaSetupNotStarted: 'urn:excellence:problem:mfa-setup-not-started',
 } as const;
 
 export type ProblemType = (typeof ProblemType)[keyof typeof ProblemType];
