@@ -25,6 +25,9 @@ export const ProblemType = {
   LastAdministrator: 'urn:excellence:problem:last-administrator',
   RoleInUse: 'urn:excellence:problem:role-in-use',
   SystemRole: 'urn:excellence:problem:system-role',
+  // Arquivos
+  FileNotUploaded: 'urn:excellence:problem:file-not-uploaded',
+  FileMismatch: 'urn:excellence:problem:file-mismatch',
 } as const;
 
 export type ProblemType = (typeof ProblemType)[keyof typeof ProblemType];

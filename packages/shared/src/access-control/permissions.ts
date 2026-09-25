@@ -20,6 +20,8 @@ export const PERMISSIONS = {
   'roles:manage': { description: 'Criar, editar e excluir perfis', sensitive: false },
   'users:read': { description: 'Ver usuários e seus perfis', sensitive: false },
   'users:manage': { description: 'Atribuir perfis a usuários', sensitive: false },
+  // A trilha de auditoria revela quem acessou dados sensíveis: sua leitura também é auditada.
+  'audit:read': { description: 'Consultar a trilha de auditoria', sensitive: true },
 } as const satisfies Record<string, PermissionDefinition>;
 
 export type Permission = keyof typeof PERMISSIONS;
