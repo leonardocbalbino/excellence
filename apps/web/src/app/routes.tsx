@@ -4,7 +4,7 @@ import type { RouteObject } from 'react-router';
 import { AppShell } from '@/components/layout/app-shell';
 import { RequirePermission } from '@/features/access/require-permission';
 import { LoginPage } from '@/features/auth/login-page';
-import { MFA_SETUP_PATH, RequireAuth } from '@/features/auth/require-auth';
+import { MFA_SETUP_PATH, PASSWORD_PATH, RequireAuth } from '@/features/auth/require-auth';
 import { HomePage } from '@/features/home/home-page';
 import { NotFoundPage } from './not-found-page';
 
@@ -41,6 +41,92 @@ export const routes: RouteObject[] = [
         element: <AppShell />,
         children: [
           { index: true, element: <HomePage /> },
+          {
+            path: PASSWORD_PATH.slice(1),
+            ...page(
+              async () =>
+                (await import('@/features/account/change-password-page')).ChangePasswordPage,
+            ),
+          },
+          {
+            path: 'pessoas',
+            ...page(
+              async () => (await import('@/features/workforce/employees-page')).EmployeesPage,
+              'employees:read',
+            ),
+          },
+          {
+            path: 'pessoas/novo',
+            ...page(
+              async () =>
+                (await import('@/features/workforce/employee-editor-page')).EmployeeEditorPage,
+              'employees:manage',
+            ),
+          },
+          {
+            path: 'pessoas/importar',
+            ...page(
+              async () => (await import('@/features/workforce/import-page')).ImportPage,
+              'employees:import',
+            ),
+          },
+          {
+            path: 'pessoas/:id',
+            ...page(
+              async () =>
+                (await import('@/features/workforce/employee-editor-page')).EmployeeEditorPage,
+              'employees:read',
+            ),
+          },
+          {
+            path: 'empresa',
+            ...page(
+              async () => (await import('@/features/organization/company-page')).CompanyPage,
+              'company:manage',
+            ),
+          },
+          {
+            path: 'cadastros/unidades',
+            ...page(
+              async () => (await import('@/features/organization/units-page')).UnitsPage,
+              'units:read',
+            ),
+          },
+          {
+            path: 'cadastros/unidades/nova',
+            ...page(
+              async () => (await import('@/features/organization/unit-editor-page')).UnitEditorPage,
+              'units:manage',
+            ),
+          },
+          {
+            path: 'cadastros/unidades/:id',
+            ...page(
+              async () => (await import('@/features/organization/unit-editor-page')).UnitEditorPage,
+              'units:read',
+            ),
+          },
+          {
+            path: 'cadastros/departamentos',
+            ...page(
+              async () => (await import('@/features/organization/catalogs')).DepartmentsPage,
+              'departments:read',
+            ),
+          },
+          {
+            path: 'cadastros/cargos',
+            ...page(
+              async () => (await import('@/features/organization/catalogs')).PositionsPage,
+              'positions:read',
+            ),
+          },
+          {
+            path: 'cadastros/sindicatos',
+            ...page(
+              async () => (await import('@/features/organization/catalogs')).UnionsPage,
+              'unions:read',
+            ),
+          },
           {
             path: MFA_SETUP_PATH.slice(1),
             ...page(

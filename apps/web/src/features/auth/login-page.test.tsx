@@ -7,7 +7,7 @@ import { safeNext } from './safe-next';
 
 function accessHandler() {
   return http.get(`${API}/me/access`, () =>
-    HttpResponse.json({ permissions: [], mfaSetupRequired: false }),
+    HttpResponse.json({ permissions: [], mfaSetupRequired: false, passwordChangeRequired: false }),
   );
 }
 

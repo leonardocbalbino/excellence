@@ -28,7 +28,12 @@ export function sessionHandlers(permissions: Permission[], access: Partial<MyAcc
   return [
     http.post(`${API}/auth/refresh`, () => HttpResponse.json(authenticated())),
     http.get(`${API}/me/access`, () =>
-      HttpResponse.json({ permissions, mfaSetupRequired: false, ...access }),
+      HttpResponse.json({
+        permissions,
+        mfaSetupRequired: false,
+        passwordChangeRequired: false,
+        ...access,
+      }),
     ),
   ];
 }
