@@ -28,6 +28,14 @@ export const ProblemType = {
   // Arquivos
   FileNotUploaded: 'urn:excellence:problem:file-not-uploaded',
   FileMismatch: 'urn:excellence:problem:file-mismatch',
+  // Cadastros
+  InUse: 'urn:excellence:problem:in-use',
+  OutOfScope: 'urn:excellence:problem:out-of-scope',
+  InvalidReference: 'urn:excellence:problem:invalid-reference',
+  AccountAlreadyExists: 'urn:excellence:problem:account-already-exists',
+  PasswordChangeRequired: 'urn:excellence:problem:password-change-required',
+  WeakPassword: 'urn:excellence:problem:weak-password',
+  WrongPassword: 'urn:excellence:problem:wrong-password',
 } as const;
 
 export type ProblemType = (typeof ProblemType)[keyof typeof ProblemType];

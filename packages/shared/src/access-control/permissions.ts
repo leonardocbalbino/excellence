@@ -20,6 +20,20 @@ export const PERMISSIONS = {
   'roles:manage': { description: 'Criar, editar e excluir perfis', sensitive: false },
   'users:read': { description: 'Ver usuários e seus perfis', sensitive: false },
   'users:manage': { description: 'Atribuir perfis a usuários', sensitive: false },
+  'units:read': { description: 'Ver unidades', sensitive: false },
+  'units:manage': { description: 'Cadastrar e editar unidades', sensitive: false },
+  'departments:read': { description: 'Ver departamentos', sensitive: false },
+  'departments:manage': { description: 'Cadastrar e editar departamentos', sensitive: false },
+  'positions:read': { description: 'Ver cargos', sensitive: false },
+  'positions:manage': { description: 'Cadastrar e editar cargos', sensitive: false },
+  'unions:read': { description: 'Ver sindicatos', sensitive: false },
+  'unions:manage': { description: 'Cadastrar e editar sindicatos', sensitive: false },
+  'employees:read': { description: 'Ver funcionários', sensitive: false },
+  'employees:manage': {
+    description: 'Cadastrar e editar funcionários e criar contas de acesso',
+    sensitive: false,
+  },
+  'employees:import': { description: 'Importar funcionários por planilha', sensitive: false },
   // A trilha de auditoria revela quem acessou dados sensíveis: sua leitura também é auditada.
   'audit:read': { description: 'Consultar a trilha de auditoria', sensitive: true },
 } as const satisfies Record<string, PermissionDefinition>;

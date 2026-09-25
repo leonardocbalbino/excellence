@@ -39,6 +39,35 @@ import {
   uploadRequestSchema,
   uploadTicketSchema,
 } from '../files/files.schemas.js';
+import {
+  type CompanyInput,
+  companyInputSchema,
+  companySchema,
+  departmentInputSchema,
+  departmentSchema,
+  laborUnionInputSchema,
+  laborUnionSchema,
+  positionInputSchema,
+  positionSchema,
+  unitInputSchema,
+  unitSchema,
+} from '../organization/organization.schemas.js';
+import {
+  type ChangePasswordInput,
+  changePasswordInputSchema,
+  type CreateAccountInput,
+  createAccountInputSchema,
+  createdAccountSchema,
+  type EmployeeImportRequest,
+  employeeImportReportSchema,
+  employeeImportRequestSchema,
+  type EmployeeInput,
+  employeeInputSchema,
+  type EmployeeListQuery,
+  employeeListQuerySchema,
+  employeePageSchema,
+  employeeSchema,
+} from '../workforce/employees.schemas.js';
 
 /** Erro HTTP da API, com o Problem Details (RFC 7807) já interpretado. */
 export class ApiError extends Error {
@@ -105,11 +134,12 @@ type Result<T extends z.ZodType | undefined> = T extends z.ZodType ? z.output<T>
 export function createApiClient(options: ApiClientOptions) {
   const doFetch = options.fetch ?? globalThis.fetch.bind(globalThis);
 
-  async function request<T extends z.ZodType | undefined = undefined>(
+  /** Envia a requisição (com renovação de sessão em 401) e devolve a resposta já checada. */
+  async function execute(
     method: string,
     path: string,
-    opts: RequestOptions<T> = {},
-  ): Promise<Result<T>> {
+    opts: RequestOptions<z.ZodType | undefined>,
+  ): Promise<Response> {
     const body: unknown = opts.bodySchema ? opts.bodySchema.parse(opts.body) : opts.body;
     const url = new URL(`${options.baseUrl}${path}`, 'http://placeholder');
     for (const [key, value] of Object.entries(opts.query ?? {})) {
@@ -150,6 +180,15 @@ export function createApiClient(options: ApiClientOptions) {
     }
 
     if (!response.ok) throw new ApiError(await readProblem(response));
+    return response;
+  }
+
+  async function request<T extends z.ZodType | undefined = undefined>(
+    method: string,
+    path: string,
+    opts: RequestOptions<T> = {},
+  ): Promise<Result<T>> {
+    const response = await execute(method, path, opts);
     if (response.status === 204 || !opts.schema) return undefined as Result<T>;
     const parsed = opts.schema.safeParse(await response.json());
     if (!parsed.success) {
@@ -160,10 +199,89 @@ export function createApiClient(options: ApiClientOptions) {
     return parsed.data as Result<T>;
   }
 
+  /** Resposta em texto (ex.: modelo de planilha CSV). */
+  async function requestText(method: string, path: string): Promise<string> {
+    return (await execute(method, path, {})).text();
+  }
+
+  /** Cadastro simples: listar, ler, criar, alterar e excluir. */
+  function crud<Out extends z.ZodType, In extends z.ZodType>(
+    path: string,
+    schema: Out,
+    inputSchema: In,
+  ) {
+    const item = (id: string) => `${path}/${encodeURIComponent(id)}`;
+    return {
+      list: (includeInactive = false) =>
+        request('GET', path, {
+          query: { includeInactive: String(includeInactive) },
+          schema: z.array(schema),
+        }),
+      get: (id: string) => request('GET', item(id), { schema }),
+      create: (input: z.input<In>) =>
+        request('POST', path, { body: input, bodySchema: inputSchema, schema }),
+      update: (id: string, input: z.input<In>) =>
+        request('PUT', item(id), { body: input, bodySchema: inputSchema, schema }),
+      remove: (id: string) => request('DELETE', item(id)),
+    };
+  }
+
   const noRetry = { retryOnUnauthorized: false } as const;
 
   return {
     request,
+    requestText,
+    company: {
+      get: () => request('GET', '/company', { schema: companySchema }),
+      update: (input: CompanyInput) =>
+        request('PUT', '/company', {
+          body: input,
+          bodySchema: companyInputSchema,
+          schema: companySchema,
+        }),
+    },
+    units: crud('/units', unitSchema, unitInputSchema),
+    departments: crud('/departments', departmentSchema, departmentInputSchema),
+    positions: crud('/positions', positionSchema, positionInputSchema),
+    unions: crud('/unions', laborUnionSchema, laborUnionInputSchema),
+    employees: {
+      list: async (query: EmployeeListQuery = {}) => {
+        const { search, unitId, departmentId, status, page, pageSize } =
+          employeeListQuerySchema.parse(query);
+        return request('GET', '/employees', {
+          query: { search, unitId, departmentId, status, page, pageSize },
+          schema: employeePageSchema,
+        });
+      },
+      get: (id: string) =>
+        request('GET', `/employees/${encodeURIComponent(id)}`, { schema: employeeSchema }),
+      mine: () => request('GET', '/me/employee', { schema: employeeSchema }),
+      create: (input: EmployeeInput) =>
+        request('POST', '/employees', {
+          body: input,
+          bodySchema: employeeInputSchema,
+          schema: employeeSchema,
+        }),
+      update: (id: string, input: EmployeeInput) =>
+        request('PUT', `/employees/${encodeURIComponent(id)}`, {
+          body: input,
+          bodySchema: employeeInputSchema,
+          schema: employeeSchema,
+        }),
+      createAccount: (id: string, input: CreateAccountInput) =>
+        request('POST', `/employees/${encodeURIComponent(id)}/account`, {
+          body: input,
+          bodySchema: createAccountInputSchema,
+          schema: createdAccountSchema,
+        }),
+      importTemplate: () => requestText('GET', '/employees/imports/template'),
+      import: (input: EmployeeImportRequest) =>
+        request('POST', '/employees/imports', {
+          body: input,
+          bodySchema: employeeImportRequestSchema,
+          schema: employeeImportReportSchema,
+        }),
+    },
     auth: {
       login: (input: LoginRequest) =>
         request('POST', '/auth/login', {
@@ -206,6 +324,8 @@ export function createApiClient(options: ApiClientOptions) {
           ...noRetry,
         }),
       me: () => request('GET', '/auth/me', { schema: authUserSchema }),
+      changePassword: (input: ChangePasswordInput) =>
+        request('POST', '/auth/password', { body: input, bodySchema: changePasswordInputSchema }),
     },
     access: {
       mine: () => request('GET', '/me/access', { schema: myAccessSchema }),

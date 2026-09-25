@@ -63,5 +63,7 @@ export const myAccessSchema = z.object({
   permissions: z.array(permissionSchema),
   /** O perfil exige MFA e o usuário ainda não ativou: o acesso fica bloqueado até ativar. */
   mfaSetupRequired: z.boolean(),
+  /** Senha temporária: o acesso fica bloqueado até a troca. */
+  passwordChangeRequired: z.boolean(),
 });
 export type MyAccess = z.infer<typeof myAccessSchema>;

@@ -5,3 +5,7 @@ export * from './access-control/roles.schemas.js';
 export * from './audit/audit.schemas.js';
 export * from './files/files.schemas.js';
 export * from './http/api-client.js';
+export * from './br/documents.js';
+export * from './br/fields.js';
+export * from './organization/organization.schemas.js';
+export * from './workforce/employees.schemas.js';
