@@ -1,5 +1,6 @@
 import { HeadBucketCommand, type S3Client } from '@aws-sdk/client-s3';
 import { Controller, Get, Inject, Res, ServiceUnavailableException } from '@nestjs/common';
+import { Public } from '../modules/auth/http/auth.decorators';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import {
   HealthCheck,
@@ -20,6 +21,7 @@ const CHECK_TIMEOUT_MS = 3000;
  * Probes de liveness e readiness. As respostas seguem o formato do Terminus, não o
  * RFC 7807, porque orquestradores e monitores esperam esse corpo inclusive no 503.
  */
+@Public()
 @ApiTags('health')
 @Controller('health')
 export class HealthController {
