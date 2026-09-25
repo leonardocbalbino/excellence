@@ -33,17 +33,21 @@ model Company {
   // mesma empresa é garantida pelo serviço (busca o perfil pelo client isolado).
   defaultEmployeeRole Role? @relation("CompanyDefaultEmployeeRole", fields: [defaultEmployeeRoleId], references: [id], onDelete: Restrict)
 
-  users            User[]
-  refreshTokens    RefreshToken[]
-  mfaRecoveryCodes MfaRecoveryCode[]
-  roles            Role[]            @relation("CompanyRoles")
-  auditLogs        AuditLog[]
-  files            StoredFile[]
-  units            Unit[]
-  departments      Department[]
-  positions        Position[]
-  laborUnions      LaborUnion[]
-  employees        Employee[]
+  users               User[]
+  refreshTokens       RefreshToken[]
+  mfaRecoveryCodes    MfaRecoveryCode[]
+  roles               Role[]                       @relation("CompanyRoles")
+  auditLogs           AuditLog[]
+  files               StoredFile[]
+  units               Unit[]
+  departments         Department[]
+  positions           Position[]
+  laborUnions         LaborUnion[]
+  employees           Employee[]
+  shifts              Shift[]
+  workSchedules       WorkSchedule[]
+  holidays            Holiday[]
+  scheduleAssignments EmployeeScheduleAssignment[]
 
   @@map("companies")
 }
@@ -314,6 +318,7 @@ model Unit {
   departments Department[]
   employees   Employee[]
   roleScopes  RoleScope[]
+  holidays    Holiday[]
 
   @@unique([companyId, code])
   @@unique([id, companyId])
@@ -405,14 +410,15 @@ model Employee {
   createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt          DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  company    Company     @relation(fields: [companyId], references: [id])
-  user       User?       @relation(fields: [userId, companyId], references: [id, companyId], onDelete: Restrict)
-  unit       Unit        @relation(fields: [unitId, companyId], references: [id, companyId], onDelete: Restrict)
-  department Department? @relation(fields: [departmentId, companyId], references: [id, companyId], onDelete: Restrict)
-  position   Position?   @relation(fields: [positionId, companyId], references: [id, companyId], onDelete: Restrict)
-  union      LaborUnion? @relation(fields: [unionId, companyId], references: [id, companyId], onDelete: Restrict)
-  manager    Employee?   @relation("EmployeeManager", fields: [managerId, companyId], references: [id, companyId], onDelete: Restrict)
-  reports    Employee[]  @relation("EmployeeManager")
+  company             Company                      @relation(fields: [companyId], references: [id])
+  user                User?                        @relation(fields: [userId, companyId], references: [id, companyId], onDelete: Restrict)
+  unit                Unit                         @relation(fields: [unitId, companyId], references: [id, companyId], onDelete: Restrict)
+  department          Department?                  @relation(fields: [departmentId, companyId], references: [id, companyId], onDelete: Restrict)
+  position            Position?                    @relation(fields: [positionId, companyId], references: [id, companyId], onDelete: Restrict)
+  union               LaborUnion?                  @relation(fields: [unionId, companyId], references: [id, companyId], onDelete: Restrict)
+  manager             Employee?                    @relation("EmployeeManager", fields: [managerId, companyId], references: [id, companyId], onDelete: Restrict)
+  reports             Employee[]                   @relation("EmployeeManager")
+  scheduleAssignments EmployeeScheduleAssignment[]
 
   @@unique([userId, companyId])
   @@unique([companyId, cpf])
@@ -422,4 +428,134 @@ model Employee {
   @@index([companyId, departmentId])
   @@index([companyId, managerId])
   @@map("employees")
+}
+
+// ─── Jornada — ADR 0011 ─────────────────────────────────────────────────────────────
+
+/// Turno: horário de início e fim em minutos do dia (0 a 1439). Fim menor ou igual ao
+/// início = termina no dia seguinte. Limites legais não são validados aqui (pendência P-012).
+model Shift {
+  id           String   @id @default(uuid(7)) @db.Uuid
+  companyId    String   @map("company_id") @db.Uuid
+  name         String   @db.Citext
+  code         String?
+  startMinute  Int      @map("start_minute") @db.SmallInt
+  endMinute    Int      @map("end_minute") @db.SmallInt
+  breakMinutes Int      @map("break_minutes") @db.SmallInt
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  company      Company           @relation(fields: [companyId], references: [id])
+  scheduleDays WorkScheduleDay[]
+
+  @@unique([companyId, name])
+  @@unique([id, companyId])
+  @@map("shifts")
+}
+
+enum ScheduleKind {
+  cycle
+  flexible
+
+  @@map("schedule_kind")
+}
+
+enum CycleAnchor {
+  monday
+  assignment
+
+  @@map("cycle_anchor")
+}
+
+model WorkSchedule {
+  id            String       @id @default(uuid(7)) @db.Uuid
+  companyId     String       @map("company_id") @db.Uuid
+  name          String       @db.Citext
+  code          String?
+  kind          ScheduleKind
+  cycleAnchor   CycleAnchor? @map("cycle_anchor")
+  // Carga de referência da escala flexível (minutos por semana).
+  weeklyMinutes Int?         @map("weekly_minutes")
+  notes         String?
+  isActive      Boolean      @default(true) @map("is_active")
+  createdAt     DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  company     Company                      @relation(fields: [companyId], references: [id])
+  days        WorkScheduleDay[]
+  assignments EmployeeScheduleAssignment[]
+
+  @@unique([companyId, name])
+  @@unique([id, companyId])
+  @@map("work_schedules")
+}
+
+/// Dia do ciclo da escala: um turno ou folga (shift_id nulo).
+model WorkScheduleDay {
+  companyId  String  @map("company_id") @db.Uuid
+  scheduleId String  @map("schedule_id") @db.Uuid
+  dayIndex   Int     @map("day_index") @db.SmallInt
+  shiftId    String? @map("shift_id") @db.Uuid
+
+  schedule WorkSchedule @relation(fields: [scheduleId, companyId], references: [id, companyId], onDelete: Cascade)
+  shift    Shift?       @relation(fields: [shiftId, companyId], references: [id, companyId], onDelete: Restrict)
+
+  @@id([scheduleId, dayIndex])
+  @@index([companyId])
+  @@map("work_schedule_days")
+}
+
+enum HolidayScope {
+  national
+  state
+  city
+  company
+  unit
+
+  @@map("holiday_scope")
+}
+
+model Holiday {
+  id        String       @id @default(uuid(7)) @db.Uuid
+  companyId String       @map("company_id") @db.Uuid
+  date      DateTime     @db.Date
+  name      String
+  scope     HolidayScope
+  state     String?      @db.Char(2)
+  city      String?      @db.Citext
+  unitId    String?      @map("unit_id") @db.Uuid
+  createdAt DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  company Company @relation(fields: [companyId], references: [id])
+  unit    Unit?   @relation(fields: [unitId, companyId], references: [id, companyId], onDelete: Restrict)
+
+  @@index([companyId, date])
+  @@map("holidays")
+}
+
+/// Vínculo do funcionário a uma escala, com histórico. Períodos não se sobrepõem
+/// (constraint EXCLUDE no banco).
+model EmployeeScheduleAssignment {
+  id             String    @id @default(uuid(7)) @db.Uuid
+  companyId      String    @map("company_id") @db.Uuid
+  employeeId     String    @map("employee_id") @db.Uuid
+  scheduleId     String    @map("schedule_id") @db.Uuid
+  startDate      DateTime  @map("start_date") @db.Date
+  // Último dia na escala; null = vigente.
+  endDate        DateTime? @map("end_date") @db.Date
+  // Dia 1 do ciclo, para escalas ancoradas no funcionário.
+  cycleStartDate DateTime  @map("cycle_start_date") @db.Date
+  createdBy      String?   @map("created_by") @db.Uuid
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  company  Company      @relation(fields: [companyId], references: [id])
+  employee Employee     @relation(fields: [employeeId, companyId], references: [id, companyId], onDelete: Restrict)
+  schedule WorkSchedule @relation(fields: [scheduleId, companyId], references: [id, companyId], onDelete: Restrict)
+
+  @@index([companyId, employeeId, startDate])
+  @@index([scheduleId])
+  @@map("employee_schedule_assignments")
 }
