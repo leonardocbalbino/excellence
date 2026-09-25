@@ -17,6 +17,29 @@ export const envSchema = z.object({
   API_CORS_ORIGINS: commaSeparatedList.default(['http://localhost:5173']),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
   OPENAPI_ENABLED: z.stringbool().default(true),
+  // Valor do "trust proxy" do Express: false, true, nº de saltos ou lista de IPs/sub-redes.
+  // Define de onde vem o IP do cliente (bloqueio de login, auditoria).
+  TRUST_PROXY: z
+    .string()
+    .default('false')
+    .transform((value): boolean | number | string => {
+      if (value === 'true' || value === 'false') return value === 'true';
+      return /^\d+$/.test(value) ? Number(value) : value;
+    }),
+
+  // Autenticação (ADR 0006)
+  JWT_SECRET: z.string().min(32, 'Use pelo menos 32 caracteres aleatórios'),
+  ACCESS_TOKEN_TTL_SECONDS: z.coerce.number().int().min(60).max(3600).default(900),
+  REFRESH_TOKEN_TTL_DAYS: z.coerce.number().int().min(1).max(90).default(30),
+  AUTH_COOKIE_SECURE: z.stringbool().default(true),
+  // Chave AES-256 em base64 (32 bytes) para cifrar os segredos TOTP.
+  MFA_ENCRYPTION_KEY: z
+    .base64()
+    .refine((value) => Buffer.from(value, 'base64').length === 32, 'Deve ter 32 bytes em base64'),
+  MFA_ISSUER: z.string().min(1).default('Excellence'),
+  LOGIN_MAX_ATTEMPTS: z.coerce.number().int().min(1).default(5),
+  LOGIN_IP_MAX_ATTEMPTS: z.coerce.number().int().min(1).default(50),
+  LOGIN_LOCKOUT_MINUTES: z.coerce.number().int().min(1).default(15),
 
   DATABASE_URL: z.url({ protocol: /^postgres(ql)?$/ }),
   REDIS_URL: z.url({ protocol: /^rediss?$/ }),

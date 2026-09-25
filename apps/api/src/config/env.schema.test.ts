@@ -8,6 +8,8 @@ const minimal = {
   S3_ACCESS_KEY: 'key',
   S3_SECRET_KEY: 'secret',
   S3_BUCKET: 'bucket',
+  JWT_SECRET: 'x'.repeat(32),
+  MFA_ENCRYPTION_KEY: Buffer.alloc(32).toString('base64'),
 };
 
 describe('validateEnv', () => {
@@ -48,6 +50,22 @@ describe('validateEnv', () => {
     const { issues, message } = thrown as InvalidEnvironmentError;
     expect(issues.map((issue) => issue.split(':')[0])).toEqual(['DATABASE_URL', 'S3_BUCKET']);
     expect(message).not.toContain('super-secret');
+  });
+
+  it('exige JWT_SECRET longo e chave MFA de 32 bytes', () => {
+    expect(() => validateEnv({ ...minimal, JWT_SECRET: 'curto' })).toThrow(/JWT_SECRET/);
+    expect(() =>
+      validateEnv({ ...minimal, MFA_ENCRYPTION_KEY: Buffer.alloc(16).toString('base64') }),
+    ).toThrow(/MFA_ENCRYPTION_KEY/);
+  });
+
+  it.each([
+    ['false', false],
+    ['true', true],
+    ['2', 2],
+    ['10.0.0.0/8, loopback', '10.0.0.0/8, loopback'],
+  ])('interpreta TRUST_PROXY=%j', (raw, expected) => {
+    expect(validateEnv({ ...minimal, TRUST_PROXY: raw }).TRUST_PROXY).toEqual(expected);
   });
 
   it('rejeita porta fora da faixa', () => {
