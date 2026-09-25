@@ -24,6 +24,7 @@ model Company {
   users            User[]
   refreshTokens    RefreshToken[]
   mfaRecoveryCodes MfaRecoveryCode[]
+  roles            Role[]
 
   @@map("companies")
 }
@@ -54,7 +55,10 @@ model User {
   company          Company           @relation(fields: [companyId], references: [id])
   refreshTokens    RefreshToken[]
   mfaRecoveryCodes MfaRecoveryCode[]
+  userRoles        UserRole[]
 
+  // Alvo das FKs compostas (id, company_id): impede vínculos entre empresas diferentes.
+  @@unique([id, companyId])
   @@index([companyId])
   @@map("users")
 }
@@ -100,4 +104,100 @@ model MfaRecoveryCode {
   @@index([userId])
   @@index([companyId])
   @@map("mfa_recovery_codes")
+}
+
+// ─── Controle de acesso (RBAC) — ADR 0007 ───────────────────────────────────────────
+
+/// Catálogo global de permissões atômicas (recurso:ação). Não pertence a uma empresa:
+/// é definido em código (@excellence/shared) e sincronizado quando a API inicia.
+model Permission {
+  key         String   @id
+  resource    String
+  action      String
+  description String
+  sensitive   Boolean  @default(false)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  rolePermissions RolePermission[]
+
+  @@map("permissions")
+}
+
+model Role {
+  id          String   @id @default(uuid(7)) @db.Uuid
+  companyId   String   @map("company_id") @db.Uuid
+  name        String   @db.Citext
+  description String?
+  // Perfis padrão da empresa: editáveis, mas não podem ser excluídos.
+  isSystem    Boolean  @default(false) @map("is_system")
+  // Exige MFA de quem tem o perfil (ADR 0006). Nunca se decide pelo nome do perfil.
+  requiresMfa Boolean  @default(false) @map("requires_mfa")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  company     Company          @relation(fields: [companyId], references: [id])
+  permissions RolePermission[]
+  scopes      RoleScope[]
+  userRoles   UserRole[]
+
+  @@unique([companyId, name])
+  @@unique([id, companyId])
+  @@map("roles")
+}
+
+model RolePermission {
+  companyId     String @map("company_id") @db.Uuid
+  roleId        String @map("role_id") @db.Uuid
+  permissionKey String @map("permission_key")
+
+  role       Role       @relation(fields: [roleId, companyId], references: [id, companyId], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionKey], references: [key])
+
+  @@id([roleId, permissionKey])
+  @@index([companyId])
+  @@map("role_permissions")
+}
+
+enum ScopeType {
+  company
+  unit
+  department
+  own_team
+  self
+
+  @@map("scope_type")
+}
+
+/// Escopo de dados de um perfil; o acesso é a união dos escopos. unit_id e department_id
+/// ganham FK quando as tabelas de unidades e departamentos existirem (etapa 1A.1).
+model RoleScope {
+  id           String    @id @default(uuid(7)) @db.Uuid
+  companyId    String    @map("company_id") @db.Uuid
+  roleId       String    @map("role_id") @db.Uuid
+  type         ScopeType
+  unitId       String?   @map("unit_id") @db.Uuid
+  departmentId String?   @map("department_id") @db.Uuid
+
+  role Role @relation(fields: [roleId, companyId], references: [id, companyId], onDelete: Cascade)
+
+  @@index([roleId])
+  @@index([companyId])
+  @@map("role_scopes")
+}
+
+model UserRole {
+  companyId String   @map("company_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  roleId    String   @map("role_id") @db.Uuid
+  grantedBy String?  @map("granted_by") @db.Uuid
+  grantedAt DateTime @default(now()) @map("granted_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId, companyId], references: [id, companyId], onDelete: Cascade)
+  role Role @relation(fields: [roleId, companyId], references: [id, companyId], onDelete: Restrict)
+
+  @@id([userId, roleId])
+  @@index([roleId])
+  @@index([companyId])
+  @@map("user_roles")
 }
