@@ -81,6 +81,21 @@ import {
   workScheduleInputSchema,
   workScheduleSchema,
 } from '../scheduling/scheduling.schemas.js';
+import {
+  type AdjustmentDecision,
+  adjustmentDecisionSchema,
+  type AdjustmentInput,
+  adjustmentInputSchema,
+  adjustmentSchema,
+  type ClockInput,
+  clockInputSchema,
+  clockReceiptSchema,
+  type ClockSettings,
+  chainVerificationSchema,
+  clockSettingsSchema,
+  timeEntrySchema,
+  timesheetSchema,
+} from '../time-tracking/time-tracking.schemas.js';
 
 /** Erro HTTP da API, com o Problem Details (RFC 7807) já interpretado. */
 export class ApiError extends Error {
@@ -122,6 +137,8 @@ export interface ApiClientOptions {
    */
   refreshSession?: () => Promise<boolean>;
   fetch?: typeof fetch;
+  /** Origem registrada nas marcações de ponto. */
+  clientName?: 'web' | 'mobile';
   /** "include" no web, para o cookie httpOnly do refresh token. */
   credentials?: RequestCredentials;
 }
@@ -134,6 +151,8 @@ interface RequestOptions<T extends z.ZodType | undefined> {
   schema?: T;
   /** Token específico (ex.: token de MFA) no lugar do access token. */
   token?: string;
+  /** Headers extras (ex.: Idempotency-Key). */
+  headers?: Record<string, string>;
   /** false: não tenta renovar a sessão em 401 (login, refresh, MFA). */
   retryOnUnauthorized?: boolean;
 }
@@ -166,6 +185,8 @@ export function createApiClient(options: ApiClientOptions) {
       const token = opts.token ?? options.getAccessToken();
       const headers: Record<string, string> = { Accept: 'application/json' };
       if (body !== undefined) headers['Content-Type'] = 'application/json';
+      if (options.clientName) headers['X-Client'] = options.clientName;
+      Object.assign(headers, opts.headers);
       if (token) headers.Authorization = `Bearer ${token}`;
       return doFetch(relative, {
         method,
@@ -280,6 +301,84 @@ export function createApiClient(options: ApiClientOptions) {
           schema: holidaySchema,
         }),
       remove: (id: string) => request('DELETE', `/holidays/${encodeURIComponent(id)}`),
+    },
+    time: {
+      /** Marca o ponto. Use a mesma idempotencyKey ao reenviar a mesma marcação. */
+      clock: (input: ClockInput, idempotencyKey: string) =>
+        request('POST', '/me/time-entries', {
+          body: input,
+          bodySchema: clockInputSchema,
+          schema: timeEntrySchema,
+          headers: { 'Idempotency-Key': idempotencyKey },
+        }),
+      mine: (from: string, to: string) =>
+        request('GET', '/me/time-entries', {
+          query: { from, to },
+          schema: z.array(timeEntrySchema),
+        }),
+      myTimesheet: (month: string) =>
+        request('GET', '/me/timesheet', { query: { month }, schema: timesheetSchema }),
+      receipt: (entryId: string) =>
+        request('GET', `/time-entries/${encodeURIComponent(entryId)}/receipt`, {
+          schema: clockReceiptSchema,
+        }),
+      forEmployee: (employeeId: string, from: string, to: string) =>
+        request('GET', `/employees/${encodeURIComponent(employeeId)}/time-entries`, {
+          query: { from, to },
+          schema: z.array(timeEntrySchema),
+        }),
+      timesheet: (employeeId: string, month: string) =>
+        request('GET', `/employees/${encodeURIComponent(employeeId)}/timesheet`, {
+          query: { month },
+          schema: timesheetSchema,
+        }),
+      verify: (employeeId: string) =>
+        request('GET', `/employees/${encodeURIComponent(employeeId)}/time-entries-verification`, {
+          schema: chainVerificationSchema,
+        }),
+      settings: () => request('GET', '/clock-settings', { schema: clockSettingsSchema }),
+      updateSettings: (input: ClockSettings) =>
+        request('PUT', '/clock-settings', {
+          body: input,
+          bodySchema: clockSettingsSchema,
+          schema: clockSettingsSchema,
+        }),
+    },
+    adjustments: {
+      request: (input: AdjustmentInput) =>
+        request('POST', '/me/time-adjustments', {
+          body: input,
+          bodySchema: adjustmentInputSchema,
+          schema: adjustmentSchema,
+        }),
+      requestFor: (employeeId: string, input: AdjustmentInput) =>
+        request('POST', `/employees/${encodeURIComponent(employeeId)}/time-adjustments`, {
+          body: input,
+          bodySchema: adjustmentInputSchema,
+          schema: adjustmentSchema,
+        }),
+      mine: () => request('GET', '/me/time-adjustments', { schema: z.array(adjustmentSchema) }),
+      cancel: (id: string) =>
+        request('POST', `/me/time-adjustments/${encodeURIComponent(id)}/cancel`, {
+          schema: adjustmentSchema,
+        }),
+      toApprove: (status?: 'pending' | 'approved' | 'rejected' | 'cancelled') =>
+        request('GET', '/time-adjustments', {
+          query: { status },
+          schema: z.array(adjustmentSchema),
+        }),
+      approve: (id: string, input: AdjustmentDecision = {}) =>
+        request('POST', `/time-adjustments/${encodeURIComponent(id)}/approve`, {
+          body: input,
+          bodySchema: adjustmentDecisionSchema,
+          schema: adjustmentSchema,
+        }),
+      reject: (id: string, input: AdjustmentDecision) =>
+        request('POST', `/time-adjustments/${encodeURIComponent(id)}/reject`, {
+          body: input,
+          bodySchema: adjustmentDecisionSchema,
+          schema: adjustmentSchema,
+        }),
     },
     schedule: {
       assignments: (employeeId: string) =>

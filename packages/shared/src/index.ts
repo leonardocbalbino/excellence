@@ -10,3 +10,4 @@ export * from './br/fields.js';
 export * from './organization/organization.schemas.js';
 export * from './workforce/employees.schemas.js';
 export * from './scheduling/scheduling.schemas.js';
+export * from './time-tracking/time-tracking.schemas.js';

@@ -40,6 +40,15 @@ export const PERMISSIONS = {
     description: 'Vincular funcionários às escalas',
     sensitive: false,
   },
+  'time_entries:read': { description: 'Ver marcações e espelho de ponto', sensitive: false },
+  'time_entries:manage': {
+    description: 'Solicitar ajustes de ponto em nome de funcionários',
+    sensitive: false,
+  },
+  'time_adjustments:approve': {
+    description: 'Aprovar ou recusar ajustes de ponto',
+    sensitive: false,
+  },
   // A trilha de auditoria revela quem acessou dados sensíveis: sua leitura também é auditada.
   'audit:read': { description: 'Consultar a trilha de auditoria', sensitive: true },
 } as const satisfies Record<string, PermissionDefinition>;

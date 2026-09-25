@@ -38,6 +38,15 @@ export const ProblemType = {
   WrongPassword: 'urn:excellence:problem:wrong-password',
   // Jornada
   AssignmentOverlap: 'urn:excellence:problem:assignment-overlap',
+  // Ponto
+  NoEmployeeRecord: 'urn:excellence:problem:no-employee-record',
+  EmployeeTerminated: 'urn:excellence:problem:employee-terminated',
+  LocationRequired: 'urn:excellence:problem:location-required',
+  SelfieRequired: 'urn:excellence:problem:selfie-required',
+  OutsideGeofence: 'urn:excellence:problem:outside-geofence',
+  IdempotencyMismatch: 'urn:excellence:problem:idempotency-mismatch',
+  AdjustmentNotPending: 'urn:excellence:problem:adjustment-not-pending',
+  SelfApproval: 'urn:excellence:problem:self-approval',
 } as const;
 
 export type ProblemType = (typeof ProblemType)[keyof typeof ProblemType];
