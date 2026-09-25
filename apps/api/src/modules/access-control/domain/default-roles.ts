@@ -50,6 +50,9 @@ export const DEFAULT_ROLE_TEMPLATES: readonly RoleTemplate[] = [
       'employees:read',
       'employees:manage',
       'employees:import',
+      'schedules:read',
+      'schedules:manage',
+      'schedules:assign',
     ],
     scopes: [{ type: 'company' }],
   },
@@ -58,7 +61,7 @@ export const DEFAULT_ROLE_TEMPLATES: readonly RoleTemplate[] = [
     name: 'Gestor',
     description: 'Aprova ajustes e ausências da equipe e acompanha rondas.',
     requiresMfa: false,
-    permissions: [...STRUCTURE_READ, 'employees:read'],
+    permissions: [...STRUCTURE_READ, 'employees:read', 'schedules:read'],
     scopes: [{ type: 'own_team' }],
   },
   {
