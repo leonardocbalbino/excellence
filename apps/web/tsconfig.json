@@ -1,7 +1,13 @@
 {
   "extends": "@excellence/tsconfig/react.json",
   "compilerOptions": {
-    "types": ["vite/client", "vitest/globals", "@testing-library/jest-dom/vitest"]
+    "types": [
+      "vite/client",
+      "vite-plugin-pwa/client",
+      "vitest/globals",
+      "@testing-library/jest-dom/vitest"
+    ],
+    "paths": { "@/*": ["./src/*"] }
   },
-  "include": ["src", "*.config.ts"]
+  "include": ["src", "e2e", "*.config.ts"]
 }
