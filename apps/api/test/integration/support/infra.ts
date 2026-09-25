@@ -38,6 +38,8 @@ export async function startInfra(): Promise<TestInfra> {
       S3_ACCESS_KEY,
       S3_SECRET_KEY,
       S3_BUCKET: 'integration-bucket',
+      JWT_SECRET: 'integration-jwt-secret-with-at-least-32-chars',
+      MFA_ENCRYPTION_KEY: Buffer.alloc(32, 3).toString('base64'),
     },
     stop: async () => {
       await Promise.all(containers.map((container) => container.stop()));

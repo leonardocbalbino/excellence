@@ -15,6 +15,8 @@ const unitEnv = {
   S3_ACCESS_KEY: 'test',
   S3_SECRET_KEY: 'test-secret',
   S3_BUCKET: 'test-bucket',
+  JWT_SECRET: 'unit-test-jwt-secret-with-at-least-32-chars',
+  MFA_ENCRYPTION_KEY: Buffer.alloc(32, 7).toString('base64'),
 };
 
 export default defineConfig({
@@ -35,6 +37,7 @@ export default defineConfig({
         test: {
           name: 'integration',
           include: ['test/integration/**/*.int.test.ts'],
+          globalSetup: ['test/integration/global-setup.ts'],
           env: { NODE_ENV: 'test', LOG_LEVEL: 'silent' },
           // Subir containers leva tempo, principalmente no primeiro pull de imagens.
           hookTimeout: 180_000,

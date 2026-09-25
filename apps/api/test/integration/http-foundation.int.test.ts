@@ -3,10 +3,10 @@ import { Controller, HttpCode, Post } from '@nestjs/common';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { isProblemDetails, problemDetailsSchema, ProblemType } from '@excellence/shared';
 import request from 'supertest';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, inject, it } from 'vitest';
 import { z } from 'zod';
 import { ZodBody, ZodResponse } from '../../src/common/openapi/zod-openapi';
-import { startInfra, type TestInfra } from './support/infra';
+import { Public } from '../../src/modules/auth/http/auth.decorators';
 import { createTestApp } from './support/test-app';
 
 const echoSchema = z.object({
@@ -15,6 +15,7 @@ const echoSchema = z.object({
 });
 
 // Controller só de teste: exercita validação Zod, 7807 e OpenAPI de ponta a ponta.
+@Public()
 @Controller('test-echo')
 class EchoController {
   @Post()
@@ -26,27 +27,23 @@ class EchoController {
 }
 
 describe('Fundação HTTP da API (integração)', () => {
-  let infra: TestInfra | undefined;
+  // Bucket exclusivo deste arquivo: começa inexistente para testar o 503 do readiness.
+  const bucket = 'health-check-bucket';
   let app: NestExpressApplication | undefined;
 
   beforeAll(async () => {
-    infra = await startInfra();
-    app = await createTestApp(infra.env, { controllers: [EchoController] });
+    app = await createTestApp({ controllers: [EchoController], env: { S3_BUCKET: bucket } });
   });
 
   afterAll(async () => {
     await app?.close();
-    await infra?.stop();
   });
 
   const http = () => {
     if (!app) throw new Error('App não inicializada');
     return request(app.getHttpServer());
   };
-  const env = () => {
-    if (!infra) throw new Error('Infra não inicializada');
-    return infra.env;
-  };
+  const env = inject('infraEnv');
   const problemOf = (body: unknown) => problemDetailsSchema.parse(body);
 
   describe('health', () => {
@@ -66,15 +63,15 @@ describe('Fundação HTTP da API (integração)', () => {
 
     it('readiness responde 200 com todas as dependências acessíveis', async () => {
       const s3 = new S3Client({
-        endpoint: env().S3_ENDPOINT,
+        endpoint: env.S3_ENDPOINT,
         region: 'us-east-1',
         forcePathStyle: true,
         credentials: {
-          accessKeyId: env().S3_ACCESS_KEY ?? '',
-          secretAccessKey: env().S3_SECRET_KEY ?? '',
+          accessKeyId: env.S3_ACCESS_KEY ?? '',
+          secretAccessKey: env.S3_SECRET_KEY ?? '',
         },
       });
-      await s3.send(new CreateBucketCommand({ Bucket: env().S3_BUCKET }));
+      await s3.send(new CreateBucketCommand({ Bucket: bucket }));
       s3.destroy();
 
       const res = await http().get('/health/ready').expect(200);
