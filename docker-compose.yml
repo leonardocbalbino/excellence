@@ -1,0 +1,94 @@
+name: excellence
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-excellence}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-excellence}
+      POSTGRES_DB: ${POSTGRES_DB:-excellence}
+      TZ: UTC
+      PGTZ: UTC
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    command: ['redis-server', '--appendonly', 'yes']
+    ports:
+      - '6379:6379'
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  minio:
+    # Imagens oficiais da MinIO deixaram de ser publicadas em registries públicos;
+    # usamos a build da Chainguard (ver ADR 0003).
+    image: cgr.dev/chainguard/minio:latest
+    command: ['server', '/data', '--console-address', ':9001']
+    environment:
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY:-excellence}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY:-excellence-secret}
+    ports:
+      - '9000:9000'
+      - '9001:9001'
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      # A imagem não traz curl/mc; usa /dev/tcp e builtins do bash contra o endpoint de liveness.
+      test:
+        - CMD
+        - bash
+        - -c
+        - "exec 3<>/dev/tcp/127.0.0.1/9000 && printf 'GET /minio/health/live HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3 && read -r line <&3 && [[ $$line == *' 200 '* ]]"
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Cria o bucket privado padrão e encerra. Executado por `pnpm infra:up`
+  # (docker compose run --rm minio-init), fora do `up --wait`.
+  minio-init:
+    image: cgr.dev/chainguard/minio-client:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment:
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-excellence}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:-excellence-secret}
+      S3_BUCKET: ${S3_BUCKET:-excellence}
+    entrypoint: >
+      /bin/bash -c "
+      mc alias set local http://minio:9000 $${S3_ACCESS_KEY} $${S3_SECRET_KEY} &&
+      mc mb --ignore-existing local/$${S3_BUCKET} &&
+      mc anonymous set none local/$${S3_BUCKET}
+      "
+    profiles: ['init']
+    restart: 'no'
+
+  mailpit:
+    image: axllent/mailpit:latest
+    ports:
+      - '1025:1025'
+      - '8025:8025'
+    healthcheck:
+      test: ['CMD', '/mailpit', 'readyz']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  postgres-data:
+  redis-data:
+  minio-data:
