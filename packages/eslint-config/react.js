@@ -11,6 +11,8 @@ export const react = tseslint.config(...base, {
   rules: {
     ...reactHooks.configs.recommended.rules,
     'react-refresh/only-export-components': ['warn', { allowConstantExport: true }],
+    // Handlers como `onClick={() => setOpen(false)}` são idiomáticos em React.
+    '@typescript-eslint/no-confusing-void-expression': ['error', { ignoreArrowShorthand: true }],
   },
 });
 
