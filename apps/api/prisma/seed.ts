@@ -13,6 +13,7 @@ import {
   type RoleTemplate,
 } from '../src/modules/access-control/domain/default-roles';
 import { PasswordHasher } from '../src/modules/auth/infrastructure/password-hasher';
+import { nationalHolidaySuggestions } from '../src/modules/scheduling/domain/national-holidays';
 
 export const SEED_COMPANY_ID = '01900000-0000-7000-8000-000000000001';
 
@@ -304,6 +305,126 @@ export async function seed(prisma: PrismaClient, password: string): Promise<void
   }
   for (const { id, managerId } of SEED_EMPLOYEES) {
     if (managerId) await prisma.employee.update({ where: { id }, data: { managerId } });
+  }
+
+  await seedScheduling(prisma);
+}
+
+const SEED_SHIFTS = {
+  comercial: '01900000-0000-7000-8000-000000000801',
+  diurno12: '01900000-0000-7000-8000-000000000802',
+  noturno12: '01900000-0000-7000-8000-000000000803',
+} as const;
+
+const SEED_SCHEDULES = {
+  comercial: '01900000-0000-7000-8000-000000000901',
+  diurno12x36: '01900000-0000-7000-8000-000000000902',
+} as const;
+
+/**
+ * Jornada de exemplo. Os horários e intervalos são só ilustrativos: limites legais são
+ * parâmetros do motor de cálculo (pendência P-012).
+ */
+async function seedScheduling(prisma: PrismaClient): Promise<void> {
+  const companyId = SEED_COMPANY_ID;
+  const shifts = [
+    {
+      id: SEED_SHIFTS.comercial,
+      name: 'Comercial',
+      startMinute: 8 * 60,
+      endMinute: 17 * 60,
+      breakMinutes: 60,
+    },
+    {
+      id: SEED_SHIFTS.diurno12,
+      name: 'Diurno 12h',
+      startMinute: 7 * 60,
+      endMinute: 19 * 60,
+      breakMinutes: 60,
+    },
+    {
+      id: SEED_SHIFTS.noturno12,
+      name: 'Noturno 12h',
+      startMinute: 19 * 60,
+      endMinute: 7 * 60,
+      breakMinutes: 60,
+    },
+  ];
+  for (const shift of shifts) {
+    await prisma.shift.upsert({
+      where: { id: shift.id },
+      update: {},
+      create: { ...shift, companyId },
+    });
+  }
+
+  const schedules = [
+    {
+      id: SEED_SCHEDULES.comercial,
+      name: '5x2 comercial',
+      kind: 'cycle' as const,
+      cycleAnchor: 'monday' as const,
+      days: [...Array<string>(5).fill(SEED_SHIFTS.comercial), null, null],
+    },
+    {
+      id: SEED_SCHEDULES.diurno12x36,
+      name: '12x36 diurno',
+      kind: 'cycle' as const,
+      cycleAnchor: 'assignment' as const,
+      days: [SEED_SHIFTS.diurno12, null],
+    },
+  ];
+  for (const { days, ...schedule } of schedules) {
+    await prisma.workSchedule.upsert({
+      where: { id: schedule.id },
+      update: {},
+      create: { ...schedule, companyId },
+    });
+    if ((await prisma.workScheduleDay.count({ where: { scheduleId: schedule.id } })) === 0) {
+      await prisma.workScheduleDay.createMany({
+        data: days.map((shiftId, dayIndex) => ({
+          companyId,
+          scheduleId: schedule.id,
+          dayIndex,
+          shiftId,
+        })),
+      });
+    }
+  }
+
+  // Feriados nacionais de data fixa do ano corrente (sugestão conferível; pendência P-011).
+  const year = new Date().getUTCFullYear();
+  if ((await prisma.holiday.count({ where: { companyId, scope: 'national' } })) === 0) {
+    await prisma.holiday.createMany({
+      data: nationalHolidaySuggestions(year).map((h) => ({
+        companyId,
+        date: date(h.date),
+        name: h.name,
+        scope: 'national' as const,
+      })),
+    });
+  }
+
+  // Administrativos no 5x2; vigilantes na 12x36 (alternando o dia de início).
+  const assignments = [
+    ['01900000-0000-7000-8000-000000000701', SEED_SCHEDULES.comercial, '2026-01-05'],
+    ['01900000-0000-7000-8000-000000000702', SEED_SCHEDULES.comercial, '2026-01-05'],
+    ['01900000-0000-7000-8000-000000000703', SEED_SCHEDULES.comercial, '2026-01-05'],
+    ['01900000-0000-7000-8000-000000000704', SEED_SCHEDULES.diurno12x36, '2026-01-05'],
+    ['01900000-0000-7000-8000-000000000705', SEED_SCHEDULES.diurno12x36, '2026-01-06'],
+    ['01900000-0000-7000-8000-000000000706', SEED_SCHEDULES.diurno12x36, '2026-01-05'],
+  ] as const;
+  for (const [employeeId, scheduleId, start] of assignments) {
+    if ((await prisma.employeeScheduleAssignment.count({ where: { employeeId } })) > 0) continue;
+    await prisma.employeeScheduleAssignment.create({
+      data: {
+        companyId,
+        employeeId,
+        scheduleId,
+        startDate: date(start),
+        cycleStartDate: date(start),
+      },
+    });
   }
 }
 
