@@ -34,6 +34,10 @@ jobs:
       - name: Lint, typecheck, test e build
         run: pnpm turbo run lint typecheck test build
 
+      # Testcontainers usa o Docker disponível no runner ubuntu-latest.
+      - name: Testes de integração
+        run: pnpm turbo run test:integration
+
       - name: Commits (Conventional Commits)
         if: github.event_name == 'pull_request'
         run: >
