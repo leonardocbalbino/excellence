@@ -18,23 +18,27 @@ pnpm infra:up        # Postgres, Redis, MinIO (+ bucket) e Mailpit
 pnpm dev             # API em :3000, web em :5173
 ```
 
-| Serviço             | Endereço                                                   |
-| ------------------- | ---------------------------------------------------------- |
-| API                 | http://localhost:3000                                      |
-| Web                 | http://localhost:5173                                      |
-| Postgres            | `localhost:5432` (bancos `excellence` e `excellence_test`) |
-| Redis               | `localhost:6379`                                           |
-| MinIO API / console | http://localhost:9000 / http://localhost:9001              |
-| Mailpit (SMTP / UI) | `localhost:1025` / http://localhost:8025                   |
+| Serviço             | Endereço                                                        |
+| ------------------- | --------------------------------------------------------------- |
+| API                 | http://localhost:3000/api/v1                                    |
+| OpenAPI (UI / JSON) | http://localhost:3000/docs / http://localhost:3000/openapi.json |
+| Health (live/ready) | http://localhost:3000/health/live · /health/ready               |
+| Web                 | http://localhost:5173                                           |
+| Postgres            | `localhost:5432` (bancos `excellence` e `excellence_test`)      |
+| Redis               | `localhost:6379`                                                |
+| MinIO API / console | http://localhost:9000 / http://localhost:9001                   |
+| Mailpit (SMTP / UI) | `localhost:1025` / http://localhost:8025                        |
 
 ## Scripts
 
-| Comando                                      | O que faz                             |
-| -------------------------------------------- | ------------------------------------- |
-| `pnpm build`                                 | Build de todos os pacotes (Turborepo) |
-| `pnpm lint` / `pnpm typecheck` / `pnpm test` | Verificações                          |
-| `pnpm format` / `pnpm format:check`          | Prettier                              |
-| `pnpm infra:up` / `pnpm infra:down`          | Sobe / derruba a infraestrutura local |
+| Comando                                      | O que faz                              |
+| -------------------------------------------- | -------------------------------------- |
+| `pnpm build`                                 | Build de todos os pacotes (Turborepo)  |
+| `pnpm lint` / `pnpm typecheck` / `pnpm test` | Verificações (testes unitários)        |
+| `pnpm test:integration`                      | Integração com Testcontainers (Docker) |
+| `pnpm --filter @excellence/api db:generate`  | Gera o Prisma Client                   |
+| `pnpm format` / `pnpm format:check`          | Prettier                               |
+| `pnpm infra:up` / `pnpm infra:down`          | Sobe / derruba a infraestrutura local  |
 
 ## Estrutura
 
