@@ -25,6 +25,8 @@ model Company {
   refreshTokens    RefreshToken[]
   mfaRecoveryCodes MfaRecoveryCode[]
   roles            Role[]
+  auditLogs        AuditLog[]
+  files            StoredFile[]
 
   @@map("companies")
 }
@@ -200,4 +202,62 @@ model UserRole {
   @@index([roleId])
   @@index([companyId])
   @@map("user_roles")
+}
+
+// ─── Auditoria — ADR 0008 ────────────────────────────────────────────────────────────
+
+/// Append-only: UPDATE, DELETE e TRUNCATE bloqueados por trigger (forbid_mutation).
+/// actor_user_id não tem FK de propósito: o registro de auditoria sobrevive a qualquer
+/// mudança nos cadastros.
+model AuditLog {
+  id           String   @id @default(uuid(7)) @db.Uuid
+  companyId    String   @map("company_id") @db.Uuid
+  // Horário oficial do servidor, em UTC.
+  occurredAt   DateTime @default(now()) @map("occurred_at") @db.Timestamptz(6)
+  actorUserId  String?  @map("actor_user_id") @db.Uuid
+  actorIp      String?  @map("actor_ip")
+  requestId    String?  @map("request_id")
+  // Verbo no passado, com o domínio de prefixo: "auth.login_succeeded", "role.updated".
+  action       String
+  resourceType String?  @map("resource_type")
+  resourceId   String?  @map("resource_id")
+  metadata     Json?
+
+  company Company @relation(fields: [companyId], references: [id])
+
+  @@index([companyId, occurredAt(sort: Desc)])
+  @@index([companyId, resourceType, resourceId])
+  @@index([companyId, actorUserId])
+  @@map("audit_logs")
+}
+
+// ─── Arquivos — ADR 0008 ─────────────────────────────────────────────────────────────
+
+enum FileStatus {
+  pending
+  uploaded
+
+  @@map("file_status")
+}
+
+model StoredFile {
+  id           String     @id @default(uuid(7)) @db.Uuid
+  companyId    String     @map("company_id") @db.Uuid
+  // Finalidade (define tipos e tamanho aceitos): ver FILE_PURPOSES em @excellence/shared.
+  purpose      String
+  // Chave no bucket, gerada pelo servidor; nunca deriva do nome enviado pelo usuário.
+  storageKey   String     @unique @map("storage_key")
+  originalName String     @map("original_name")
+  contentType  String     @map("content_type")
+  sizeBytes    Int        @map("size_bytes")
+  status       FileStatus @default(pending)
+  uploadedBy   String     @map("uploaded_by") @db.Uuid
+  createdAt    DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+  confirmedAt  DateTime?  @map("confirmed_at") @db.Timestamptz(6)
+
+  company Company @relation(fields: [companyId], references: [id])
+
+  @@unique([id, companyId])
+  @@index([companyId, status])
+  @@map("files")
 }
