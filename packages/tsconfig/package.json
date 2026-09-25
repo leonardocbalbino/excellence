@@ -1,0 +1,11 @@
+{
+  "name": "@excellence/tsconfig",
+  "version": "0.0.0",
+  "private": true,
+  "files": [
+    "*.json"
+  ],
+  "devDependencies": {
+    "typescript": "~6.0.3"
+  }
+}
