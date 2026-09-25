@@ -16,17 +16,34 @@ datasource db {
 // ─── Organização (mínimo para autenticação; ampliado na etapa 1A.1) ─────────────
 
 model Company {
-  id        String   @id @default(uuid(7)) @db.Uuid
-  name      String
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id                    String   @id @default(uuid(7)) @db.Uuid
+  // Nome de exibição (fantasia).
+  name                  String
+  legalName             String?  @map("legal_name")
+  // Sem pontuação; aceita o formato alfanumérico (IN RFB 2.229/2024).
+  cnpj                  String?  @unique
+  // Fuso padrão para exibição; cada unidade pode ter o seu (regra 4).
+  timezone              String   @default("America/Sao_Paulo")
+  // Perfil atribuído às contas criadas para funcionários (configurado pelo Admin).
+  defaultEmployeeRoleId String?  @map("default_employee_role_id") @db.Uuid
+  createdAt             DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // FK simples: FK composta com o próprio id impede o Prisma de gerar o id no create. A
+  // mesma empresa é garantida pelo serviço (busca o perfil pelo client isolado).
+  defaultEmployeeRole Role? @relation("CompanyDefaultEmployeeRole", fields: [defaultEmployeeRoleId], references: [id], onDelete: Restrict)
 
   users            User[]
   refreshTokens    RefreshToken[]
   mfaRecoveryCodes MfaRecoveryCode[]
-  roles            Role[]
+  roles            Role[]            @relation("CompanyRoles")
   auditLogs        AuditLog[]
   files            StoredFile[]
+  units            Unit[]
+  departments      Department[]
+  positions        Position[]
+  laborUnions      LaborUnion[]
+  employees        Employee[]
 
   @@map("companies")
 }
@@ -42,13 +59,15 @@ model User {
   passwordHash String  @map("password_hash")
   isActive     Boolean @default(true) @map("is_active")
 
-  mfaEnabled       Boolean   @default(false) @map("mfa_enabled")
+  mfaEnabled         Boolean   @default(false) @map("mfa_enabled")
   // Segredos TOTP cifrados com AES-256-GCM (MFA_ENCRYPTION_KEY), nunca em claro.
-  mfaSecret        String?   @map("mfa_secret")
-  mfaPendingSecret String?   @map("mfa_pending_secret")
+  mfaSecret          String?   @map("mfa_secret")
+  mfaPendingSecret   String?   @map("mfa_pending_secret")
   // Último passo TOTP aceito: impede reutilizar o mesmo código (replay).
-  mfaLastUsedStep  BigInt?   @map("mfa_last_used_step")
-  mfaEnabledAt     DateTime? @map("mfa_enabled_at") @db.Timestamptz(6)
+  mfaLastUsedStep    BigInt?   @map("mfa_last_used_step")
+  mfaEnabledAt       DateTime? @map("mfa_enabled_at") @db.Timestamptz(6)
+  // Senha temporária (conta criada pelo RH): o acesso fica restrito até a troca.
+  mustChangePassword Boolean   @default(false) @map("must_change_password")
 
   lastLoginAt DateTime? @map("last_login_at") @db.Timestamptz(6)
   createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
@@ -58,6 +77,7 @@ model User {
   refreshTokens    RefreshToken[]
   mfaRecoveryCodes MfaRecoveryCode[]
   userRoles        UserRole[]
+  employee         Employee?
 
   // Alvo das FKs compostas (id, company_id): impede vínculos entre empresas diferentes.
   @@unique([id, companyId])
@@ -138,10 +158,11 @@ model Role {
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  company     Company          @relation(fields: [companyId], references: [id])
+  company     Company          @relation("CompanyRoles", fields: [companyId], references: [id])
   permissions RolePermission[]
   scopes      RoleScope[]
   userRoles   UserRole[]
+  defaultFor  Company[]        @relation("CompanyDefaultEmployeeRole")
 
   @@unique([companyId, name])
   @@unique([id, companyId])
@@ -181,7 +202,9 @@ model RoleScope {
   unitId       String?   @map("unit_id") @db.Uuid
   departmentId String?   @map("department_id") @db.Uuid
 
-  role Role @relation(fields: [roleId, companyId], references: [id, companyId], onDelete: Cascade)
+  role       Role        @relation(fields: [roleId, companyId], references: [id, companyId], onDelete: Cascade)
+  unit       Unit?       @relation(fields: [unitId, companyId], references: [id, companyId], onDelete: Restrict)
+  department Department? @relation(fields: [departmentId, companyId], references: [id, companyId], onDelete: Restrict)
 
   @@index([roleId])
   @@index([companyId])
@@ -260,4 +283,143 @@ model StoredFile {
   @@unique([id, companyId])
   @@index([companyId, status])
   @@map("files")
+}
+
+// ─── Organização — ADR 0010 ─────────────────────────────────────────────────────────
+
+model Unit {
+  id                   String   @id @default(uuid(7)) @db.Uuid
+  companyId            String   @map("company_id") @db.Uuid
+  name                 String
+  code                 String?  @db.Citext
+  cnpj                 String?
+  street               String?
+  number               String?
+  complement           String?
+  district             String?
+  city                 String?
+  state                String?  @db.Char(2)
+  postalCode           String?  @map("postal_code")
+  latitude             Float?
+  longitude            Float?
+  // Raio da cerca virtual em metros; null = sem cerca.
+  geofenceRadiusMeters Int?     @map("geofence_radius_meters")
+  // Fuso da unidade; null = fuso da empresa.
+  timezone             String?
+  isActive             Boolean  @default(true) @map("is_active")
+  createdAt            DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  company     Company      @relation(fields: [companyId], references: [id])
+  departments Department[]
+  employees   Employee[]
+  roleScopes  RoleScope[]
+
+  @@unique([companyId, code])
+  @@unique([id, companyId])
+  @@map("units")
+}
+
+model Department {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  companyId String   @map("company_id") @db.Uuid
+  name      String
+  code      String?  @db.Citext
+  // Unidade a que pertence; null = vale para a empresa toda.
+  unitId    String?  @map("unit_id") @db.Uuid
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  company    Company     @relation(fields: [companyId], references: [id])
+  unit       Unit?       @relation(fields: [unitId, companyId], references: [id, companyId], onDelete: Restrict)
+  employees  Employee[]
+  roleScopes RoleScope[]
+
+  @@unique([companyId, code])
+  @@unique([id, companyId])
+  @@map("departments")
+}
+
+model Position {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  companyId String   @map("company_id") @db.Uuid
+  name      String   @db.Citext
+  // Classificação Brasileira de Ocupações (6 dígitos).
+  cbo       String?
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  company   Company    @relation(fields: [companyId], references: [id])
+  employees Employee[]
+
+  @@unique([companyId, name])
+  @@unique([id, companyId])
+  @@map("positions")
+}
+
+model LaborUnion {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  companyId String   @map("company_id") @db.Uuid
+  name      String   @db.Citext
+  cnpj      String?
+  // Mês da data-base da categoria (1 a 12).
+  baseMonth Int?     @map("base_month") @db.SmallInt
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  company   Company    @relation(fields: [companyId], references: [id])
+  employees Employee[]
+
+  @@unique([companyId, name])
+  @@unique([id, companyId])
+  @@map("unions")
+}
+
+// ─── Pessoas — ADR 0010 ─────────────────────────────────────────────────────────────
+
+model Employee {
+  id                 String    @id @default(uuid(7)) @db.Uuid
+  companyId          String    @map("company_id") @db.Uuid
+  // Conta de acesso (login) do funcionário, se houver.
+  userId             String?   @unique @map("user_id") @db.Uuid
+  registrationNumber String    @map("registration_number") @db.Citext
+  name               String
+  socialName         String?   @map("social_name")
+  // Só dígitos.
+  cpf                String    @db.Char(11)
+  pis                String?   @db.Char(11)
+  birthDate          DateTime? @map("birth_date") @db.Date
+  email              String?   @db.Citext
+  phone              String?
+  hireDate           DateTime  @map("hire_date") @db.Date
+  terminationDate    DateTime? @map("termination_date") @db.Date
+  unitId             String    @map("unit_id") @db.Uuid
+  departmentId       String?   @map("department_id") @db.Uuid
+  positionId         String?   @map("position_id") @db.Uuid
+  unionId            String?   @map("union_id") @db.Uuid
+  // Gestor direto: define a "própria equipe" (escopo own_team).
+  managerId          String?   @map("manager_id") @db.Uuid
+  createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  company    Company     @relation(fields: [companyId], references: [id])
+  user       User?       @relation(fields: [userId, companyId], references: [id, companyId], onDelete: Restrict)
+  unit       Unit        @relation(fields: [unitId, companyId], references: [id, companyId], onDelete: Restrict)
+  department Department? @relation(fields: [departmentId, companyId], references: [id, companyId], onDelete: Restrict)
+  position   Position?   @relation(fields: [positionId, companyId], references: [id, companyId], onDelete: Restrict)
+  union      LaborUnion? @relation(fields: [unionId, companyId], references: [id, companyId], onDelete: Restrict)
+  manager    Employee?   @relation("EmployeeManager", fields: [managerId, companyId], references: [id, companyId], onDelete: Restrict)
+  reports    Employee[]  @relation("EmployeeManager")
+
+  @@unique([userId, companyId])
+  @@unique([companyId, cpf])
+  @@unique([companyId, registrationNumber])
+  @@unique([id, companyId])
+  @@index([companyId, unitId])
+  @@index([companyId, departmentId])
+  @@index([companyId, managerId])
+  @@map("employees")
 }
