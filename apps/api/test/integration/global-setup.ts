@@ -1,4 +1,5 @@
 import { execFileSync } from 'node:child_process';
+import { CreateBucketCommand, S3Client } from '@aws-sdk/client-s3';
 import { resolve } from 'node:path';
 import type { TestProject } from 'vitest/node';
 import { startInfra, type TestInfra } from './support/infra';
@@ -23,6 +24,19 @@ export async function setup(project: TestProject): Promise<void> {
     env: { ...process.env, DATABASE_URL: infra.env.DATABASE_URL },
     stdio: 'pipe',
   });
+  // Bucket padrão (o teste de health usa um bucket próprio, criado por ele).
+  const s3 = new S3Client({
+    endpoint: infra.env.S3_ENDPOINT,
+    region: 'us-east-1',
+    forcePathStyle: true,
+    credentials: {
+      accessKeyId: infra.env.S3_ACCESS_KEY ?? '',
+      secretAccessKey: infra.env.S3_SECRET_KEY ?? '',
+    },
+  });
+  await s3.send(new CreateBucketCommand({ Bucket: infra.env.S3_BUCKET }));
+  s3.destroy();
+
   project.provide('infraEnv', infra.env);
 }
 
