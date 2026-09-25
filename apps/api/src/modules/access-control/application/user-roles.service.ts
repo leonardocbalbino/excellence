@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, UnprocessableEntityException } from '@nestjs/common';
 import { isPermission, type UserWithRoles } from '@excellence/shared';
 import { TenantPrismaService } from '../../../infrastructure/prisma/tenant-prisma.service';
+import { AuditService } from '../../audit/application/audit.service';
 import type { AccessGrant } from '../http/access.decorators';
 import { assertAdministratorRemains, assertCanGrant, assertCompanyWide } from './access-rules';
 
@@ -34,7 +35,10 @@ function toUser(row: {
  */
 @Injectable()
 export class UserRolesService {
-  constructor(private readonly db: TenantPrismaService) {}
+  constructor(
+    private readonly db: TenantPrismaService,
+    private readonly audit: AuditService,
+  ) {}
 
   async list(): Promise<UserWithRoles[]> {
     const rows = await this.db.client.user.findMany({
@@ -79,6 +83,19 @@ export class UserRolesService {
         })),
       });
       await assertAdministratorRemains(tx);
+
+      const removed = [...current].filter((roleId) => !roleIds.includes(roleId));
+      if (added.length > 0 || removed.length > 0) {
+        await this.audit.record(
+          {
+            action: 'user.roles_changed',
+            resourceType: 'user',
+            resourceId: userId,
+            metadata: { added: added.map((role) => role.id), removed },
+          },
+          tx,
+        );
+      }
 
       return toUser(
         await tx.user.findUniqueOrThrow({ where: { id: userId }, select: USER_SELECT }),

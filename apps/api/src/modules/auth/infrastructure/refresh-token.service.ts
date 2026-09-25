@@ -3,10 +3,12 @@ import { Injectable, Logger } from '@nestjs/common';
 import { generateOpaqueToken, sha256 } from '../../../common/crypto/tokens';
 import { AppConfig } from '../../../config/app-config';
 import { PrismaService } from '../../../infrastructure/prisma/prisma.service';
+import { AuditService } from '../../audit/application/audit.service';
 
 export interface ClientMetadata {
   ip: string;
   userAgent?: string | undefined;
+  requestId?: string | undefined;
 }
 
 export interface IssuedRefreshToken {
@@ -45,6 +47,7 @@ export class RefreshTokenService {
 
   constructor(
     private readonly prisma: PrismaService,
+    private readonly audit: AuditService,
     config: AppConfig,
   ) {
     this.ttlMs = config.get('REFRESH_TOKEN_TTL_DAYS') * DAY_MS;
@@ -111,6 +114,16 @@ export class RefreshTokenService {
         'Reuso de refresh token detectado; sessão revogada',
       );
       await this.revokeFamily(current.familyId, 'reuse_detected');
+      await this.audit.record({
+        action: 'auth.refresh_token_reused',
+        resourceType: 'user',
+        resourceId: current.userId,
+        companyId: current.companyId,
+        actorUserId: null,
+        actorIp: meta.ip,
+        requestId: meta.requestId ?? null,
+        metadata: { sessionId: current.familyId, userAgent: meta.userAgent ?? null },
+      });
       throw new InvalidRefreshTokenError('reused');
     }
 
@@ -123,13 +136,21 @@ export class RefreshTokenService {
     };
   }
 
-  /** Revoga a sessão a que o token pertence. Token desconhecido é ignorado (logout idempotente). */
-  async revokeByToken(token: string, reason: RevokeReason): Promise<void> {
+  /**
+   * Revoga a sessão a que o token pertence e devolve de quem era. Token desconhecido é
+   * ignorado (logout idempotente).
+   */
+  async revokeByToken(
+    token: string,
+    reason: RevokeReason,
+  ): Promise<{ userId: string; companyId: string } | null> {
     const current = await this.prisma.refreshToken.findUnique({
       where: { tokenHash: sha256(token) },
-      select: { familyId: true },
+      select: { familyId: true, userId: true, companyId: true, revokedAt: true },
     });
-    if (current) await this.revokeFamily(current.familyId, reason);
+    if (!current || current.revokedAt) return null;
+    await this.revokeFamily(current.familyId, reason);
+    return { userId: current.userId, companyId: current.companyId };
   }
 
   async revokeFamily(familyId: string, reason: RevokeReason): Promise<void> {

@@ -9,6 +9,7 @@ import {
 import type { z } from 'zod';
 import { ProblemException } from '../../../common/errors/problem.exception';
 import { TenantPrismaService } from '../../../infrastructure/prisma/tenant-prisma.service';
+import { AuditService, toAuditJson } from '../../audit/application/audit.service';
 import { fromRoleScope, toRoleScope } from '../domain/data-scope';
 import type { AccessGrant } from '../http/access.decorators';
 import { assertAdministratorRemains, assertCanGrant, assertCompanyWide } from './access-rules';
@@ -56,7 +57,10 @@ function toRole(row: RoleRow): Role {
 
 @Injectable()
 export class RolesService {
-  constructor(private readonly db: TenantPrismaService) {}
+  constructor(
+    private readonly db: TenantPrismaService,
+    private readonly audit: AuditService,
+  ) {}
 
   async list(): Promise<Role[]> {
     const rows = await this.db.client.role.findMany({
@@ -75,32 +79,43 @@ export class RolesService {
   async create(input: RoleInput, grant: AccessGrant): Promise<Role> {
     assertCompanyWide(grant);
     assertCanGrant(grant, input.permissions);
-    const row = await this.db.client.role.create({
-      data: {
-        companyId: grant.companyId,
-        name: input.name,
-        description: input.description,
-        requiresMfa: input.requiresMfa,
-        permissions: { create: input.permissions.map((permissionKey) => ({ permissionKey })) },
-        // company_id dos filhos vem da FK composta (role_id, company_id).
-        scopes: { create: input.scopes.map(fromRoleScope) },
-      },
-      select: ROLE_SELECT,
+    return this.db.client.$transaction(async (tx) => {
+      const role = toRole(
+        await tx.role.create({
+          data: {
+            companyId: grant.companyId,
+            name: input.name,
+            description: input.description,
+            requiresMfa: input.requiresMfa,
+            permissions: { create: input.permissions.map((permissionKey) => ({ permissionKey })) },
+            // company_id dos filhos vem da FK composta (role_id, company_id).
+            scopes: { create: input.scopes.map(fromRoleScope) },
+          },
+          select: ROLE_SELECT,
+        }),
+      );
+      await this.audit.record(
+        {
+          action: 'role.created',
+          resourceType: 'role',
+          resourceId: role.id,
+          metadata: snapshot(role),
+        },
+        tx,
+      );
+      return role;
     });
-    return toRole(row);
   }
 
   async update(id: string, input: RoleInput, grant: AccessGrant): Promise<Role> {
     assertCompanyWide(grant);
     return this.db.client.$transaction(async (tx) => {
-      const current = await tx.role.findUnique({
-        where: { id },
-        select: { permissions: { select: { permissionKey: true } } },
-      });
-      if (!current) throw new NotFoundException('Perfil não encontrado.');
+      const currentRow = await tx.role.findUnique({ where: { id }, select: ROLE_SELECT });
+      if (!currentRow) throw new NotFoundException('Perfil não encontrado.');
+      const before = toRole(currentRow);
 
       // Só as permissões acrescentadas precisam estar em poder de quem edita.
-      const existing = new Set(current.permissions.map((p) => p.permissionKey));
+      const existing = new Set<string>(before.permissions);
       assertCanGrant(
         grant,
         input.permissions.filter((p: Permission) => !existing.has(p)),
@@ -121,7 +136,17 @@ export class RolesService {
         select: ROLE_SELECT,
       });
       await assertAdministratorRemains(tx);
-      return toRole(row);
+      const after = toRole(row);
+      await this.audit.record(
+        {
+          action: 'role.updated',
+          resourceType: 'role',
+          resourceId: id,
+          metadata: { before: snapshot(before), after: snapshot(after) },
+        },
+        tx,
+      );
+      return after;
     });
   }
 
@@ -148,6 +173,23 @@ export class RolesService {
         detail: 'Remova o perfil dos usuários antes de excluí-lo.',
       });
     }
-    await this.db.client.role.delete({ where: { id } });
+    await this.db.client.$transaction(async (tx) => {
+      const deleted = toRole(await tx.role.delete({ where: { id }, select: ROLE_SELECT }));
+      await this.audit.record(
+        {
+          action: 'role.deleted',
+          resourceType: 'role',
+          resourceId: id,
+          metadata: snapshot(deleted),
+        },
+        tx,
+      );
+    });
   }
+}
+
+/** Estado do perfil registrado na auditoria (antes/depois). */
+function snapshot(role: Role) {
+  const { name, description, requiresMfa, permissions, scopes } = role;
+  return toAuditJson({ name, description, requiresMfa, permissions, scopes });
 }

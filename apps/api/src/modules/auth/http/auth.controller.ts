@@ -31,6 +31,7 @@ function metadataOf(req: Request): ClientMetadata {
   return {
     ip: req.ip ?? req.socket.remoteAddress ?? 'unknown',
     userAgent: req.headers['user-agent'],
+    requestId: typeof req.id === 'string' ? req.id : undefined,
   };
 }
 
@@ -143,7 +144,7 @@ export class AuthController {
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ): Promise<void> {
-    await this.auth.logout(body.refreshToken ?? readRefreshCookie(req));
+    await this.auth.logout(body.refreshToken ?? readRefreshCookie(req), metadataOf(req));
     clearRefreshCookie(res, this.secureCookie);
   }
 

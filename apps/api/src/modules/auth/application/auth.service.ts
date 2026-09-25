@@ -8,7 +8,9 @@ import {
   ProblemType,
 } from '@excellence/shared';
 import { ProblemException } from '../../../common/errors/problem.exception';
+import type { Prisma } from '../../../generated/prisma/client';
 import { PrismaService } from '../../../infrastructure/prisma/prisma.service';
+import { AuditService } from '../../audit/application/audit.service';
 import type { AuthPrincipal } from '../domain/auth-principal';
 import { MFA_POLICY, type MfaPolicy } from '../domain/mfa-policy';
 import { LoginThrottler, type ThrottleStatus } from '../infrastructure/login-throttler';
@@ -55,6 +57,7 @@ export class AuthService {
     private readonly refreshTokens: RefreshTokenService,
     private readonly mfa: MfaService,
     @Inject(MFA_POLICY) private readonly mfaPolicy: MfaPolicy,
+    private readonly audit: AuditService,
   ) {}
 
   async login(
@@ -67,6 +70,12 @@ export class AuthService {
     const passwordOk = await this.hasher.verify(user?.passwordHash ?? null, input.password);
     if (!user || !passwordOk || !user.isActive) {
       await this.throttler.registerLoginFailure(input.email, meta.ip);
+      // E-mail inexistente não tem empresa para auditar; fica só no log de acesso.
+      if (user) {
+        await this.recordAuth('auth.login_failed', user, meta, {
+          reason: passwordOk ? 'inactive_user' : 'wrong_password',
+        });
+      }
       // Mesma resposta para e-mail inexistente, senha errada ou usuário inativo.
       throw new ProblemException(
         {
@@ -112,10 +121,15 @@ export class AuthService {
     assertNotThrottled(await this.throttler.checkMfa(principal.tokenId));
     if (!(await this.mfa.verifyAndConsume(principal.userId, code))) {
       await this.throttler.registerMfaFailure(principal.tokenId);
+      await this.recordAuth(
+        'auth.mfa_failed',
+        { id: principal.userId, companyId: principal.companyId },
+        meta,
+      );
       throw invalidMfaCode();
     }
     const user = await this.findActiveUser(principal.userId);
-    return this.createSession(user, principal.client ?? 'web', meta);
+    return this.createSession(user, principal.client ?? 'web', meta, { mfa: true });
   }
 
   /**
@@ -128,11 +142,16 @@ export class AuthService {
     meta: ClientMetadata,
   ): Promise<ActivateResult> {
     const recoveryCodes = await this.mfa.activate(principal.userId, code);
+    await this.recordAuth(
+      'auth.mfa_enabled',
+      { id: principal.userId, companyId: principal.companyId },
+      meta,
+    );
     if (principal.tokenType !== 'mfa_enrollment') return { recoveryCodes };
     const user = await this.findActiveUser(principal.userId);
     return {
       recoveryCodes,
-      session: await this.createSession(user, principal.client ?? 'web', meta),
+      session: await this.createSession(user, principal.client ?? 'web', meta, { mfa: true }),
     };
   }
 
@@ -152,8 +171,16 @@ export class AuthService {
     return this.sessionFor(user, rotated, client);
   }
 
-  async logout(refreshToken: string | undefined): Promise<void> {
-    if (refreshToken) await this.refreshTokens.revokeByToken(refreshToken, 'logout');
+  async logout(refreshToken: string | undefined, meta: ClientMetadata): Promise<void> {
+    if (!refreshToken) return;
+    const session = await this.refreshTokens.revokeByToken(refreshToken, 'logout');
+    if (session) {
+      await this.recordAuth(
+        'auth.logout',
+        { id: session.userId, companyId: session.companyId },
+        meta,
+      );
+    }
   }
 
   async me(principal: AuthPrincipal): Promise<AuthUser> {
@@ -164,10 +191,35 @@ export class AuthService {
     user: UserRecord,
     client: AuthClient,
     meta: ClientMetadata,
+    details: { mfa: boolean } = { mfa: false },
   ): Promise<SessionResult> {
     const refresh = await this.refreshTokens.issue(user, meta);
     await this.prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
+    await this.recordAuth('auth.login_succeeded', user, meta, {
+      client,
+      mfa: details.mfa,
+      sessionId: refresh.familyId,
+    });
     return this.sessionFor(user, refresh, client);
+  }
+
+  /** Eventos de autenticação acontecem antes do contexto da requisição: tudo explícito. */
+  private recordAuth(
+    action: string,
+    user: { id: string; companyId: string },
+    meta: ClientMetadata,
+    metadata?: Prisma.InputJsonObject,
+  ): Promise<void> {
+    return this.audit.record({
+      action,
+      resourceType: 'user',
+      resourceId: user.id,
+      companyId: user.companyId,
+      actorUserId: user.id,
+      actorIp: meta.ip,
+      requestId: meta.requestId ?? null,
+      metadata: { ...metadata, userAgent: meta.userAgent ?? null },
+    });
   }
 
   private async sessionFor(
