@@ -12,3 +12,92 @@ generator client {
 datasource db {
   provider = "postgresql"
 }
+
+// ─── Organização (mínimo para autenticação; ampliado na etapa 1A.1) ─────────────
+
+model Company {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  name      String
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  users            User[]
+  refreshTokens    RefreshToken[]
+  mfaRecoveryCodes MfaRecoveryCode[]
+
+  @@map("companies")
+}
+
+// ─── Autenticação ────────────────────────────────────────────────────────────────
+
+model User {
+  id           String  @id @default(uuid(7)) @db.Uuid
+  companyId    String  @map("company_id") @db.Uuid
+  // Identificador de login, único em todo o sistema (ADR 0006).
+  email        String  @unique @db.Citext
+  name         String
+  passwordHash String  @map("password_hash")
+  isActive     Boolean @default(true) @map("is_active")
+
+  mfaEnabled       Boolean   @default(false) @map("mfa_enabled")
+  // Segredos TOTP cifrados com AES-256-GCM (MFA_ENCRYPTION_KEY), nunca em claro.
+  mfaSecret        String?   @map("mfa_secret")
+  mfaPendingSecret String?   @map("mfa_pending_secret")
+  // Último passo TOTP aceito: impede reutilizar o mesmo código (replay).
+  mfaLastUsedStep  BigInt?   @map("mfa_last_used_step")
+  mfaEnabledAt     DateTime? @map("mfa_enabled_at") @db.Timestamptz(6)
+
+  lastLoginAt DateTime? @map("last_login_at") @db.Timestamptz(6)
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  company          Company           @relation(fields: [companyId], references: [id])
+  refreshTokens    RefreshToken[]
+  mfaRecoveryCodes MfaRecoveryCode[]
+
+  @@index([companyId])
+  @@map("users")
+}
+
+/// Refresh tokens opacos e rotativos. Cada login abre uma família; cada uso consome o token
+/// e emite o próximo. Reapresentar um token consumido revoga a família inteira (ADR 0006).
+model RefreshToken {
+  id            String    @id @default(uuid(7)) @db.Uuid
+  companyId     String    @map("company_id") @db.Uuid
+  userId        String    @map("user_id") @db.Uuid
+  familyId      String    @map("family_id") @db.Uuid
+  // SHA-256 do token; o valor em claro só existe no cliente.
+  tokenHash     String    @unique @map("token_hash")
+  expiresAt     DateTime  @map("expires_at") @db.Timestamptz(6)
+  usedAt        DateTime? @map("used_at") @db.Timestamptz(6)
+  revokedAt     DateTime? @map("revoked_at") @db.Timestamptz(6)
+  revokedReason String?   @map("revoked_reason")
+  userAgent     String?   @map("user_agent")
+  ipAddress     String?   @map("ip_address")
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  company Company @relation(fields: [companyId], references: [id])
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([familyId])
+  @@index([userId])
+  @@index([companyId])
+  @@map("refresh_tokens")
+}
+
+/// Códigos de recuperação do MFA (uso único), armazenados como hash.
+model MfaRecoveryCode {
+  id        String    @id @default(uuid(7)) @db.Uuid
+  companyId String    @map("company_id") @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  codeHash  String    @map("code_hash")
+  usedAt    DateTime? @map("used_at") @db.Timestamptz(6)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  company Company @relation(fields: [companyId], references: [id])
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([companyId])
+  @@map("mfa_recovery_codes")
+}
