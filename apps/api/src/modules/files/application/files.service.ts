@@ -193,6 +193,25 @@ export class FilesService {
     return { url, expiresAt: new Date(Date.now() + this.ttlSeconds * 1000).toISOString() };
   }
 
+  /**
+   * Conteúdo de um arquivo enviado pelo próprio usuário para a finalidade informada (ex.:
+   * planilha de importação). Só arquivos confirmados.
+   */
+  async readOwnUpload(
+    fileId: string,
+    purpose: FilePurpose,
+  ): Promise<{ content: Buffer; contentType: string }> {
+    const file = await this.ownFile(fileId);
+    if (file.status !== 'uploaded' || file.purpose !== purpose) {
+      throw new NotFoundException('Arquivo não encontrado para esta finalidade.');
+    }
+    const object = await this.s3.send(
+      new GetObjectCommand({ Bucket: this.bucket, Key: file.storageKey }),
+    );
+    const bytes = (await object.Body?.transformToByteArray()) ?? new Uint8Array();
+    return { content: Buffer.from(bytes), contentType: file.contentType };
+  }
+
   private async readHead(storageKey: string): Promise<Uint8Array> {
     const object = await this.s3.send(
       new GetObjectCommand({
