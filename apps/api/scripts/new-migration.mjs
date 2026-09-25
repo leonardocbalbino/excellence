@@ -4,7 +4,7 @@
 // Objetos mantidos só em SQL (prisma/sql-managed.json) têm seus DROP removidos, porque o
 // Prisma não os conhece e tentaria apagá-los. Revise sempre o SQL gerado antes do commit.
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -43,8 +43,16 @@ if (!result || result.split('\n').every((line) => line.startsWith('--') || !line
   process.exit(0);
 }
 
-const stamp = new Date().toISOString().replace(/\D/g, '').slice(0, 14);
-const dir = join(root, 'prisma/migrations', `${stamp}_${name}`);
+// A ordem de aplicação é a ordem dos nomes: o novo prefixo precisa ser maior que o último.
+const migrationsDir = join(root, 'prisma/migrations');
+const last = readdirSync(migrationsDir)
+  .map((entry) => entry.slice(0, 14))
+  .filter((prefix) => /^\d{14}$/.test(prefix))
+  .sort()
+  .at(-1);
+const now = new Date().toISOString().replace(/\D/g, '').slice(0, 14);
+const stamp = last && now <= last ? String(BigInt(last) + 1n) : now;
+const dir = join(migrationsDir, `${stamp}_${name}`);
 if (existsSync(dir)) throw new Error(`Já existe: ${dir}`);
 mkdirSync(dir, { recursive: true });
 writeFileSync(join(dir, 'migration.sql'), `${result}\n`);
