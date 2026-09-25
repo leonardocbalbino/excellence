@@ -48,7 +48,9 @@ pnpm dev             # API em :3000, web em :5173
 
 ## Usuários de teste (seed)
 
-Senha: valor de `SEED_PASSWORD` no `.env`. Os perfis Administrador e RH exigem MFA: no primeiro
+O seed cria a empresa de exemplo, 2 unidades (Matriz em São Paulo e Filial em Campinas, com
+coordenadas e cerca virtual), departamentos, cargos, um sindicato, os 4 perfis padrão e 6
+funcionários. Senha: valor de `SEED_PASSWORD` no `.env`. Os perfis Administrador e RH exigem MFA: no primeiro
 login, o sistema pede o cadastro no aplicativo autenticador.
 
 | E-mail                     | Perfil        |
