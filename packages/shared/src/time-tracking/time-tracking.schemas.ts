@@ -106,6 +106,19 @@ export const timesheetDaySchema = z.object({
   /** Número ímpar de marcações: falta uma. */
   incomplete: z.boolean(),
   pendingAdjustments: z.number().int(),
+  /**
+   * Ausências justificadas no dia (atestado aceito). Só informativo: o efeito no cálculo
+   * (abono, desconto de DSR, afastamento previdenciário) é do motor de cálculo (P-017).
+   */
+  justifications: z.array(
+    z.object({
+      type: z.enum(['medical_certificate']),
+      id: z.uuid(),
+      /** Afastamento por horas; null para o dia inteiro. */
+      startTime: timeOfDaySchema.nullable(),
+      endTime: timeOfDaySchema.nullable(),
+    }),
+  ),
 });
 export type TimesheetDay = z.infer<typeof timesheetDaySchema>;
 

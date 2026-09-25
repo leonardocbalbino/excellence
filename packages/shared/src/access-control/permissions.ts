@@ -49,6 +49,22 @@ export const PERMISSIONS = {
     description: 'Aprovar ou recusar ajustes de ponto',
     sensitive: false,
   },
+  'medical_certificates:read': {
+    description: 'Ver atestados (período e situação, sem CID)',
+    sensitive: false,
+  },
+  'medical_certificates:read_sensitive': {
+    description: 'Ver o CID e o documento dos atestados',
+    sensitive: true,
+  },
+  'medical_certificates:manage': {
+    description: 'Registrar atestados em nome de funcionários',
+    sensitive: false,
+  },
+  'medical_certificates:review': {
+    description: 'Aceitar ou recusar atestados',
+    sensitive: false,
+  },
   // A trilha de auditoria revela quem acessou dados sensíveis: sua leitura também é auditada.
   'audit:read': { description: 'Consultar a trilha de auditoria', sensitive: true },
 } as const satisfies Record<string, PermissionDefinition>;

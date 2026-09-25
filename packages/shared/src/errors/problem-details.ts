@@ -47,6 +47,8 @@ export const ProblemType = {
   IdempotencyMismatch: 'urn:excellence:problem:idempotency-mismatch',
   AdjustmentNotPending: 'urn:excellence:problem:adjustment-not-pending',
   SelfApproval: 'urn:excellence:problem:self-approval',
+  MedicalCertificateNotPending: 'urn:excellence:problem:medical-certificate-not-pending',
+  MedicalCertificateOverlap: 'urn:excellence:problem:medical-certificate-overlap',
 } as const;
 
 export type ProblemType = (typeof ProblemType)[keyof typeof ProblemType];

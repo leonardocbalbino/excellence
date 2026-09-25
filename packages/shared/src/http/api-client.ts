@@ -96,6 +96,15 @@ import {
   timeEntrySchema,
   timesheetSchema,
 } from '../time-tracking/time-tracking.schemas.js';
+import {
+  type MedicalCertificateInput,
+  medicalCertificateInputSchema,
+  type MedicalCertificateListQuery,
+  type MedicalCertificateReview,
+  medicalCertificateReviewSchema,
+  medicalCertificateSchema,
+  medicalCertificateSensitiveSchema,
+} from '../medical/medical-certificates.schemas.js';
 
 /** Erro HTTP da API, com o Problem Details (RFC 7807) já interpretado. */
 export class ApiError extends Error {
@@ -378,6 +387,52 @@ export function createApiClient(options: ApiClientOptions) {
           body: input,
           bodySchema: adjustmentDecisionSchema,
           schema: adjustmentSchema,
+        }),
+    },
+    medicalCertificates: {
+      submit: (input: MedicalCertificateInput) =>
+        request('POST', '/me/medical-certificates', {
+          body: input,
+          bodySchema: medicalCertificateInputSchema,
+          schema: medicalCertificateSchema,
+        }),
+      mine: () =>
+        request('GET', '/me/medical-certificates', { schema: z.array(medicalCertificateSchema) }),
+      myDocument: (id: string) =>
+        request('GET', `/me/medical-certificates/${encodeURIComponent(id)}/document`, {
+          schema: downloadLinkSchema,
+        }),
+      cancel: (id: string) =>
+        request('POST', `/me/medical-certificates/${encodeURIComponent(id)}/cancel`, {
+          schema: medicalCertificateSchema,
+        }),
+      registerFor: (employeeId: string, input: MedicalCertificateInput) =>
+        request('POST', `/employees/${encodeURIComponent(employeeId)}/medical-certificates`, {
+          body: input,
+          bodySchema: medicalCertificateInputSchema,
+          schema: medicalCertificateSchema,
+        }),
+      list: (query: MedicalCertificateListQuery = {}) =>
+        request('GET', '/medical-certificates', {
+          query,
+          schema: z.array(medicalCertificateSchema),
+        }),
+      /** CID e link do documento. Cada chamada fica registrada na auditoria. */
+      sensitive: (id: string) =>
+        request('GET', `/medical-certificates/${encodeURIComponent(id)}/sensitive`, {
+          schema: medicalCertificateSensitiveSchema,
+        }),
+      accept: (id: string, input: MedicalCertificateReview = {}) =>
+        request('POST', `/medical-certificates/${encodeURIComponent(id)}/accept`, {
+          body: input,
+          bodySchema: medicalCertificateReviewSchema,
+          schema: medicalCertificateSchema,
+        }),
+      reject: (id: string, input: MedicalCertificateReview) =>
+        request('POST', `/medical-certificates/${encodeURIComponent(id)}/reject`, {
+          body: input,
+          bodySchema: medicalCertificateReviewSchema,
+          schema: medicalCertificateSchema,
         }),
     },
     schedule: {
