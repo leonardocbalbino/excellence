@@ -15,6 +15,8 @@ corepack enable
 pnpm install
 cp .env.example .env
 pnpm infra:up        # Postgres, Redis, MinIO (+ bucket) e Mailpit
+pnpm --filter @excellence/api db:deploy   # aplica as migrations
+pnpm --filter @excellence/api db:seed     # empresa de exemplo, perfis e usuários
 pnpm dev             # API em :3000, web em :5173
 ```
 
@@ -31,14 +33,29 @@ pnpm dev             # API em :3000, web em :5173
 
 ## Scripts
 
-| Comando                                      | O que faz                              |
-| -------------------------------------------- | -------------------------------------- |
-| `pnpm build`                                 | Build de todos os pacotes (Turborepo)  |
-| `pnpm lint` / `pnpm typecheck` / `pnpm test` | Verificações (testes unitários)        |
-| `pnpm test:integration`                      | Integração com Testcontainers (Docker) |
-| `pnpm --filter @excellence/api db:generate`  | Gera o Prisma Client                   |
-| `pnpm format` / `pnpm format:check`          | Prettier                               |
-| `pnpm infra:up` / `pnpm infra:down`          | Sobe / derruba a infraestrutura local  |
+| Comando                                                 | O que faz                                        |
+| ------------------------------------------------------- | ------------------------------------------------ |
+| `pnpm build`                                            | Build de todos os pacotes (Turborepo)            |
+| `pnpm lint` / `pnpm typecheck` / `pnpm test`            | Verificações (testes unitários)                  |
+| `pnpm test:integration`                                 | Integração com Testcontainers (Docker)           |
+| `pnpm --filter @excellence/api db:generate`             | Gera o Prisma Client                             |
+| `pnpm --filter @excellence/api db:deploy`               | Aplica as migrations                             |
+| `pnpm --filter @excellence/api db:seed`                 | Dados de exemplo (idempotente)                   |
+| `pnpm --filter @excellence/api db:new-migration <nome>` | Gera migration a partir do schema (revise o SQL) |
+| `pnpm format` / `pnpm format:check`                     | Prettier                                         |
+| `pnpm infra:up` / `pnpm infra:down`                     | Sobe / derruba a infraestrutura local            |
+
+## Usuários de teste (seed)
+
+Senha: valor de `SEED_PASSWORD` no `.env`. Os perfis Administrador e RH exigem MFA: no primeiro
+login, o sistema pede o cadastro no aplicativo autenticador.
+
+| E-mail                     | Perfil        |
+| -------------------------- | ------------- |
+| admin@exemplo.com.br       | Administrador |
+| rh@exemplo.com.br          | RH            |
+| gestor@exemplo.com.br      | Gestor        |
+| funcionario@exemplo.com.br | Funcionário   |
 
 ## Estrutura
 
