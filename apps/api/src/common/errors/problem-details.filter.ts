@@ -79,6 +79,7 @@ export class ProblemDetailsFilter implements ExceptionFilter {
     }
 
     if (response.headersSent) return;
+    if (exception instanceof ProblemException) response.set(exception.headers);
     response.status(body.status).type(PROBLEM_CONTENT_TYPE).json(body);
   }
 }

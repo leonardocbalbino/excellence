@@ -21,6 +21,7 @@ function createHost(request: Record<string, unknown> = {}) {
   const response = {
     headersSent: false,
     status: vi.fn().mockReturnThis(),
+    set: vi.fn().mockReturnThis(),
     type: vi.fn().mockReturnThis(),
     json: vi.fn().mockReturnThis(),
   };
@@ -89,6 +90,15 @@ describe('ProblemDetailsFilter', () => {
       errors: [{ path: 'email', message: 'inválido' }],
       requestId: 'req-12345678',
     });
+  });
+
+  it('envia os headers da ProblemException', () => {
+    const { host, response } = createHost();
+    filter.catch(
+      new ProblemException({ title: 'Too Many Requests', status: 429 }, { 'Retry-After': '60' }),
+      host,
+    );
+    expect(response.set).toHaveBeenCalledWith({ 'Retry-After': '60' });
   });
 
   it.each([

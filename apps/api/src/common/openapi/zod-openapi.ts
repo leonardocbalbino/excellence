@@ -31,10 +31,14 @@ function applyToMethod(
   if (descriptor) decorator(target, propertyKey, descriptor);
 }
 
-/** Valida o corpo com o schema e o documenta no OpenAPI. */
+/**
+ * Valida o corpo com o schema e o documenta no OpenAPI. Requisição sem corpo é tratada
+ * como `{}`, para que schemas só com campos opcionais funcionem.
+ */
 export function ZodBody(schema: z.ZodType): ParameterDecorator {
   return (target, propertyKey, index) => {
-    Body(new ZodValidationPipe(schema))(target, propertyKey, index);
+    const bodySchema = z.preprocess((value) => value ?? {}, schema);
+    Body(new ZodValidationPipe(bodySchema))(target, propertyKey, index);
     applyToMethod(target, propertyKey, ApiBody({ schema: toOpenApiSchema(schema, 'input') }));
   };
 }
