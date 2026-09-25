@@ -25,7 +25,7 @@ pnpm dev             # API em :3000, web em :5173
 | API                 | http://localhost:3000/api/v1                                    |
 | OpenAPI (UI / JSON) | http://localhost:3000/docs / http://localhost:3000/openapi.json |
 | Health (live/ready) | http://localhost:3000/health/live · /health/ready               |
-| Web                 | http://localhost:5173                                           |
+| Web (PWA)           | http://localhost:5173 (a API passa pelo proxy em `/api`)        |
 | Postgres            | `localhost:5432` (bancos `excellence` e `excellence_test`)      |
 | Redis               | `localhost:6379`                                                |
 | MinIO API / console | http://localhost:9000 / http://localhost:9001                   |
@@ -33,17 +33,18 @@ pnpm dev             # API em :3000, web em :5173
 
 ## Scripts
 
-| Comando                                                 | O que faz                                        |
-| ------------------------------------------------------- | ------------------------------------------------ |
-| `pnpm build`                                            | Build de todos os pacotes (Turborepo)            |
-| `pnpm lint` / `pnpm typecheck` / `pnpm test`            | Verificações (testes unitários)                  |
-| `pnpm test:integration`                                 | Integração com Testcontainers (Docker)           |
-| `pnpm --filter @excellence/api db:generate`             | Gera o Prisma Client                             |
-| `pnpm --filter @excellence/api db:deploy`               | Aplica as migrations                             |
-| `pnpm --filter @excellence/api db:seed`                 | Dados de exemplo (idempotente)                   |
-| `pnpm --filter @excellence/api db:new-migration <nome>` | Gera migration a partir do schema (revise o SQL) |
-| `pnpm format` / `pnpm format:check`                     | Prettier                                         |
-| `pnpm infra:up` / `pnpm infra:down`                     | Sobe / derruba a infraestrutura local            |
+| Comando                                                 | O que faz                                                                                                |
+| ------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `pnpm build`                                            | Build de todos os pacotes (Turborepo)                                                                    |
+| `pnpm lint` / `pnpm typecheck` / `pnpm test`            | Verificações (testes unitários)                                                                          |
+| `pnpm test:integration`                                 | Integração com Testcontainers (Docker)                                                                   |
+| `pnpm test:e2e`                                         | e2e com Playwright (Docker e Chromium: `pnpm --filter @excellence/web exec playwright install chromium`) |
+| `pnpm --filter @excellence/api db:generate`             | Gera o Prisma Client                                                                                     |
+| `pnpm --filter @excellence/api db:deploy`               | Aplica as migrations                                                                                     |
+| `pnpm --filter @excellence/api db:seed`                 | Dados de exemplo (idempotente)                                                                           |
+| `pnpm --filter @excellence/api db:new-migration <nome>` | Gera migration a partir do schema (revise o SQL)                                                         |
+| `pnpm format` / `pnpm format:check`                     | Prettier                                                                                                 |
+| `pnpm infra:up` / `pnpm infra:down`                     | Sobe / derruba a infraestrutura local                                                                    |
 
 ## Usuários de teste (seed)
 
