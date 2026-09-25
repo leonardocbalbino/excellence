@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isProblemDetails, problemDetailsSchema } from './problem-details.js';
+import { isProblemDetails, problemDetailsSchema, ProblemType } from './problem-details.js';
 
 describe('problemDetailsSchema', () => {
   it('aplica type padrão about:blank', () => {
@@ -22,5 +22,20 @@ describe('problemDetailsSchema', () => {
 
   it('rejeita objeto sem title', () => {
     expect(isProblemDetails({ status: 500 })).toBe(false);
+  });
+});
+
+describe('ProblemType', () => {
+  it('usa URNs estáveis para tipos específicos', () => {
+    expect(ProblemType.Validation).toMatch(/^urn:excellence:problem:/);
+  });
+
+  it('aceita requestId como membro de extensão', () => {
+    const parsed = problemDetailsSchema.parse({
+      title: 'Bad Request',
+      status: 400,
+      requestId: 'abc',
+    });
+    expect(parsed.requestId).toBe('abc');
   });
 });
