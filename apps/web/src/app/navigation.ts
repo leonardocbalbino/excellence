@@ -14,10 +14,12 @@ import {
   CalendarClockIcon,
   ClipboardCheckIcon,
   ClipboardListIcon,
+  FileHeartIcon,
   FingerprintIcon,
   CalendarDaysIcon,
   CalendarRangeIcon,
   PartyPopperIcon,
+  StethoscopeIcon,
 } from 'lucide-react';
 
 export interface NavItem {
@@ -34,11 +36,18 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { label: 'Bater ponto', to: '/ponto', icon: FingerprintIcon },
   { label: 'Meu ponto', to: '/meu-ponto', icon: ClipboardListIcon },
   { label: 'Minha escala', to: '/minha-escala', icon: CalendarDaysIcon },
+  { label: 'Meus atestados', to: '/meus-atestados', icon: StethoscopeIcon },
   {
     label: 'Ajustes de ponto',
     to: '/ponto/ajustes',
     icon: ClipboardCheckIcon,
     permission: 'time_adjustments:approve',
+  },
+  {
+    label: 'Atestados',
+    to: '/atestados',
+    icon: FileHeartIcon,
+    permission: 'medical_certificates:read',
   },
   { label: 'Funcionários', to: '/pessoas', icon: UserRoundIcon, permission: 'employees:read' },
   { label: 'Unidades', to: '/cadastros/unidades', icon: MapPinIcon, permission: 'units:read' },

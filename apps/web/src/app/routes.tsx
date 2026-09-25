@@ -112,6 +112,29 @@ export const routes: RouteObject[] = [
             ),
           },
           {
+            path: 'meus-atestados',
+            ...page(
+              async () =>
+                (await import('@/features/medical/my-certificates-page')).MyCertificatesPage,
+            ),
+          },
+          {
+            path: 'atestados',
+            ...page(
+              async () => (await import('@/features/medical/certificates-page')).CertificatesPage,
+              'medical_certificates:read',
+            ),
+          },
+          {
+            path: 'pessoas/:id/atestado',
+            ...page(
+              async () =>
+                (await import('@/features/medical/employee-certificate-page'))
+                  .EmployeeCertificatePage,
+              'medical_certificates:manage',
+            ),
+          },
+          {
             path: 'minha-escala',
             ...page(
               async () => (await import('@/features/scheduling/my-schedule-page')).MySchedulePage,

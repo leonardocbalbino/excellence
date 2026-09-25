@@ -89,6 +89,11 @@ export function TimesheetTable({
                       </span>
                     );
                   })}
+                  {day.justifications.map((j) => (
+                    <Badge key={j.id} variant="outline">
+                      Atestado{j.startTime ? ` ${j.startTime}–${j.endTime ?? ''}` : ''}
+                    </Badge>
+                  ))}
                   {day.incomplete ? <Badge variant="secondary">Falta marcação</Badge> : null}
                   {day.pendingAdjustments > 0 ? (
                     <Badge variant="outline">{day.pendingAdjustments} ajuste(s) pendente(s)</Badge>

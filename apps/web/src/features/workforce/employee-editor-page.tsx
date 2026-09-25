@@ -39,6 +39,7 @@ export function EmployeeEditorPage() {
   const { id } = useParams();
   const api = useApi();
   const canReadTime = useCan('time_entries:read');
+  const canRegisterCertificate = useCan('medical_certificates:manage');
   const employee = useQuery({
     queryKey: [...employeesQueryKey, id],
     queryFn: () => api.employees.get(id ?? ''),
@@ -76,10 +77,19 @@ export function EmployeeEditorPage() {
           )}
         </CardContent>
       </Card>
-      {employee.data && canReadTime ? (
-        <Button asChild variant="outline">
-          <Link to={`/pessoas/${employee.data.id}/espelho`}>Ver espelho de ponto</Link>
-        </Button>
+      {employee.data && (canReadTime || canRegisterCertificate) ? (
+        <div className="flex flex-wrap gap-2">
+          {canReadTime ? (
+            <Button asChild variant="outline">
+              <Link to={`/pessoas/${employee.data.id}/espelho`}>Ver espelho de ponto</Link>
+            </Button>
+          ) : null}
+          {canRegisterCertificate ? (
+            <Button asChild variant="outline">
+              <Link to={`/pessoas/${employee.data.id}/atestado`}>Registrar atestado</Link>
+            </Button>
+          ) : null}
+        </div>
       ) : null}
       {employee.data ? <EmployeeSchedulePanel employeeId={employee.data.id} /> : null}
       {employee.data ? <AccountPanel employee={employee.data} /> : null}
