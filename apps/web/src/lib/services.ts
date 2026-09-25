@@ -15,6 +15,7 @@ export function createServices(
   const api = createApiClient({
     baseUrl,
     credentials: 'include',
+    clientName: 'web',
     getAccessToken: () => holder.session?.accessToken() ?? null,
     refreshSession: () => holder.session?.refresh() ?? Promise.resolve(false),
   });

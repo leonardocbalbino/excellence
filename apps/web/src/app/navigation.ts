@@ -12,6 +12,9 @@ import {
   UserRoundIcon,
   UsersIcon,
   CalendarClockIcon,
+  ClipboardCheckIcon,
+  ClipboardListIcon,
+  FingerprintIcon,
   CalendarDaysIcon,
   CalendarRangeIcon,
   PartyPopperIcon,
@@ -28,7 +31,15 @@ export interface NavItem {
 /** Itens do menu. Cada módulo acrescenta os seus nas próximas etapas. */
 export const NAV_ITEMS: readonly NavItem[] = [
   { label: 'Início', to: '/', icon: HomeIcon },
+  { label: 'Bater ponto', to: '/ponto', icon: FingerprintIcon },
+  { label: 'Meu ponto', to: '/meu-ponto', icon: ClipboardListIcon },
   { label: 'Minha escala', to: '/minha-escala', icon: CalendarDaysIcon },
+  {
+    label: 'Ajustes de ponto',
+    to: '/ponto/ajustes',
+    icon: ClipboardCheckIcon,
+    permission: 'time_adjustments:approve',
+  },
   { label: 'Funcionários', to: '/pessoas', icon: UserRoundIcon, permission: 'employees:read' },
   { label: 'Unidades', to: '/cadastros/unidades', icon: MapPinIcon, permission: 'units:read' },
   {

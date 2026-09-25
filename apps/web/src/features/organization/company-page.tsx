@@ -20,6 +20,7 @@ import { applyFieldErrors } from '@/lib/form-errors';
 import { errorMessage, useApi } from '@/lib/services';
 import { BRAZIL_TIMEZONES } from '@/lib/timezones';
 import { useCan } from '../access/access';
+import { ClockSettingsCard } from '../time-tracking/clock-settings-card';
 import { companyQueryKey } from './query-keys';
 
 export function CompanyPage() {
@@ -41,6 +42,7 @@ export function CompanyPage() {
           )}
         </CardContent>
       </Card>
+      <ClockSettingsCard />
     </div>
   );
 }

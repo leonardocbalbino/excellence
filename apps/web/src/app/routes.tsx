@@ -79,6 +79,39 @@ export const routes: RouteObject[] = [
             ),
           },
           {
+            path: 'ponto',
+            ...page(async () => (await import('@/features/time-tracking/clock-page')).ClockPage),
+          },
+          {
+            path: 'ponto/comprovante/:id',
+            ...page(
+              async () => (await import('@/features/time-tracking/receipt-page')).ReceiptPage,
+            ),
+          },
+          {
+            path: 'ponto/ajustes',
+            ...page(
+              async () => (await import('@/features/time-tracking/approvals-page')).ApprovalsPage,
+              'time_adjustments:approve',
+            ),
+          },
+          {
+            path: 'meu-ponto',
+            ...page(
+              async () =>
+                (await import('@/features/time-tracking/my-timesheet-page')).MyTimesheetPage,
+            ),
+          },
+          {
+            path: 'pessoas/:id/espelho',
+            ...page(
+              async () =>
+                (await import('@/features/time-tracking/employee-timesheet-page'))
+                  .EmployeeTimesheetPage,
+              'time_entries:read',
+            ),
+          },
+          {
             path: 'minha-escala',
             ...page(
               async () => (await import('@/features/scheduling/my-schedule-page')).MySchedulePage,
