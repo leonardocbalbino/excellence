@@ -53,6 +53,7 @@ model Company {
   timeEntries         TimeEntry[]
   adjustmentRequests  TimeAdjustmentRequest[]
   idempotencyKeys     IdempotencyKey[]
+  medicalCertificates MedicalCertificate[]
 
   @@map("companies")
 }
@@ -287,7 +288,8 @@ model StoredFile {
   createdAt    DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
   confirmedAt  DateTime?  @map("confirmed_at") @db.Timestamptz(6)
 
-  company Company @relation(fields: [companyId], references: [id])
+  company             Company              @relation(fields: [companyId], references: [id])
+  medicalCertificates MedicalCertificate[]
 
   @@unique([id, companyId])
   @@index([companyId, status])
@@ -427,6 +429,7 @@ model Employee {
   scheduleAssignments EmployeeScheduleAssignment[]
   timeEntries         TimeEntry[]
   adjustmentRequests  TimeAdjustmentRequest[]
+  medicalCertificates MedicalCertificate[]
 
   @@unique([userId, companyId])
   @@unique([companyId, cpf])
@@ -730,4 +733,50 @@ model IdempotencyKey {
   @@unique([companyId, userId, key])
   @@index([createdAt])
   @@map("idempotency_keys")
+}
+
+// ─── Atestados — ADR 0013 ───────────────────────────────────────────────────────────
+
+enum MedicalCertificateStatus {
+  pending
+  accepted
+  rejected
+  cancelled
+
+  @@map("medical_certificate_status")
+}
+
+/// Atestado ou declaração de comparecimento. O CID é dado sensível (regra 7): só sai pela
+/// rota própria, com permissão sensível e auditoria da leitura.
+model MedicalCertificate {
+  id             String                   @id @default(uuid(7)) @db.Uuid
+  companyId      String                   @map("company_id") @db.Uuid
+  employeeId     String                   @map("employee_id") @db.Uuid
+  // Documento digitalizado (finalidade medical_certificate). Um arquivo, um atestado.
+  fileId         String                   @unique @map("file_id") @db.Uuid
+  startDate      DateTime                 @map("start_date") @db.Date
+  endDate        DateTime                 @map("end_date") @db.Date
+  // Afastamento parcial (declaração de horas): só em atestado de um dia, minutos do dia.
+  startMinute    Int?                     @map("start_minute")
+  endMinute      Int?                     @map("end_minute")
+  issuerName     String?                  @map("issuer_name")
+  // Registro profissional do emissor (ex.: CRM/UF), como escrito no documento.
+  issuerRegistry String?                  @map("issuer_registry")
+  cid            String?
+  notes          String?
+  status         MedicalCertificateStatus @default(pending)
+  submittedBy    String                   @map("submitted_by") @db.Uuid
+  reviewedBy     String?                  @map("reviewed_by") @db.Uuid
+  reviewedAt     DateTime?                @map("reviewed_at") @db.Timestamptz(6)
+  reviewNote     String?                  @map("review_note")
+  createdAt      DateTime                 @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime                 @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  company  Company    @relation(fields: [companyId], references: [id])
+  employee Employee   @relation(fields: [employeeId, companyId], references: [id, companyId], onDelete: Restrict)
+  file     StoredFile @relation(fields: [fileId, companyId], references: [id, companyId], onDelete: Restrict)
+
+  @@index([companyId, status])
+  @@index([companyId, employeeId, startDate])
+  @@map("medical_certificates")
 }

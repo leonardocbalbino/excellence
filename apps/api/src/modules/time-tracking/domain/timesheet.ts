@@ -40,6 +40,14 @@ export function buildTimesheetDays(input: {
   timezone: string;
   graceMinutes: number;
   pendingByDate: ReadonlyMap<string, number>;
+  /** Atestados aceitos; cada um aparece em todos os dias do seu período. */
+  justifications?: readonly {
+    id: string;
+    startDate: string;
+    endDate: string;
+    startTime: string | null;
+    endTime: string | null;
+  }[];
 }): TimesheetDay[] {
   const plannedByDate = new Map(input.planned.map((day) => [day.date, day]));
   const byWorkDate = new Map<
@@ -75,6 +83,14 @@ export function buildTimesheetDays(input: {
       workedMinutes,
       incomplete: items.length % 2 === 1,
       pendingAdjustments: input.pendingByDate.get(planned.date) ?? 0,
+      justifications: (input.justifications ?? [])
+        .filter((j) => j.startDate <= planned.date && planned.date <= j.endDate)
+        .map((j) => ({
+          type: 'medical_certificate' as const,
+          id: j.id,
+          startTime: j.startTime,
+          endTime: j.endTime,
+        })),
     };
   });
 }

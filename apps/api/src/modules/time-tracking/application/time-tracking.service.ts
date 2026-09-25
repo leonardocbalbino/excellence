@@ -10,6 +10,7 @@ import type { z } from 'zod';
 import { ProblemException } from '../../../common/errors/problem.exception';
 import { TenantPrismaService } from '../../../infrastructure/prisma/tenant-prisma.service';
 import type { AccessGrant } from '../../access-control/http/access.decorators';
+import { MedicalCertificatesService } from '../../medical/application/medical-certificates.service';
 import { FilesService } from '../../files/application/files.service';
 import { CompanyService } from '../../organization/application/company.service';
 import { AssignmentsService } from '../../scheduling/application/assignments.service';
@@ -78,6 +79,7 @@ export class TimeTrackingService {
     private readonly employees: EmployeesService,
     private readonly assignments: AssignmentsService,
     private readonly files: FilesService,
+    private readonly certificates: MedicalCertificatesService,
   ) {}
 
   /** Marcação do próprio funcionário. */
@@ -307,12 +309,15 @@ export class TimeTrackingService {
       pendingByDate.set(date, (pendingByDate.get(date) ?? 0) + 1);
     }
 
+    const justifications = await this.certificates.acceptedBetween(employeeId, from, to);
+
     const days = buildTimesheetDays({
       planned,
       entries: effective,
       timezone,
       graceMinutes: settings.overnightGraceMinutes,
       pendingByDate,
+      justifications,
     }).filter((day) => day.date >= from);
 
     return {

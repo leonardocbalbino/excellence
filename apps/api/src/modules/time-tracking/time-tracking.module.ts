@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { FilesModule } from '../files/files.module';
+import { MedicalModule } from '../medical/medical.module';
 import { OrganizationModule } from '../organization/organization.module';
 import { SchedulingModule } from '../scheduling/scheduling.module';
 import { WorkforceModule } from '../workforce/workforce.module';
@@ -17,7 +18,7 @@ import {
 
 /** Ponto: marcações append-only com hash encadeado, espelho e ajustes (ADR 0012). */
 @Module({
-  imports: [FilesModule, OrganizationModule, SchedulingModule, WorkforceModule],
+  imports: [FilesModule, MedicalModule, OrganizationModule, SchedulingModule, WorkforceModule],
   controllers: [
     MyTimeController,
     TimeEntriesController,
