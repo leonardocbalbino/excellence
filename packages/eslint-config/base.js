@@ -7,7 +7,7 @@ import tseslint from 'typescript-eslint';
  * Cada pacote informa o tsconfigRootDir via `parserOptions`.
  */
 export const base = tseslint.config(
-  { ignores: ['**/dist/**', '**/coverage/**', '**/.turbo/**'] },
+  { ignores: ['**/dist/**', '**/coverage/**', '**/.turbo/**', '**/generated/**'] },
   js.configs.recommended,
   ...tseslint.configs.strictTypeChecked,
   ...tseslint.configs.stylisticTypeChecked,

@@ -1,0 +1,14 @@
+// Schema do banco. Convenções em docs/adr/0002-orm-prisma.md:
+// - toda tabela de negócio tem company_id;
+// - datas sempre DateTime @db.Timestamptz(6) (UTC);
+// - triggers, funções e índices parciais ficam em SQL nas migrations.
+
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "cjs"
+}
+
+datasource db {
+  provider = "postgresql"
+}
