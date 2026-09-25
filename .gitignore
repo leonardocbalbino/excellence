@@ -14,3 +14,7 @@ coverage/
 
 # Prisma Client gerado
 apps/api/src/generated/
+
+# Playwright
+test-results/
+playwright-report/

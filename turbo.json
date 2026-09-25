@@ -28,6 +28,10 @@
       "dependsOn": ["^build", "db:generate"],
       "cache": false,
       "persistent": true
+    },
+    "test:e2e": {
+      "dependsOn": ["build", "@excellence/api#build"],
+      "cache": false
     }
   }
 }

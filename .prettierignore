@@ -3,3 +3,5 @@ dist
 coverage
 .turbo
 apps/api/src/generated
+playwright-report
+test-results
