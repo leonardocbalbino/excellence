@@ -1,4 +1,7 @@
 import { Module } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
+import { PermissionGuard } from './access-control/http/permission.guard';
+import { AuthGuard } from './auth/http/auth.guard';
 import { OrganizationModule } from './organization/organization.module';
 import { WorkforceModule } from './workforce/workforce.module';
 import { SchedulingModule } from './scheduling/scheduling.module';
@@ -18,6 +21,12 @@ import { FilesModule } from './files/files.module';
 
 /** Agrega os módulos de domínio. Cada um é preenchido na etapa correspondente. */
 @Module({
+  // Guards globais registrados juntos para a ordem ser explícita: primeiro autentica
+  // (AuthGuard), depois autoriza por permissão e escopo (PermissionGuard).
+  providers: [
+    { provide: APP_GUARD, useExisting: AuthGuard },
+    { provide: APP_GUARD, useExisting: PermissionGuard },
+  ],
   imports: [
     OrganizationModule,
     WorkforceModule,
