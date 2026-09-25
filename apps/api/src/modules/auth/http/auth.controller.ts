@@ -18,6 +18,7 @@ import {
 import type { Request, Response } from 'express';
 import type { z } from 'zod';
 import { ZodBody, ZodResponse } from '../../../common/openapi/zod-openapi';
+import { AnyAuthenticated } from '../../access-control/http/access.decorators';
 import { AppConfig } from '../../../config/app-config';
 import { AuthService, type SessionResult } from '../application/auth.service';
 import { MfaService } from '../application/mfa.service';
@@ -63,6 +64,7 @@ export class AuthController {
 
   @Post('mfa/verify')
   @AcceptTokenTypes('mfa_challenge')
+  @AnyAuthenticated()
   @HttpCode(HttpStatus.OK)
   @ApiBearerAuth()
   @ApiOperation({
@@ -82,6 +84,7 @@ export class AuthController {
 
   @Post('mfa/setup')
   @AcceptTokenTypes('access', 'mfa_enrollment')
+  @AnyAuthenticated({ allowPendingMfa: true })
   @HttpCode(HttpStatus.OK)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Gera o segredo TOTP para cadastrar no aplicativo autenticador' })
@@ -96,6 +99,7 @@ export class AuthController {
 
   @Post('mfa/activate')
   @AcceptTokenTypes('access', 'mfa_enrollment')
+  @AnyAuthenticated({ allowPendingMfa: true })
   @HttpCode(HttpStatus.OK)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Ativa o MFA com um código válido e devolve os códigos de recuperação' })
@@ -144,6 +148,7 @@ export class AuthController {
   }
 
   @Get('me')
+  @AnyAuthenticated({ allowPendingMfa: true })
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Usuário da sessão atual' })
   @ZodResponse(HttpStatus.OK, authUserSchema)
