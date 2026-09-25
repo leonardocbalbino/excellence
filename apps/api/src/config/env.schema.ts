@@ -51,6 +51,10 @@ export const envSchema = z.object({
   S3_BUCKET: z.string().min(3),
   // O MinIO exige path-style (http://host/bucket/chave).
   S3_FORCE_PATH_STYLE: z.stringbool().default(true),
+  // Endereço do storage visto pelo navegador, quando difere do usado pela API (ex.: rede
+  // interna do Docker). As URLs pré-assinadas são geradas com ele.
+  S3_PUBLIC_ENDPOINT: z.url().optional(),
+  FILE_URL_TTL_SECONDS: z.coerce.number().int().min(30).max(3600).default(300),
 });
 
 export type Env = z.infer<typeof envSchema>;
