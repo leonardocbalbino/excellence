@@ -15,9 +15,8 @@ import type { PrismaClient } from '../../src/generated/prisma/client';
 import { AccessResolver } from '../../src/modules/access-control/application/access-resolver.service';
 import { authHeader, createRole, grantRole } from './support/access';
 import { createTestPrisma, createTestUser, TEST_PASSWORD } from './support/db';
+import { createUnit } from './support/organization';
 import { createTestApp } from './support/test-app';
-
-const UNIT = '01900000-0000-7000-8000-00000000a001';
 
 describe('RBAC (integração)', () => {
   let app: NestExpressApplication | undefined;
@@ -46,7 +45,8 @@ describe('RBAC (integração)', () => {
       permissions: [...PERMISSION_KEYS],
     });
     await grantRole(prisma, admin, adminRole);
-    return { admin, adminRole, auth: await authHeader(http, admin.email) };
+    const { id: unitId } = await createUnit(prisma, admin.companyId);
+    return { admin, adminRole, unitId, auth: await authHeader(http, admin.email) };
   }
 
   const roleInput = (overrides: Record<string, unknown> = {}) => ({
@@ -71,13 +71,17 @@ describe('RBAC (integração)', () => {
       const me = myAccessSchema.parse(
         (await http().get('/api/v1/me/access').set(auth).expect(200)).body,
       );
-      expect(me).toEqual({ permissions: [], mfaSetupRequired: false });
+      expect(me).toEqual({
+        permissions: [],
+        mfaSetupRequired: false,
+        passwordChangeRequired: false,
+      });
     });
   });
 
   describe('gestão de perfis', () => {
     it('ciclo completo: listar, criar, editar e excluir', async () => {
-      const { auth } = await companyWithAdmin();
+      const { auth, unitId } = await companyWithAdmin();
 
       const catalog = await http().get('/api/v1/permissions').set(auth).expect(200);
       expect((catalog.body as unknown[]).length).toBe(PERMISSION_KEYS.length);
@@ -87,12 +91,12 @@ describe('RBAC (integração)', () => {
           await http()
             .post('/api/v1/roles')
             .set(auth)
-            .send(roleInput({ scopes: [{ type: 'unit', unitId: UNIT }, { type: 'self' }] }))
+            .send(roleInput({ scopes: [{ type: 'unit', unitId }, { type: 'self' }] }))
             .expect(201)
         ).body,
       );
       expect(created).toMatchObject({ isSystem: false, userCount: 0, permissions: ['roles:read'] });
-      expect(created.scopes).toEqual([{ type: 'unit', unitId: UNIT }, { type: 'self' }]);
+      expect(created.scopes).toEqual([{ type: 'unit', unitId }, { type: 'self' }]);
 
       const updated = roleSchema.parse(
         (
@@ -222,14 +226,14 @@ describe('RBAC (integração)', () => {
     });
 
     it('gestão de perfis exige a permissão com escopo de empresa', async () => {
-      const { admin } = await companyWithAdmin();
+      const { admin, unitId } = await companyWithAdmin();
       const unitManager = await createTestUser(prisma, { companyId: admin.companyId });
       await grantRole(
         prisma,
         unitManager,
         await createRole(prisma, admin.companyId, {
           permissions: ['roles:read', 'roles:manage'],
-          scopes: [{ type: 'unit', unitId: UNIT }],
+          scopes: [{ type: 'unit', unitId }],
         }),
       );
       const auth = await authHeader(http, unitManager.email);
@@ -293,14 +297,14 @@ describe('RBAC (integração)', () => {
 
   describe('escopo efetivo', () => {
     it('o escopo de uma permissão é a união só dos perfis que a concedem', async () => {
-      const { admin } = await companyWithAdmin();
+      const { admin, unitId } = await companyWithAdmin();
       const user = await createTestUser(prisma, { companyId: admin.companyId });
       await grantRole(
         prisma,
         user,
         await createRole(prisma, admin.companyId, {
           permissions: ['users:read'],
-          scopes: [{ type: 'unit', unitId: UNIT }],
+          scopes: [{ type: 'unit', unitId }],
         }),
       );
       await grantRole(
@@ -320,7 +324,7 @@ describe('RBAC (integração)', () => {
       const access = await app?.get(AccessResolver).resolve(user.id, user.companyId);
       expect(access?.permissions.get('users:read')).toEqual({
         companyWide: false,
-        unitIds: [UNIT],
+        unitIds: [unitId],
         departmentIds: [],
         ownTeam: false,
         self: true,
