@@ -2,7 +2,10 @@
   "extends": "@excellence/tsconfig/library.json",
   "compilerOptions": {
     "outDir": "dist",
-    "rootDir": "."
+    "rootDir": ".",
+    // Consumido por web, mobile e API: usa o fetch padrão (DOM), não os tipos do Node.
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "types": []
   },
   "include": ["src", "*.config.ts"]
 }
