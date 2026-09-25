@@ -5,8 +5,12 @@ código**: viram parâmetro configurável e são registradas aqui até que algu�
 
 **Status:** aberta · em análise · decidida (registrar a decisão e a fonte: lei, cláusula, parecer).
 
-| ID  | Tema | Descrição / pergunta | Parâmetro no sistema | Responsável | Status |
-| --- | ---- | -------------------- | -------------------- | ----------- | ------ |
+| ID    | Tema                                   | Descrição / pergunta                                                                                                                | Parâmetro no sistema                                         | Responsável  | Status |
+| ----- | -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ | ------------ | ------ |
+| P-001 | Login de colaboradores sem e-mail      | Vigilantes e rondantes podem não ter e-mail. O login deve aceitar CPF ou matrícula?                                                 | Hoje só `users.email`; exigiria um identificador alternativo | Produto/RH   | aberta |
+| P-002 | Política de senha                      | Tamanho mínimo, complexidade, expiração e histórico de senhas. Há norma interna ou exigência de cliente?                            | A definir no cadastro e na troca de senha (1A.1)             | Segurança/RH | aberta |
+| P-003 | Primeiro acesso e recuperação de senha | Canal (e-mail, SMS ou RH redefine), validade do link e se o primeiro acesso exige troca de senha.                                   | A definir                                                    | Produto      | aberta |
+| P-004 | Duração máxima da sessão               | O refresh token tem validade deslizante de 30 dias. Perfis administrativos devem ter limite absoluto (ex.: 12 h) ou validade menor? | `REFRESH_TOKEN_TTL_DAYS`                                     | Segurança    | aberta |
 
 Exemplo de preenchimento:
 
