@@ -80,9 +80,15 @@ export class PermissionGuard implements CanActivate {
       );
     }
 
-    // Perfil passou a exigir MFA depois do login: só libera o cadastro do MFA.
-    const pendingMfa = access.mfaRequired && !access.mfaEnabled;
-    if (pendingMfa && !(requirement.kind === 'authenticated' && requirement.allowPendingMfa)) {
+    // Pendências de acesso: só liberam as rotas que servem para resolvê-las.
+    const setupRoute = requirement.kind === 'authenticated' && requirement.allowPendingSetup;
+    if (access.passwordChangeRequired && !setupRoute) {
+      throw forbidden(
+        ProblemType.PasswordChangeRequired,
+        'Troque a senha temporária para continuar.',
+      );
+    }
+    if (access.mfaRequired && !access.mfaEnabled && !setupRoute) {
       throw forbidden(
         ProblemType.MfaSetupRequired,
         'Seu perfil exige MFA. Ative-o para continuar.',

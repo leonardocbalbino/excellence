@@ -11,6 +11,8 @@ export interface UserAccess {
   mfaEnabled: boolean;
   /** Algum perfil do usuário exige MFA. */
   mfaRequired: boolean;
+  /** Senha temporária ainda não trocada. */
+  passwordChangeRequired: boolean;
   permissions: ReadonlyMap<Permission, DataScope>;
 }
 
@@ -30,6 +32,7 @@ export class AccessResolver {
       select: {
         isActive: true,
         mfaEnabled: true,
+        mustChangePassword: true,
         userRoles: {
           select: {
             role: {
@@ -69,6 +72,7 @@ export class AccessResolver {
       isActive: user.isActive,
       mfaEnabled: user.mfaEnabled,
       mfaRequired,
+      passwordChangeRequired: user.mustChangePassword,
       permissions,
     };
   }

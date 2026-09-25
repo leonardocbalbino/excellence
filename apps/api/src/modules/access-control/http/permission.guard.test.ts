@@ -30,7 +30,7 @@ class Routes {
     return 'anyone';
   }
 
-  @AnyAuthenticated({ allowPendingMfa: true })
+  @AnyAuthenticated({ allowPendingSetup: true })
   mfaSetup(): string {
     return 'mfaSetup';
   }
@@ -45,6 +45,7 @@ function access(overrides: Partial<UserAccess> = {}): UserAccess {
     isActive: true,
     mfaEnabled: false,
     mfaRequired: false,
+    passwordChangeRequired: false,
     permissions: new Map<Permission, typeof unitScope>([['roles:read', unitScope]]),
     ...overrides,
   };
@@ -125,6 +126,15 @@ describe('PermissionGuard', () => {
     });
     expect(await problemOf(run('anyone', { access: pending }).result)).toMatchObject({
       type: ProblemType.MfaSetupRequired,
+    });
+    await expect(run('mfaSetup', { access: pending }).result).resolves.toBe(true);
+  });
+
+  it('com senha temporária, só libera rotas marcadas', async () => {
+    const pending = access({ passwordChangeRequired: true });
+    expect(await problemOf(run('readRoles', { access: pending }).result)).toMatchObject({
+      status: 403,
+      type: ProblemType.PasswordChangeRequired,
     });
     await expect(run('mfaSetup', { access: pending }).result).resolves.toBe(true);
   });

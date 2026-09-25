@@ -10,6 +10,14 @@ export interface RoleTemplate {
   scopes: readonly RoleScope[];
 }
 
+/** Leitura dos cadastros de estrutura, útil para quase todos os perfis de gestão. */
+const STRUCTURE_READ: readonly Permission[] = [
+  'units:read',
+  'departments:read',
+  'positions:read',
+  'unions:read',
+];
+
 /**
  * Perfis criados com cada empresa. São só o ponto de partida: o Administrador pode
  * mudar permissões, escopos e exigência de MFA. O código nunca decide nada pelo nome ou
@@ -31,7 +39,18 @@ export const DEFAULT_ROLE_TEMPLATES: readonly RoleTemplate[] = [
     name: 'RH',
     description: 'Opera o sistema dentro do escopo definido pelo Administrador.',
     requiresMfa: true,
-    permissions: ['roles:read', 'users:read'],
+    permissions: [
+      'roles:read',
+      'users:read',
+      ...STRUCTURE_READ,
+      'units:manage',
+      'departments:manage',
+      'positions:manage',
+      'unions:manage',
+      'employees:read',
+      'employees:manage',
+      'employees:import',
+    ],
     scopes: [{ type: 'company' }],
   },
   {
@@ -39,7 +58,7 @@ export const DEFAULT_ROLE_TEMPLATES: readonly RoleTemplate[] = [
     name: 'Gestor',
     description: 'Aprova ajustes e ausências da equipe e acompanha rondas.',
     requiresMfa: false,
-    permissions: [],
+    permissions: [...STRUCTURE_READ, 'employees:read'],
     scopes: [{ type: 'own_team' }],
   },
   {

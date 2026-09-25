@@ -126,7 +126,7 @@ export class UserRolesController {
 @Controller('me')
 export class MyAccessController {
   @Get('access')
-  @AnyAuthenticated({ allowPendingMfa: true })
+  @AnyAuthenticated({ allowPendingSetup: true })
   @ApiOperation({ summary: 'Permissões efetivas do usuário logado' })
   @ZodResponse(HttpStatus.OK, myAccessSchema)
   myAccess(@Access() grant: AccessGrant): MyAccess {
@@ -134,6 +134,7 @@ export class MyAccessController {
     return {
       permissions: access ? [...access.permissions.keys()].sort() : [],
       mfaSetupRequired: access ? access.mfaRequired && !access.mfaEnabled : false,
+      passwordChangeRequired: access?.passwordChangeRequired ?? false,
     };
   }
 }

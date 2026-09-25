@@ -8,7 +8,7 @@ export const ACCESS_REQUIREMENT = 'access:requirement';
 
 export type AccessRequirement =
   | { kind: 'permission'; permission: Permission }
-  | { kind: 'authenticated'; allowPendingMfa: boolean };
+  | { kind: 'authenticated'; allowPendingSetup: boolean };
 
 /**
  * Exige a permissão na rota. O escopo com que ela foi concedida fica disponível em
@@ -19,13 +19,14 @@ export const RequirePermission = (permission: Permission) =>
 
 /**
  * Rota para qualquer usuário autenticado, sem permissão específica (ex.: dados da própria
- * sessão). `allowPendingMfa` libera a rota para quem ainda precisa cadastrar o MFA exigido
- * pelo perfil (ex.: o próprio cadastro do MFA).
+ * sessão). `allowPendingSetup` libera a rota para quem ainda tem pendência de acesso: MFA
+ * exigido pelo perfil e não cadastrado, ou senha temporária a trocar (ex.: as próprias rotas
+ * de cadastro do MFA e de troca de senha).
  */
-export const AnyAuthenticated = (options: { allowPendingMfa?: boolean } = {}) =>
+export const AnyAuthenticated = (options: { allowPendingSetup?: boolean } = {}) =>
   SetMetadata(ACCESS_REQUIREMENT, {
     kind: 'authenticated',
-    allowPendingMfa: options.allowPendingMfa ?? false,
+    allowPendingSetup: options.allowPendingSetup ?? false,
   } satisfies AccessRequirement);
 
 /** Resultado da checagem de acesso, anexado à requisição pelo PermissionGuard. */

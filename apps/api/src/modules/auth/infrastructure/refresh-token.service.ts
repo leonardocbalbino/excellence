@@ -22,7 +22,7 @@ export interface RotatedRefreshToken extends IssuedRefreshToken {
   companyId: string;
 }
 
-export type RevokeReason = 'logout' | 'reuse_detected' | 'user_inactive';
+export type RevokeReason = 'logout' | 'reuse_detected' | 'user_inactive' | 'password_changed';
 
 export class InvalidRefreshTokenError extends Error {
   constructor(readonly reason: string) {
@@ -151,6 +151,18 @@ export class RefreshTokenService {
     if (!current || current.revokedAt) return null;
     await this.revokeFamily(current.familyId, reason);
     return { userId: current.userId, companyId: current.companyId };
+  }
+
+  /** Encerra as sessões do usuário, exceto a informada (ex.: após trocar a senha). */
+  async revokeOtherSessions(userId: string, keepFamilyId: string | undefined): Promise<void> {
+    await this.prisma.refreshToken.updateMany({
+      where: {
+        userId,
+        revokedAt: null,
+        ...(keepFamilyId ? { familyId: { not: keepFamilyId } } : {}),
+      },
+      data: { revokedAt: new Date(), revokedReason: 'password_changed' },
+    });
   }
 
   async revokeFamily(familyId: string, reason: RevokeReason): Promise<void> {

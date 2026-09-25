@@ -1,4 +1,5 @@
 import { Controller, Get, HttpCode, HttpStatus, Post, Req, Res } from '@nestjs/common';
+import { changePasswordInputSchema } from '@excellence/shared';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import {
   type AuthenticatedResponse,
@@ -22,6 +23,7 @@ import { AnyAuthenticated } from '../../access-control/http/access.decorators';
 import { AppConfig } from '../../../config/app-config';
 import { AuthService, type SessionResult } from '../application/auth.service';
 import { MfaService } from '../application/mfa.service';
+import { PasswordService } from '../application/password.service';
 import type { AuthPrincipal } from '../domain/auth-principal';
 import type { ClientMetadata } from '../infrastructure/refresh-token.service';
 import { AcceptTokenTypes, CurrentPrincipal, Public } from './auth.decorators';
@@ -43,6 +45,7 @@ export class AuthController {
   constructor(
     private readonly auth: AuthService,
     private readonly mfa: MfaService,
+    private readonly passwords: PasswordService,
     config: AppConfig,
   ) {
     this.secureCookie = config.get('AUTH_COOKIE_SECURE');
@@ -85,7 +88,7 @@ export class AuthController {
 
   @Post('mfa/setup')
   @AcceptTokenTypes('access', 'mfa_enrollment')
-  @AnyAuthenticated({ allowPendingMfa: true })
+  @AnyAuthenticated({ allowPendingSetup: true })
   @HttpCode(HttpStatus.OK)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Gera o segredo TOTP para cadastrar no aplicativo autenticador' })
@@ -100,7 +103,7 @@ export class AuthController {
 
   @Post('mfa/activate')
   @AcceptTokenTypes('access', 'mfa_enrollment')
-  @AnyAuthenticated({ allowPendingMfa: true })
+  @AnyAuthenticated({ allowPendingSetup: true })
   @HttpCode(HttpStatus.OK)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Ativa o MFA com um código válido e devolve os códigos de recuperação' })
@@ -148,8 +151,20 @@ export class AuthController {
     clearRefreshCookie(res, this.secureCookie);
   }
 
+  @Post('password')
+  @AnyAuthenticated({ allowPendingSetup: true })
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Troca a própria senha (encerra as outras sessões)' })
+  async changePassword(
+    @CurrentPrincipal() principal: AuthPrincipal,
+    @ZodBody(changePasswordInputSchema) body: z.output<typeof changePasswordInputSchema>,
+  ): Promise<void> {
+    await this.passwords.change(principal, body.currentPassword, body.newPassword);
+  }
+
   @Get('me')
-  @AnyAuthenticated({ allowPendingMfa: true })
+  @AnyAuthenticated({ allowPendingSetup: true })
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Usuário da sessão atual' })
   @ZodResponse(HttpStatus.OK, authUserSchema)

@@ -40,6 +40,8 @@ export const envSchema = z.object({
   LOGIN_MAX_ATTEMPTS: z.coerce.number().int().min(1).default(5),
   LOGIN_IP_MAX_ATTEMPTS: z.coerce.number().int().min(1).default(50),
   LOGIN_LOCKOUT_MINUTES: z.coerce.number().int().min(1).default(15),
+  // Tamanho mínimo de senha (demais regras: pendência P-002).
+  PASSWORD_MIN_LENGTH: z.coerce.number().int().min(8).max(128).default(10),
 
   DATABASE_URL: z.url({ protocol: /^postgres(ql)?$/ }),
   REDIS_URL: z.url({ protocol: /^rediss?$/ }),

@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { AccessControlModule } from '../access-control/access-control.module';
 import { AuthService } from './application/auth.service';
 import { MfaService } from './application/mfa.service';
+import { PasswordService } from './application/password.service';
 import { LoginThrottler } from './infrastructure/login-throttler';
 import { PasswordHasher } from './infrastructure/password-hasher';
 import { RefreshTokenService } from './infrastructure/refresh-token.service';
@@ -17,12 +18,13 @@ import { AuthGuard } from './http/auth.guard';
   providers: [
     AuthService,
     MfaService,
+    PasswordService,
     TokenService,
     RefreshTokenService,
     PasswordHasher,
     LoginThrottler,
     AuthGuard,
   ],
-  exports: [TokenService, PasswordHasher, AuthGuard],
+  exports: [TokenService, PasswordHasher, PasswordService, AuthGuard],
 })
 export class AuthModule {}
