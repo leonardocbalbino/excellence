@@ -60,6 +60,7 @@ export const DEFAULT_ROLE_TEMPLATES: readonly RoleTemplate[] = [
       'medical_certificates:read_sensitive',
       'medical_certificates:manage',
       'medical_certificates:review',
+      'announcements:manage',
     ],
     scopes: [{ type: 'company' }],
   },

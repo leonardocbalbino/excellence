@@ -5,6 +5,7 @@ import { AuthGuard } from './auth/http/auth.guard';
 import { OrganizationModule } from './organization/organization.module';
 import { WorkforceModule } from './workforce/workforce.module';
 import { SchedulingModule } from './scheduling/scheduling.module';
+import { AnnouncementsModule } from './announcements/announcements.module';
 import { MedicalModule } from './medical/medical.module';
 import { TimeTrackingModule } from './time-tracking/time-tracking.module';
 import { AbsencesModule } from './absences/absences.module';
@@ -34,6 +35,7 @@ import { FilesModule } from './files/files.module';
     SchedulingModule,
     TimeTrackingModule,
     MedicalModule,
+    AnnouncementsModule,
     AbsencesModule,
     PatrolsModule,
     CommunicationModule,

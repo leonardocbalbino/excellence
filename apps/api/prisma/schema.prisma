@@ -54,6 +54,10 @@ model Company {
   adjustmentRequests  TimeAdjustmentRequest[]
   idempotencyKeys     IdempotencyKey[]
   medicalCertificates MedicalCertificate[]
+  announcements       Announcement[]
+  announcementUnits   AnnouncementUnit[]
+  announcementDepts   AnnouncementDepartment[]
+  announcementReads   AnnouncementRead[]
 
   @@map("companies")
 }
@@ -83,11 +87,12 @@ model User {
   createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  company          Company           @relation(fields: [companyId], references: [id])
-  refreshTokens    RefreshToken[]
-  mfaRecoveryCodes MfaRecoveryCode[]
-  userRoles        UserRole[]
-  employee         Employee?
+  company           Company            @relation(fields: [companyId], references: [id])
+  refreshTokens     RefreshToken[]
+  mfaRecoveryCodes  MfaRecoveryCode[]
+  userRoles         UserRole[]
+  employee          Employee?
+  announcementReads AnnouncementRead[]
 
   // Alvo das FKs compostas (id, company_id): impede vínculos entre empresas diferentes.
   @@unique([id, companyId])
@@ -321,12 +326,13 @@ model Unit {
   createdAt            DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt            DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  company     Company      @relation(fields: [companyId], references: [id])
-  departments Department[]
-  employees   Employee[]
-  roleScopes  RoleScope[]
-  holidays    Holiday[]
-  timeEntries TimeEntry[]
+  company       Company            @relation(fields: [companyId], references: [id])
+  departments   Department[]
+  employees     Employee[]
+  roleScopes    RoleScope[]
+  holidays      Holiday[]
+  timeEntries   TimeEntry[]
+  announcements AnnouncementUnit[]
 
   @@unique([companyId, code])
   @@unique([id, companyId])
@@ -344,10 +350,11 @@ model Department {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  company    Company     @relation(fields: [companyId], references: [id])
-  unit       Unit?       @relation(fields: [unitId, companyId], references: [id, companyId], onDelete: Restrict)
-  employees  Employee[]
-  roleScopes RoleScope[]
+  company       Company                  @relation(fields: [companyId], references: [id])
+  unit          Unit?                    @relation(fields: [unitId, companyId], references: [id, companyId], onDelete: Restrict)
+  employees     Employee[]
+  roleScopes    RoleScope[]
+  announcements AnnouncementDepartment[]
 
   @@unique([companyId, code])
   @@unique([id, companyId])
@@ -779,4 +786,99 @@ model MedicalCertificate {
   @@index([companyId, status])
   @@index([companyId, employeeId, startDate])
   @@map("medical_certificates")
+}
+
+// ─── Comunicados — ADR 0014 ─────────────────────────────────────────────────────────
+
+enum AnnouncementStatus {
+  draft
+  published
+  archived
+
+  @@map("announcement_status")
+}
+
+/// Comunicado. Publicado, o conteúdo e o público congelam (trigger): a ciência registrada
+/// vale para exatamente o que foi lido. Correção = novo comunicado.
+model Announcement {
+  id                     String             @id @default(uuid(7)) @db.Uuid
+  companyId              String             @map("company_id") @db.Uuid
+  title                  String
+  body                   String
+  // Exige "li e estou ciente", além do registro de leitura.
+  requiresAcknowledgment Boolean            @default(false) @map("requires_acknowledgment")
+  status                 AnnouncementStatus @default(draft)
+  publishedAt            DateTime?          @map("published_at") @db.Timestamptz(6)
+  publishedBy            String?            @map("published_by") @db.Uuid
+  // Depois disso sai do mural dos funcionários (continua na gestão e nos relatórios).
+  expiresAt              DateTime?          @map("expires_at") @db.Timestamptz(6)
+  archivedAt             DateTime?          @map("archived_at") @db.Timestamptz(6)
+  createdBy              String             @map("created_by") @db.Uuid
+  createdAt              DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt              DateTime           @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  company     Company                  @relation(fields: [companyId], references: [id])
+  // Público: sem unidades nem departamentos = toda a empresa; senão, a união deles.
+  units       AnnouncementUnit[]
+  departments AnnouncementDepartment[]
+  reads       AnnouncementRead[]
+
+  @@unique([id, companyId])
+  @@index([companyId, status])
+  @@map("announcements")
+}
+
+model AnnouncementUnit {
+  announcementId String @map("announcement_id") @db.Uuid
+  unitId         String @map("unit_id") @db.Uuid
+  companyId      String @map("company_id") @db.Uuid
+
+  company      Company      @relation(fields: [companyId], references: [id])
+  announcement Announcement @relation(fields: [announcementId, companyId], references: [id, companyId], onDelete: Cascade)
+  unit         Unit         @relation(fields: [unitId, companyId], references: [id, companyId], onDelete: Restrict)
+
+  @@id([announcementId, unitId])
+  @@map("announcement_units")
+}
+
+model AnnouncementDepartment {
+  announcementId String @map("announcement_id") @db.Uuid
+  departmentId   String @map("department_id") @db.Uuid
+  companyId      String @map("company_id") @db.Uuid
+
+  company      Company      @relation(fields: [companyId], references: [id])
+  announcement Announcement @relation(fields: [announcementId, companyId], references: [id, companyId], onDelete: Cascade)
+  department   Department   @relation(fields: [departmentId, companyId], references: [id, companyId], onDelete: Restrict)
+
+  @@id([announcementId, departmentId])
+  @@map("announcement_departments")
+}
+
+enum AnnouncementReadKind {
+  viewed
+  acknowledged
+
+  @@map("announcement_read_kind")
+}
+
+/// Leitura e ciência (append-only, regra 2). Um registro por usuário e tipo.
+model AnnouncementRead {
+  id             String               @id @default(uuid(7)) @db.Uuid
+  companyId      String               @map("company_id") @db.Uuid
+  announcementId String               @map("announcement_id") @db.Uuid
+  userId         String               @map("user_id") @db.Uuid
+  // Cadastro de funcionário do usuário no momento da leitura (null para quem não tem).
+  employeeId     String?              @map("employee_id") @db.Uuid
+  kind           AnnouncementReadKind
+  ip             String?
+  userAgent      String?              @map("user_agent")
+  createdAt      DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  company      Company      @relation(fields: [companyId], references: [id])
+  announcement Announcement @relation(fields: [announcementId, companyId], references: [id, companyId], onDelete: Restrict)
+  user         User         @relation(fields: [userId, companyId], references: [id, companyId], onDelete: Restrict)
+
+  @@unique([announcementId, userId, kind])
+  @@index([companyId, userId])
+  @@map("announcement_reads")
 }
