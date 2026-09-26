@@ -20,6 +20,8 @@ import {
   CalendarRangeIcon,
   PartyPopperIcon,
   StethoscopeIcon,
+  MegaphoneIcon,
+  SendIcon,
 } from 'lucide-react';
 
 export interface NavItem {
@@ -33,6 +35,7 @@ export interface NavItem {
 /** Itens do menu. Cada módulo acrescenta os seus nas próximas etapas. */
 export const NAV_ITEMS: readonly NavItem[] = [
   { label: 'Início', to: '/', icon: HomeIcon },
+  { label: 'Comunicados', to: '/comunicados', icon: MegaphoneIcon },
   { label: 'Bater ponto', to: '/ponto', icon: FingerprintIcon },
   { label: 'Meu ponto', to: '/meu-ponto', icon: ClipboardListIcon },
   { label: 'Minha escala', to: '/minha-escala', icon: CalendarDaysIcon },
@@ -42,6 +45,12 @@ export const NAV_ITEMS: readonly NavItem[] = [
     to: '/ponto/ajustes',
     icon: ClipboardCheckIcon,
     permission: 'time_adjustments:approve',
+  },
+  {
+    label: 'Gestão de comunicados',
+    to: '/gestao/comunicados',
+    icon: SendIcon,
+    permission: 'announcements:manage',
   },
   {
     label: 'Atestados',

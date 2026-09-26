@@ -112,6 +112,40 @@ export const routes: RouteObject[] = [
             ),
           },
           {
+            path: 'comunicados',
+            ...page(
+              async () =>
+                (await import('@/features/announcements/my-announcements-page'))
+                  .MyAnnouncementsPage,
+            ),
+          },
+          {
+            path: 'gestao/comunicados',
+            ...page(
+              async () =>
+                (await import('@/features/announcements/announcements-page')).AnnouncementsPage,
+              'announcements:manage',
+            ),
+          },
+          {
+            path: 'gestao/comunicados/novo',
+            ...page(
+              async () =>
+                (await import('@/features/announcements/announcement-editor-page'))
+                  .AnnouncementEditorPage,
+              'announcements:manage',
+            ),
+          },
+          {
+            path: 'gestao/comunicados/:id',
+            ...page(
+              async () =>
+                (await import('@/features/announcements/announcement-editor-page'))
+                  .AnnouncementEditorPage,
+              'announcements:manage',
+            ),
+          },
+          {
             path: 'meus-atestados',
             ...page(
               async () =>
