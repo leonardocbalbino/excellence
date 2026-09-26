@@ -48,6 +48,7 @@ export const ProblemType = {
   AdjustmentNotPending: 'urn:excellence:problem:adjustment-not-pending',
   SelfApproval: 'urn:excellence:problem:self-approval',
   MedicalCertificateNotPending: 'urn:excellence:problem:medical-certificate-not-pending',
+  AnnouncementNotEditable: 'urn:excellence:problem:announcement-not-editable',
   MedicalCertificateOverlap: 'urn:excellence:problem:medical-certificate-overlap',
 } as const;
 

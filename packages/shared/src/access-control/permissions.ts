@@ -65,6 +65,10 @@ export const PERMISSIONS = {
     description: 'Aceitar ou recusar atestados',
     sensitive: false,
   },
+  'announcements:manage': {
+    description: 'Escrever, publicar e arquivar comunicados e ver quem leu',
+    sensitive: false,
+  },
   // A trilha de auditoria revela quem acessou dados sensíveis: sua leitura também é auditada.
   'audit:read': { description: 'Consultar a trilha de auditoria', sensitive: true },
 } as const satisfies Record<string, PermissionDefinition>;

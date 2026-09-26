@@ -97,6 +97,15 @@ import {
   timesheetSchema,
 } from '../time-tracking/time-tracking.schemas.js';
 import {
+  type AnnouncementInput,
+  announcementInputSchema,
+  announcementReceiptSchema,
+  announcementSchema,
+  type AnnouncementStatus,
+  myAnnouncementFeedSchema,
+  myAnnouncementSchema,
+} from '../announcements/announcements.schemas.js';
+import {
   type MedicalCertificateInput,
   medicalCertificateInputSchema,
   type MedicalCertificateListQuery,
@@ -387,6 +396,51 @@ export function createApiClient(options: ApiClientOptions) {
           body: input,
           bodySchema: adjustmentDecisionSchema,
           schema: adjustmentSchema,
+        }),
+    },
+    announcements: {
+      /** Mural do usuário: comunicados publicados e vigentes para ele. */
+      feed: () => request('GET', '/me/announcements', { schema: myAnnouncementFeedSchema }),
+      /** Abre o comunicado e registra a leitura. */
+      open: (id: string) =>
+        request('GET', `/me/announcements/${encodeURIComponent(id)}`, {
+          schema: myAnnouncementSchema,
+        }),
+      acknowledge: (id: string) =>
+        request('POST', `/me/announcements/${encodeURIComponent(id)}/acknowledge`, {
+          schema: myAnnouncementSchema,
+        }),
+      list: (status?: AnnouncementStatus) =>
+        request('GET', '/announcements', {
+          query: { status },
+          schema: z.array(announcementSchema),
+        }),
+      get: (id: string) =>
+        request('GET', `/announcements/${encodeURIComponent(id)}`, { schema: announcementSchema }),
+      create: (input: AnnouncementInput) =>
+        request('POST', '/announcements', {
+          body: input,
+          bodySchema: announcementInputSchema,
+          schema: announcementSchema,
+        }),
+      update: (id: string, input: AnnouncementInput) =>
+        request('PUT', `/announcements/${encodeURIComponent(id)}`, {
+          body: input,
+          bodySchema: announcementInputSchema,
+          schema: announcementSchema,
+        }),
+      remove: (id: string) => request('DELETE', `/announcements/${encodeURIComponent(id)}`),
+      publish: (id: string) =>
+        request('POST', `/announcements/${encodeURIComponent(id)}/publish`, {
+          schema: announcementSchema,
+        }),
+      archive: (id: string) =>
+        request('POST', `/announcements/${encodeURIComponent(id)}/archive`, {
+          schema: announcementSchema,
+        }),
+      receipts: (id: string) =>
+        request('GET', `/announcements/${encodeURIComponent(id)}/receipts`, {
+          schema: z.array(announcementReceiptSchema),
         }),
     },
     medicalCertificates: {
