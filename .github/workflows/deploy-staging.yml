@@ -1,0 +1,116 @@
+name: Deploy (staging)
+
+# Deploy pra staging quando o PR recebe a label "staging" (ou ganha novos
+# commits enquanto já tem a label). Pra reativar depois de um push, tire e
+# recoloque a label.
+#
+# Build completo (API + web) roda aqui no GitHub Actions. A VPS não tem
+# acesso ao repositório git — só recebe os artefatos prontos via rsync por SSH
+# e faz o "swap" (symlink + pm2 reload). Ver deploy/README.md.
+#
+# Mesma VPS do cartao-colaborativa e do arsenal-cac, em pasta e portas
+# próprias.
+on:
+  pull_request:
+    types: [labeled, synchronize]
+
+concurrency:
+  group: deploy-staging
+  cancel-in-progress: true
+
+env:
+  REMOTE_BASE: /var/www/projetos/repo/excellence/staging
+  PM2_ECOSYSTEM: ecosystem.staging.config.js
+
+jobs:
+  build-and-deploy:
+    if: contains(github.event.pull_request.labels.*.name, 'staging')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Instalar dependências
+        run: pnpm install --frozen-lockfile
+
+      # O web usa a API na mesma origem (/api/v1, proxy do nginx), então o
+      # build não precisa de VITE_API_BASE_URL.
+      - name: Build — API e web
+        run: pnpm turbo run build --filter=@excellence/api --filter=@excellence/web
+
+      # Pasta autocontida só com a API e as dependências de produção
+      # (@excellence/shared entra já buildado, sem symlink pro workspace).
+      - name: Empacotar API
+        run: pnpm --filter @excellence/api deploy --prod .deploy/api
+
+      - name: Configurar SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.VPS_SSH_KEY }}
+
+      - name: Adicionar VPS aos known_hosts
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -p ${{ secrets.VPS_SSH_PORT || 22 }} ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts
+
+      # O Postgres da VPS só escuta em localhost. Um túnel SSH leva a porta
+      # 5432 do runner até ele, então DATABASE_URL_STAGING é a mesma URL do
+      # secrets.env da VPS (localhost:5432). O runner ubuntu-latest não tem
+      # Postgres rodando, a porta está livre.
+      - name: Rodar migrations (via túnel SSH)
+        env:
+          SSH_PORT: ${{ secrets.VPS_SSH_PORT || 22 }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL_STAGING }}
+        run: |
+          ssh -p "$SSH_PORT" -fN -o ExitOnForwardFailure=yes \
+            -L 127.0.0.1:5432:127.0.0.1:5432 ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}
+          pnpm --filter @excellence/api db:deploy
+
+      - name: Definir timestamp da release
+        id: ts
+        run: echo "ts=$(date +%Y%m%d%H%M%S)" >> "$GITHUB_OUTPUT"
+
+      - name: Enviar artefatos pro VPS
+        env:
+          SSH_PORT: ${{ secrets.VPS_SSH_PORT || 22 }}
+          DEST: ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:${{ env.REMOTE_BASE }}/releases/${{ steps.ts.outputs.ts }}
+        run: |
+          ssh -p "$SSH_PORT" ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} \
+            "mkdir -p '${{ env.REMOTE_BASE }}/releases/${{ steps.ts.outputs.ts }}/api' '${{ env.REMOTE_BASE }}/releases/${{ steps.ts.outputs.ts }}/web'"
+
+          # node_modules do `pnpm deploy` usa symlinks relativos dentro dele
+          # mesmo (.pnpm/), o -a preserva.
+          rsync -az -e "ssh -p $SSH_PORT" .deploy/api/dist .deploy/api/node_modules .deploy/api/package.json "$DEST/api/"
+
+          # Web é SPA estática (Vite): o nginx serve direto de current/web.
+          rsync -az -e "ssh -p $SSH_PORT" apps/web/dist/ "$DEST/web/"
+
+      - name: Ativar release (symlink atômico + pm2 reload)
+        env:
+          SSH_PORT: ${{ secrets.VPS_SSH_PORT || 22 }}
+        run: |
+          ssh -p "$SSH_PORT" ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} bash -s -- \
+            "${{ env.REMOTE_BASE }}" "${{ steps.ts.outputs.ts }}" "${{ env.PM2_ECOSYSTEM }}" <<'EOF'
+          set -euo pipefail
+          BASE="$1"; TS="$2"; ECOSYSTEM="$3"
+
+          ln -sfn "$BASE/releases/$TS" "$BASE/current"
+
+          # O ecosystem e o secrets.env ficam fixos em $BASE (fora dos
+          # releases), copiados uma vez no setup da VPS — ver deploy/README.md.
+          pm2 startOrReload "$BASE/$ECOSYSTEM" --update-env
+          pm2 save
+
+          # Mantém só as últimas 3 releases.
+          cd "$BASE/releases" && ls -1t | tail -n +4 | xargs -r rm -rf
+          EOF
