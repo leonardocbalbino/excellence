@@ -1,8 +1,9 @@
 name: Deploy (staging)
 
-# Deploy pra staging quando o PR recebe a label "staging" (ou ganha novos
-# commits enquanto já tem a label). Pra reativar depois de um push, tire e
-# recoloque a label.
+# Deploy pra staging em três casos:
+# - push na branch `staging`;
+# - PR com a label "staging" (ao receber a label ou novos commits);
+# - manual (Actions → Deploy (staging) → Run workflow, escolhendo a branch).
 #
 # Build completo (API + web) roda aqui no GitHub Actions. A VPS não tem
 # acesso ao repositório git — só recebe os artefatos prontos via rsync por SSH
@@ -11,8 +12,11 @@ name: Deploy (staging)
 # Mesma VPS do cartao-colaborativa e do arsenal-cac, em pasta e portas
 # próprias.
 on:
+  push:
+    branches: [staging]
   pull_request:
     types: [labeled, synchronize]
+  workflow_dispatch: {}
 
 concurrency:
   group: deploy-staging
@@ -24,14 +28,14 @@ env:
 
 jobs:
   build-and-deploy:
-    if: contains(github.event.pull_request.labels.*.name, 'staging')
+    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'staging')
     runs-on: ubuntu-latest
     timeout-minutes: 30
     environment: staging
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - uses: pnpm/action-setup@v4
 
