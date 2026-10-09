@@ -22,6 +22,7 @@ import {
   getCurrentPosition,
 } from '@/lib/device/geolocation';
 import { todayIso } from '@/lib/format';
+import { randomId } from '@/lib/random-id';
 import { errorMessage, useApi } from '@/lib/services';
 import { uploadFile } from '@/lib/upload';
 import { CameraCapture } from './camera-capture';
@@ -51,7 +52,7 @@ export function ClockPage() {
   const [photo, setPhoto] = useState<Blob | null>(null);
   const [locationNote, setLocationNote] = useState<string | null>(null);
   // Mesma chave enquanto a tentativa não tiver sucesso: reenviar não duplica a marcação.
-  const attemptKey = useRef(crypto.randomUUID());
+  const attemptKey = useRef(randomId());
   const selfieRequired = settings.data?.requireSelfie ?? false;
   const useSelfie = selfieRequired || withSelfie;
 
@@ -85,7 +86,7 @@ export function ClockPage() {
       );
     },
     onSuccess: async () => {
-      attemptKey.current = crypto.randomUUID();
+      attemptKey.current = randomId();
       setPhoto(null);
       await queryClient.invalidateQueries({ queryKey: timeEntriesQueryKey });
     },

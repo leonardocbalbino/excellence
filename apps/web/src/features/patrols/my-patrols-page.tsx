@@ -17,6 +17,7 @@ import { Skeleton, Spinner } from '@/components/ui/feedback';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { getCurrentPosition } from '@/lib/device/geolocation';
+import { randomId } from '@/lib/random-id';
 import { errorMessage, useApi } from '@/lib/services';
 import { cn } from '@/lib/utils';
 import { localTime, myPatrolsQueryKey, runStatusText, SLOT_STATUS } from './labels';
@@ -51,11 +52,11 @@ function RouteList({ routes }: { routes: MyPatrols['routes'] }) {
   const api = useApi();
   const queryClient = useQueryClient();
   // Mesma chave enquanto a tentativa não tiver sucesso: reenviar não abre duas rondas.
-  const attemptKey = useRef(crypto.randomUUID());
+  const attemptKey = useRef(randomId());
   const start = useMutation({
     mutationFn: (routeId: string) => api.patrols.start(routeId, attemptKey.current),
     onSuccess: (run) => {
-      attemptKey.current = crypto.randomUUID();
+      attemptKey.current = randomId();
       queryClient.setQueryData<MyPatrols>(myPatrolsQueryKey, (old) =>
         old ? { ...old, current: run } : old,
       );
@@ -140,7 +141,7 @@ function RunInProgress({ run }: { run: PatrolRun }) {
   const queryClient = useQueryClient();
   const [scanning, setScanning] = useState(true);
   const [note, setNote] = useState('');
-  const attemptKey = useRef(crypto.randomUUID());
+  const attemptKey = useRef(randomId());
   const update = (next: PatrolRun) =>
     queryClient.setQueryData<MyPatrols>(myPatrolsQueryKey, (old) =>
       old ? { ...old, current: next.status === 'in_progress' ? next : null } : old,
@@ -162,7 +163,7 @@ function RunInProgress({ run }: { run: PatrolRun }) {
       );
     },
     onSuccess: (next) => {
-      attemptKey.current = crypto.randomUUID();
+      attemptKey.current = randomId();
       const latest = next.points
         .filter((p) => p.checkin)
         .sort((a, b) =>
@@ -177,7 +178,7 @@ function RunInProgress({ run }: { run: PatrolRun }) {
       void queryClient.invalidateQueries({ queryKey: myPatrolsQueryKey });
     },
     onError: () => {
-      attemptKey.current = crypto.randomUUID();
+      attemptKey.current = randomId();
     },
   });
   const finish = useMutation({
