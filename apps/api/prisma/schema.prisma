@@ -58,6 +58,17 @@ model Company {
   announcementUnits   AnnouncementUnit[]
   announcementDepts   AnnouncementDepartment[]
   announcementReads   AnnouncementRead[]
+  patrolPoints        PatrolPoint[]
+  patrolRoutes        PatrolRoute[]
+  patrolRoutePoints   PatrolRoutePoint[]
+  patrolAssignees     PatrolRouteAssignee[]
+  patrolRuns          PatrolRun[]
+  patrolCheckins      PatrolCheckin[]
+  benefits            Benefit[]
+  employeeBenefits    EmployeeBenefit[]
+  usefulLinks         UsefulLink[]
+  payrollPeriods      PayrollPeriod[]
+  payrollItems        PayrollItem[]
 
   @@map("companies")
 }
@@ -333,6 +344,9 @@ model Unit {
   holidays      Holiday[]
   timeEntries   TimeEntry[]
   announcements AnnouncementUnit[]
+  patrolPoints  PatrolPoint[]
+  patrolRoutes  PatrolRoute[]
+  patrolRuns    PatrolRun[]
 
   @@unique([companyId, code])
   @@unique([id, companyId])
@@ -362,14 +376,16 @@ model Department {
 }
 
 model Position {
-  id        String   @id @default(uuid(7)) @db.Uuid
-  companyId String   @map("company_id") @db.Uuid
-  name      String   @db.Citext
+  id              String   @id @default(uuid(7)) @db.Uuid
+  companyId       String   @map("company_id") @db.Uuid
+  name            String   @db.Citext
   // Classificação Brasileira de Ocupações (6 dígitos).
-  cbo       String?
-  isActive  Boolean  @default(true) @map("is_active")
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  cbo             String?
+  // Salário base do cargo, em centavos (ADR 0017). Só quem tem payroll:manage vê e altera.
+  baseSalaryCents Int?     @map("base_salary_cents")
+  isActive        Boolean  @default(true) @map("is_active")
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   company   Company    @relation(fields: [companyId], references: [id])
   employees Employee[]
@@ -437,6 +453,10 @@ model Employee {
   timeEntries         TimeEntry[]
   adjustmentRequests  TimeAdjustmentRequest[]
   medicalCertificates MedicalCertificate[]
+  patrolRoutes        PatrolRouteAssignee[]
+  patrolRuns          PatrolRun[]
+  benefits            EmployeeBenefit[]
+  payrollItems        PayrollItem[]
 
   @@unique([userId, companyId])
   @@unique([companyId, cpf])
@@ -881,4 +901,292 @@ model AnnouncementRead {
   @@unique([announcementId, userId, kind])
   @@index([companyId, userId])
   @@map("announcement_reads")
+}
+
+// ─── Rondas (ADR 0016) ─────────────────────────────────────────────────────────────
+
+/// Ponto de ronda: um QR code afixado num local da unidade.
+model PatrolPoint {
+  id           String   @id @default(uuid(7)) @db.Uuid
+  companyId    String   @map("company_id") @db.Uuid
+  unitId       String   @map("unit_id") @db.Uuid
+  name         String   @db.Citext
+  description  String?
+  // Localização opcional do ponto, para conferir onde o check-in foi feito.
+  latitude     Float?
+  longitude    Float?
+  radiusMeters Int?     @map("radius_meters")
+  // Token aleatório impresso no QR; gerar um novo QR troca o token e soma a versão.
+  codeToken    String   @map("code_token")
+  codeVersion  Int      @default(1) @map("code_version")
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  company     Company            @relation(fields: [companyId], references: [id])
+  unit        Unit               @relation(fields: [unitId, companyId], references: [id, companyId], onDelete: Restrict)
+  routePoints PatrolRoutePoint[]
+  checkins    PatrolCheckin[]
+
+  @@unique([companyId, unitId, name])
+  @@unique([id, companyId])
+  @@map("patrol_points")
+}
+
+/// Rota: sequência de pontos, tempo previsto e horários de início.
+model PatrolRoute {
+  id              String   @id @default(uuid(7)) @db.Uuid
+  companyId       String   @map("company_id") @db.Uuid
+  unitId          String   @map("unit_id") @db.Uuid
+  name            String   @db.Citext
+  description     String?
+  expectedMinutes Int      @map("expected_minutes") @db.SmallInt
+  enforceOrder    Boolean  @default(false) @map("enforce_order")
+  // Horários de início em minutos do dia (fuso da unidade) e dias da semana (0 = domingo).
+  startMinutes    Int[]    @map("start_minutes") @db.SmallInt
+  weekdays        Int[]    @db.SmallInt
+  isActive        Boolean  @default(true) @map("is_active")
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  company   Company               @relation(fields: [companyId], references: [id])
+  unit      Unit                  @relation(fields: [unitId, companyId], references: [id, companyId], onDelete: Restrict)
+  points    PatrolRoutePoint[]
+  assignees PatrolRouteAssignee[]
+  runs      PatrolRun[]
+
+  @@unique([companyId, unitId, name])
+  @@unique([id, companyId])
+  @@map("patrol_routes")
+}
+
+model PatrolRoutePoint {
+  routeId   String @map("route_id") @db.Uuid
+  position  Int    @db.SmallInt
+  pointId   String @map("point_id") @db.Uuid
+  companyId String @map("company_id") @db.Uuid
+
+  company Company     @relation(fields: [companyId], references: [id])
+  route   PatrolRoute @relation(fields: [routeId, companyId], references: [id, companyId], onDelete: Cascade)
+  point   PatrolPoint @relation(fields: [pointId, companyId], references: [id, companyId], onDelete: Restrict)
+
+  @@id([routeId, position])
+  @@unique([routeId, pointId])
+  @@map("patrol_route_points")
+}
+
+model PatrolRouteAssignee {
+  routeId    String @map("route_id") @db.Uuid
+  employeeId String @map("employee_id") @db.Uuid
+  companyId  String @map("company_id") @db.Uuid
+
+  company  Company     @relation(fields: [companyId], references: [id])
+  route    PatrolRoute @relation(fields: [routeId, companyId], references: [id, companyId], onDelete: Cascade)
+  employee Employee    @relation(fields: [employeeId, companyId], references: [id, companyId], onDelete: Restrict)
+
+  @@id([routeId, employeeId])
+  @@index([companyId, employeeId])
+  @@map("patrol_route_assignees")
+}
+
+enum PatrolRunStatus {
+  in_progress
+  completed
+  incomplete
+
+  @@map("patrol_run_status")
+}
+
+/// Ronda feita. Só o encerramento altera o registro (trigger), uma única vez.
+model PatrolRun {
+  id            String          @id @default(uuid(7)) @db.Uuid
+  companyId     String          @map("company_id") @db.Uuid
+  routeId       String          @map("route_id") @db.Uuid
+  employeeId    String          @map("employee_id") @db.Uuid
+  unitId        String          @map("unit_id") @db.Uuid
+  // Pontos da rota no início, em ordem: mudar a rota depois não altera a ronda.
+  pointIds      String[]        @map("point_ids") @db.Uuid
+  enforceOrder  Boolean         @map("enforce_order")
+  scheduledFor  DateTime?       @map("scheduled_for") @db.Timestamptz(6)
+  startedAt     DateTime        @map("started_at") @db.Timestamptz(6)
+  expectedEndAt DateTime        @map("expected_end_at") @db.Timestamptz(6)
+  status        PatrolRunStatus @default(in_progress)
+  finishedAt    DateTime?       @map("finished_at") @db.Timestamptz(6)
+  finishNote    String?         @map("finish_note")
+  createdAt     DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  company  Company         @relation(fields: [companyId], references: [id])
+  route    PatrolRoute     @relation(fields: [routeId, companyId], references: [id, companyId], onDelete: Restrict)
+  employee Employee        @relation(fields: [employeeId, companyId], references: [id, companyId], onDelete: Restrict)
+  unit     Unit            @relation(fields: [unitId, companyId], references: [id, companyId], onDelete: Restrict)
+  checkins PatrolCheckin[]
+
+  @@unique([id, companyId])
+  @@index([companyId, startedAt])
+  @@index([companyId, employeeId, startedAt])
+  @@map("patrol_runs")
+}
+
+/// Check-in num ponto (append-only, regra 2).
+model PatrolCheckin {
+  id               String         @id @default(uuid(7)) @db.Uuid
+  companyId        String         @map("company_id") @db.Uuid
+  runId            String         @map("run_id") @db.Uuid
+  pointId          String         @map("point_id") @db.Uuid
+  employeeId       String         @map("employee_id") @db.Uuid
+  // Horário oficial (servidor, UTC).
+  recordedAt       DateTime       @map("recorded_at") @db.Timestamptz(6)
+  deviceRecordedAt DateTime?      @map("device_recorded_at") @db.Timestamptz(6)
+  codeVersion      Int            @map("code_version")
+  latitude         Float?
+  longitude        Float?
+  accuracyMeters   Float?         @map("accuracy_meters")
+  distanceMeters   Float?         @map("distance_meters")
+  geofenceStatus   GeofenceStatus @map("geofence_status")
+  outOfOrder       Boolean        @map("out_of_order")
+  source           String
+  ipAddress        String?        @map("ip_address")
+  userAgent        String?        @map("user_agent")
+  createdAt        DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  company Company     @relation(fields: [companyId], references: [id])
+  run     PatrolRun   @relation(fields: [runId, companyId], references: [id, companyId], onDelete: Restrict)
+  point   PatrolPoint @relation(fields: [pointId, companyId], references: [id, companyId], onDelete: Restrict)
+
+  @@unique([runId, pointId])
+  @@index([companyId, recordedAt])
+  @@map("patrol_checkins")
+}
+
+// ─── Benefícios, links úteis e fechamento mensal (ADR 0017) ────────────────────────
+
+enum BenefitKind {
+  transport
+  meal
+  food
+  health
+  dental
+  life_insurance
+  other
+
+  @@map("benefit_kind")
+}
+
+/// Benefício oferecido pela empresa (catálogo).
+model Benefit {
+  id                           String      @id @default(uuid(7)) @db.Uuid
+  companyId                    String      @map("company_id") @db.Uuid
+  name                         String      @db.Citext
+  kind                         BenefitKind
+  provider                     String?
+  description                  String?
+  howToUse                     String?     @map("how_to_use")
+  // Valores sugeridos ao atribuir, em centavos por mês.
+  defaultCompanyValueCents     Int?        @map("default_company_value_cents")
+  defaultEmployeeDiscountCents Int?        @map("default_employee_discount_cents")
+  isActive                     Boolean     @default(true) @map("is_active")
+  createdAt                    DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                    DateTime    @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  company   Company           @relation(fields: [companyId], references: [id])
+  employees EmployeeBenefit[]
+
+  @@unique([companyId, name])
+  @@unique([id, companyId])
+  @@map("benefits")
+}
+
+/// Benefício de um funcionário, com valores e vigência. Sem sobreposição do mesmo benefício.
+model EmployeeBenefit {
+  id                    String    @id @default(uuid(7)) @db.Uuid
+  companyId             String    @map("company_id") @db.Uuid
+  employeeId            String    @map("employee_id") @db.Uuid
+  benefitId             String    @map("benefit_id") @db.Uuid
+  companyValueCents     Int       @map("company_value_cents")
+  employeeDiscountCents Int       @map("employee_discount_cents")
+  startDate             DateTime  @map("start_date") @db.Date
+  // Último dia do benefício; null = vigente.
+  endDate               DateTime? @map("end_date") @db.Date
+  notes                 String?
+  createdBy             String    @map("created_by") @db.Uuid
+  createdAt             DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  company  Company  @relation(fields: [companyId], references: [id])
+  employee Employee @relation(fields: [employeeId, companyId], references: [id, companyId], onDelete: Restrict)
+  benefit  Benefit  @relation(fields: [benefitId, companyId], references: [id, companyId], onDelete: Restrict)
+
+  @@index([companyId, employeeId])
+  @@index([benefitId])
+  @@map("employee_benefits")
+}
+
+/// Link útil mostrado aos funcionários.
+model UsefulLink {
+  id          String   @id @default(uuid(7)) @db.Uuid
+  companyId   String   @map("company_id") @db.Uuid
+  name        String
+  url         String
+  description String?
+  category    String?
+  position    Int      @default(0) @db.SmallInt
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  company Company @relation(fields: [companyId], references: [id])
+
+  @@index([companyId, position])
+  @@map("useful_links")
+}
+
+enum PayrollStatus {
+  draft
+  published
+  closed
+
+  @@map("payroll_status")
+}
+
+/// Fechamento de um mês. Fechado, o banco recusa mudanças nele e nos itens.
+model PayrollPeriod {
+  id          String        @id @default(uuid(7)) @db.Uuid
+  companyId   String        @map("company_id") @db.Uuid
+  // AAAA-MM
+  month       String
+  status      PayrollStatus @default(draft)
+  cutoffDate  DateTime      @map("cutoff_date") @db.Date
+  generatedAt DateTime      @map("generated_at") @db.Timestamptz(6)
+  generatedBy String        @map("generated_by") @db.Uuid
+  publishedAt DateTime?     @map("published_at") @db.Timestamptz(6)
+  publishedBy String?       @map("published_by") @db.Uuid
+  closedAt    DateTime?     @map("closed_at") @db.Timestamptz(6)
+  closedBy    String?       @map("closed_by") @db.Uuid
+  createdAt   DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  company Company       @relation(fields: [companyId], references: [id])
+  items   PayrollItem[]
+
+  @@unique([companyId, month])
+  @@unique([id, companyId])
+  @@map("payroll_periods")
+}
+
+/// Linha do fechamento: o consolidado do funcionário no mês (JSON no formato `payrollItemSchema`).
+model PayrollItem {
+  id         String   @id @default(uuid(7)) @db.Uuid
+  companyId  String   @map("company_id") @db.Uuid
+  periodId   String   @map("period_id") @db.Uuid
+  employeeId String   @map("employee_id") @db.Uuid
+  data       Json
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  company  Company       @relation(fields: [companyId], references: [id])
+  period   PayrollPeriod @relation(fields: [periodId, companyId], references: [id, companyId], onDelete: Restrict)
+  employee Employee      @relation(fields: [employeeId, companyId], references: [id, companyId], onDelete: Restrict)
+
+  @@unique([periodId, employeeId])
+  @@index([companyId, employeeId])
+  @@map("payroll_items")
 }

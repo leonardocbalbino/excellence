@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { deflateSync } from 'node:zlib';
 
 const out = join(dirname(fileURLToPath(import.meta.url)), '../public');
-const BLUE = [0x1d, 0x4e, 0xd8];
+const BRAND = [0x0f, 0x5a, 0x52];
 const WHITE = [0xff, 0xff, 0xff];
 
 // Marca de "check" em coordenadas relativas à área de conteúdo (0..1).
@@ -52,7 +52,7 @@ function render(size, { maskable }) {
       const pixel = 1 / (size * contentScale);
       const mark = Math.max(0, Math.min(1, (STROKE / 2 - d) / pixel + 0.5));
       for (let c = 0; c < 3; c++)
-        pixels[i + c] = Math.round(BLUE[c] * (1 - mark) + WHITE[c] * mark);
+        pixels[i + c] = Math.round(BRAND[c] * (1 - mark) + WHITE[c] * mark);
       pixels[i + 3] = Math.round(255 * background);
     }
   }
@@ -113,6 +113,6 @@ const points = CHECK.map(
 );
 writeFileSync(
   join(out, 'favicon.svg'),
-  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="#1d4ed8"/><polyline points="${points.join(' ')}" fill="none" stroke="#fff" stroke-width="${(STROKE * 51.2).toFixed(1)}" stroke-linecap="round" stroke-linejoin="round"/></svg>\n`,
+  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="#0f5a52"/><polyline points="${points.join(' ')}" fill="none" stroke="#fff" stroke-width="${(STROKE * 51.2).toFixed(1)}" stroke-linecap="round" stroke-linejoin="round"/></svg>\n`,
 );
 process.stdout.write(`Ícones gerados em ${out}\n`);

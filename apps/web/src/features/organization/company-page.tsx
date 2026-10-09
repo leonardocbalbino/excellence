@@ -116,7 +116,7 @@ function CompanyForm({
       <FormField
         label="Fuso horário"
         error={errors.timezone?.message}
-        hint="Padrão para exibir horários; cada unidade pode ter o seu."
+        hint="Padrão para exibir horários; cada posto de trabalho pode ter o seu."
       >
         {(field) => (
           <Select {...field} {...form.register('timezone')}>

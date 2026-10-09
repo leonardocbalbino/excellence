@@ -49,7 +49,7 @@ export class UnitsService {
 
   async get(id: string): Promise<Unit> {
     const unit = await this.db.client.unit.findUnique({ where: { id }, select: UNIT_SELECT });
-    if (!unit) throw new NotFoundException('Unidade não encontrada.');
+    if (!unit) throw new NotFoundException('Posto de trabalho não encontrado.');
     return unit;
   }
 
@@ -102,10 +102,10 @@ export class UnitsService {
         _count: { select: { employees: true, departments: true, roleScopes: true } },
       },
     });
-    if (!unit) throw new NotFoundException('Unidade não encontrada.');
+    if (!unit) throw new NotFoundException('Posto de trabalho não encontrado.');
     const { employees, departments, roleScopes } = unit._count;
     if (employees + departments + roleScopes > 0) {
-      throw inUse('A unidade tem funcionários, departamentos ou perfis vinculados.');
+      throw inUse('O posto tem funcionários, departamentos ou perfis vinculados.');
     }
     await this.db.client.$transaction(async (tx) => {
       await tx.unit.delete({ where: { id } });
@@ -126,6 +126,6 @@ export class UnitsService {
     const taken = await this.db.client.unit.count({
       where: { code, ...(exceptId ? { id: { not: exceptId } } : {}) },
     });
-    if (taken > 0) throw duplicated('code', 'Já existe uma unidade com este código.');
+    if (taken > 0) throw duplicated('code', 'Já existe um posto com este código.');
   }
 }

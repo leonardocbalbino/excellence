@@ -95,7 +95,7 @@ describe('Funcionários', () => {
         ),
       ),
     );
-    renderApp(`/pessoas/${employee().id}`);
+    renderApp(`/pessoas/${employee().id}?aba=acesso`);
     const user = userEvent.setup();
     await user.type(await screen.findByLabelText('E-mail de login'), 'fabio@exemplo.com.br');
     await user.click(screen.getByRole('button', { name: 'Criar acesso' }));
@@ -139,6 +139,7 @@ describe('Cadastro de funcionário', () => {
             id: '01900000-0000-7000-8000-000000000501',
             name: 'Vigilante',
             cbo: null,
+            baseSalary: null,
             isActive: true,
           },
         ]),

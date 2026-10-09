@@ -24,13 +24,13 @@ describe('getCurrentPosition', () => {
   it('devolve coordenadas, precisão e horário do dispositivo', async () => {
     const position = {
       timestamp: Date.UTC(2026, 8, 25, 12),
-      coords: { latitude: -23.55, longitude: -46.63, accuracy: 12 },
+      coords: { latitude: -2.55, longitude: -44.24, accuracy: 12 },
     } as GeolocationPosition;
     await expect(
       getCurrentPosition({ geolocation: geolocationStub({ position }) }),
     ).resolves.toEqual({
-      latitude: -23.55,
-      longitude: -46.63,
+      latitude: -2.55,
+      longitude: -44.24,
       accuracyMeters: 12,
       deviceTimestamp: '2026-09-25T12:00:00.000Z',
     });

@@ -34,14 +34,14 @@ export function UnitsPage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold">Unidades</h1>
+          <h1 className="text-2xl font-semibold">Postos de trabalho</h1>
           <p className="text-muted-foreground">Locais de trabalho, com endereço e cerca virtual.</p>
         </div>
         {canManage ? (
           <Button asChild>
-            <Link to="/cadastros/unidades/nova">
+            <Link to="/cadastros/postos/novo">
               <PlusIcon />
-              Nova unidade
+              Novo posto
             </Link>
           </Button>
         ) : null}
@@ -59,7 +59,7 @@ export function UnitsPage() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Unidade</TableHead>
+              <TableHead>Posto</TableHead>
               <TableHead>Cidade</TableHead>
               <TableHead>Cerca virtual</TableHead>
             </TableRow>
@@ -74,7 +74,7 @@ export function UnitsPage() {
             ) : units.data?.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={3} className="text-center text-muted-foreground">
-                  Nenhuma unidade cadastrada.
+                  Nenhum posto de trabalho cadastrado.
                 </TableCell>
               </TableRow>
             ) : (
@@ -82,7 +82,7 @@ export function UnitsPage() {
                 <TableRow key={unit.id}>
                   <TableCell>
                     <Link
-                      to={`/cadastros/unidades/${unit.id}`}
+                      to={`/cadastros/postos/${unit.id}`}
                       className="font-medium text-primary hover:underline"
                     >
                       {unit.name}

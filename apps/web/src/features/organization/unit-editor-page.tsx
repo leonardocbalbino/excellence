@@ -43,13 +43,13 @@ export function UnitEditorPage() {
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       <Button asChild variant="ghost" size="sm">
-        <Link to="/cadastros/unidades">
+        <Link to="/cadastros/postos">
           <ArrowLeftIcon />
-          Unidades
+          Postos de trabalho
         </Link>
       </Button>
       <h1 className="text-2xl font-semibold">
-        {id ? (unit.data?.name ?? 'Unidade') : 'Nova unidade'}
+        {id ? (unit.data?.name ?? 'Posto de trabalho') : 'Novo posto de trabalho'}
       </h1>
       {unit.isError ? <Alert variant="destructive">{errorMessage(unit.error)}</Alert> : null}
       <Card>
@@ -114,8 +114,8 @@ function UnitForm({ unit }: { unit: Unit | undefined }) {
     try {
       const saved = unit ? await api.units.update(unit.id, values) : await api.units.create(values);
       await queryClient.invalidateQueries({ queryKey: unitsQueryKey });
-      toast.success('Unidade salva.');
-      if (!unit) void navigate(`/cadastros/unidades/${saved.id}`, { replace: true });
+      toast.success('Posto de trabalho salvo.');
+      if (!unit) void navigate(`/cadastros/postos/${saved.id}`, { replace: true });
     } catch (error) {
       applyFieldErrors(error, form.setError);
       setSubmitError(error);
@@ -123,12 +123,12 @@ function UnitForm({ unit }: { unit: Unit | undefined }) {
   });
 
   const remove = async () => {
-    if (!unit || !window.confirm(`Excluir a unidade "${unit.name}"?`)) return;
+    if (!unit || !window.confirm(`Excluir o posto "${unit.name}"?`)) return;
     try {
       await api.units.remove(unit.id);
       await queryClient.invalidateQueries({ queryKey: unitsQueryKey });
-      toast.success('Unidade excluída.');
-      void navigate('/cadastros/unidades', { replace: true });
+      toast.success('Posto de trabalho excluído.');
+      void navigate('/cadastros/postos', { replace: true });
     } catch (error) {
       setSubmitError(error);
     }
@@ -153,7 +153,7 @@ function UnitForm({ unit }: { unit: Unit | undefined }) {
         >
           {(field) => <Input {...field} {...text('code')} />}
         </FormField>
-        <FormField label="CNPJ da unidade" error={errors.cnpj?.message}>
+        <FormField label="CNPJ do posto" error={errors.cnpj?.message}>
           {(field) => <Input {...field} {...text('cnpj')} />}
         </FormField>
         <FormField label="CEP" error={errors.postalCode?.message}>
@@ -254,7 +254,7 @@ function UnitForm({ unit }: { unit: Unit | undefined }) {
             form.setValue('isActive', checked === true, { shouldDirty: true })
           }
         />
-        <Label htmlFor="unit-active">Unidade ativa</Label>
+        <Label htmlFor="unit-active">Posto ativo</Label>
       </div>
 
       {submitError ? <Alert variant="destructive">{errorMessage(submitError)}</Alert> : null}
@@ -262,7 +262,7 @@ function UnitForm({ unit }: { unit: Unit | undefined }) {
         <div className="flex flex-wrap gap-2">
           <Button type="submit" disabled={isSubmitting}>
             {isSubmitting ? <Spinner /> : null}
-            Salvar unidade
+            Salvar posto
           </Button>
           {unit ? (
             <Button type="button" variant="outline" onClick={() => void remove()}>

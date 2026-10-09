@@ -10,7 +10,7 @@ export const RESOURCE_LABELS: Record<string, string> = {
 
 export const SCOPE_LABELS: Record<ScopeType, string> = {
   company: 'Toda a empresa',
-  unit: 'Unidade',
+  unit: 'Posto de trabalho',
   department: 'Departamento',
   own_team: 'Equipe que gerencia',
   self: 'Somente os próprios dados',

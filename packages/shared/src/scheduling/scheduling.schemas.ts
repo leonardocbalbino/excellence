@@ -183,7 +183,8 @@ export const holidayInputSchema = z
       need('state', holiday.state !== null, 'Informe a UF');
       need('city', holiday.city !== null, 'Informe o município');
     }
-    if (holiday.scope === 'unit') need('unitId', holiday.unitId !== null, 'Informe a unidade');
+    if (holiday.scope === 'unit')
+      need('unitId', holiday.unitId !== null, 'Informe o posto de trabalho');
   });
 export type HolidayInput = z.input<typeof holidayInputSchema>;
 

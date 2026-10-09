@@ -1,11 +1,13 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import type {
-  Department,
-  departmentInputSchema,
-  LaborUnion,
-  laborUnionInputSchema,
-  Position,
-  positionInputSchema,
+import {
+  type Department,
+  type departmentInputSchema,
+  fromCents,
+  type LaborUnion,
+  type laborUnionInputSchema,
+  optionalCents,
+  type Position,
+  type positionInputSchema,
 } from '@excellence/shared';
 import type { z } from 'zod';
 import { TenantPrismaService } from '../../../infrastructure/prisma/tenant-prisma.service';
@@ -25,7 +27,30 @@ const DEPARTMENT_SELECT = {
   unitId: true,
   isActive: true,
 } as const;
-const POSITION_SELECT = { id: true, name: true, cbo: true, isActive: true } as const;
+const POSITION_SELECT = {
+  id: true,
+  name: true,
+  cbo: true,
+  baseSalaryCents: true,
+  isActive: true,
+} as const;
+
+function toPosition(
+  row: {
+    id: string;
+    name: string;
+    cbo: string | null;
+    baseSalaryCents: number | null;
+    isActive: boolean;
+  },
+  canSeeSalary: boolean,
+): Position {
+  const { baseSalaryCents, ...rest } = row;
+  return {
+    ...rest,
+    baseSalary: canSeeSalary && baseSalaryCents !== null ? fromCents(baseSalaryCents) : null,
+  };
+}
 const UNION_SELECT = { id: true, name: true, cnpj: true, baseMonth: true, isActive: true } as const;
 
 const activeFilter = (includeInactive: boolean) => (includeInactive ? {} : { isActive: true });
@@ -68,7 +93,7 @@ export class CatalogsService {
     assertCompanyWide(grant);
     const before = id ? await this.getDepartment(id) : null;
     if (input.unitId && (await this.db.client.unit.count({ where: { id: input.unitId } })) === 0) {
-      throw invalidReference('unitId', 'Unidade não encontrada.');
+      throw invalidReference('unitId', 'Posto de trabalho não encontrado.');
     }
     if (input.code) {
       const taken = await this.db.client.department.count({
@@ -113,41 +138,52 @@ export class CatalogsService {
 
   // ─── Cargos ─────────────────────────────────────────────────────────────────────
 
-  listPositions(includeInactive: boolean): Promise<Position[]> {
-    return this.db.client.position.findMany({
+  /** `canSeeSalary`: quem tem `payroll:manage` vê o salário base; os demais recebem null. */
+  async listPositions(includeInactive: boolean, canSeeSalary: boolean): Promise<Position[]> {
+    const rows = await this.db.client.position.findMany({
       where: activeFilter(includeInactive),
       select: POSITION_SELECT,
       orderBy: { name: 'asc' },
     });
+    return rows.map((row) => toPosition(row, canSeeSalary));
   }
 
-  async getPosition(id: string): Promise<Position> {
+  async getPosition(id: string, canSeeSalary: boolean): Promise<Position> {
     const row = await this.db.client.position.findUnique({
       where: { id },
       select: POSITION_SELECT,
     });
     if (!row) throw new NotFoundException('Cargo não encontrado.');
-    return row;
+    return toPosition(row, canSeeSalary);
   }
 
+  /** Sem `payroll:manage`, o salário enviado é ignorado e o atual é mantido. */
   async savePosition(
     id: string | null,
     input: PositionInput,
     grant: AccessGrant,
+    canManageSalary: boolean,
   ): Promise<Position> {
     assertCompanyWide(grant);
-    const before = id ? await this.getPosition(id) : null;
+    const before = id ? await this.getPosition(id, true) : null;
     const taken = await this.db.client.position.count({
       where: { name: input.name, ...(id ? { id: { not: id } } : {}) },
     });
     if (taken > 0) throw duplicated('name', 'Já existe um cargo com este nome.');
+    const data = {
+      name: input.name,
+      cbo: input.cbo,
+      isActive: input.isActive,
+      ...(canManageSalary ? { baseSalaryCents: optionalCents(input.baseSalary) } : {}),
+    };
     return this.db.client.$transaction(async (tx) => {
-      const after = id
-        ? await tx.position.update({ where: { id }, data: input, select: POSITION_SELECT })
+      const row = id
+        ? await tx.position.update({ where: { id }, data, select: POSITION_SELECT })
         : await tx.position.create({
-            data: { ...input, companyId: grant.companyId },
+            data: { ...data, companyId: grant.companyId },
             select: POSITION_SELECT,
           });
+      const after = toPosition(row, true);
       await this.audit.record(
         {
           action: id ? 'position.updated' : 'position.created',
@@ -157,7 +193,7 @@ export class CatalogsService {
         },
         tx,
       );
-      return after;
+      return toPosition(row, canManageSalary);
     });
   }
 

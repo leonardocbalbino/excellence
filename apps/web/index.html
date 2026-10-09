@@ -4,10 +4,29 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="description" content="Gestão de pessoas, controle de ponto e rondas." />
-    <meta name="theme-color" content="#1d4ed8" />
+    <meta name="theme-color" content="#0f5a52" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <title>Excellence</title>
+    <!-- Tema antes da primeira pintura (sem piscar). Mesma chave e cores de src/lib/theme.ts. -->
+    <script>
+      (function () {
+        var theme = 'light';
+        try {
+          var stored = localStorage.getItem('excellence-theme');
+          theme =
+            stored === 'light' || stored === 'dark'
+              ? stored
+              : window.matchMedia('(prefers-color-scheme: dark)').matches
+                ? 'dark'
+                : 'light';
+        } catch (e) {}
+        document.documentElement.dataset.theme = theme;
+        if (theme === 'dark') {
+          document.querySelector('meta[name="theme-color"]').setAttribute('content', '#0f1614');
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

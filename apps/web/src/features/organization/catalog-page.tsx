@@ -61,6 +61,8 @@ export interface CatalogConfig<T extends CatalogItem> {
   remove: (id: string) => Promise<unknown>;
   /** false enquanto as opções dos selects carregam (evita perder o valor ao editar). */
   ready?: boolean;
+  /** Ações extras no cabeçalho (ex.: imprimir QR codes). */
+  actions?: ReactNode;
 }
 
 /** Página de cadastro simples: lista com edição no próprio lugar. */
@@ -80,12 +82,15 @@ export function CatalogPage<T extends CatalogItem>({ config }: { config: Catalog
           <h1 className="text-2xl font-semibold">{config.title}</h1>
           <p className="text-muted-foreground">{config.description}</p>
         </div>
-        {canManage && editing === null ? (
-          <Button onClick={() => setEditing('new')} disabled={config.ready === false}>
-            <PlusIcon />
-            Novo {config.singular}
-          </Button>
-        ) : null}
+        <div className="flex flex-wrap gap-2">
+          {config.actions}
+          {canManage && editing === null ? (
+            <Button onClick={() => setEditing('new')} disabled={config.ready === false}>
+              <PlusIcon />
+              Novo {config.singular}
+            </Button>
+          ) : null}
+        </div>
       </div>
 
       {editing !== null ? (

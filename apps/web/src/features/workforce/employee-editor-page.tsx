@@ -11,7 +11,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeftIcon, CopyIcon, KeyRoundIcon } from 'lucide-react';
 import { useState } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
-import { Link, useNavigate, useParams } from 'react-router';
+import { Tabs } from 'radix-ui';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import { toast } from 'sonner';
 import type { z } from 'zod';
 import { Alert } from '@/components/ui/alert';
@@ -26,6 +27,7 @@ import { applyFieldErrors } from '@/lib/form-errors';
 import { emptyToNull } from '@/lib/form-values';
 import { errorMessage, useApi } from '@/lib/services';
 import { useCan } from '../access/access';
+import { EmployeeBenefitsPanel } from '../benefits/employee-benefits-panel';
 import {
   departmentsQueryKey,
   positionsQueryKey,
@@ -33,66 +35,149 @@ import {
   unitsQueryKey,
 } from '../organization/query-keys';
 import { EmployeeSchedulePanel } from '../scheduling/employee-schedule-panel';
+import { EmployeeHistory } from './employee-history';
 import { employeesQueryKey } from './query-keys';
 
+type Tab = 'dados' | 'escala' | 'beneficios' | 'ponto' | 'acesso' | 'historico';
+
+const TAB_CLASS =
+  'shrink-0 border-b-2 border-transparent px-3 py-2.5 text-sm font-medium text-muted-foreground transition-colors outline-none hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 data-[state=active]:border-primary data-[state=active]:font-semibold data-[state=active]:text-primary';
+
+/**
+ * Funcionário: cadastro e tudo o que se liga a ele, em abas. A aba fica no endereço
+ * (`?aba=historico`) para dar para compartilhar o link. Novo funcionário: só o formulário.
+ */
 export function EmployeeEditorPage() {
   const { id } = useParams();
   const api = useApi();
+  const [params, setParams] = useSearchParams();
+  const canManage = useCan('employees:manage');
   const canReadTime = useCan('time_entries:read');
   const canRegisterCertificate = useCan('medical_certificates:manage');
+  const canManageBenefits = useCan('benefits:manage');
   const employee = useQuery({
     queryKey: [...employeesQueryKey, id],
     queryFn: () => api.employees.get(id ?? ''),
     enabled: id !== undefined,
   });
-  const title = id
-    ? employee.data
-      ? (employee.data.socialName ?? employee.data.name)
-      : 'Funcionário'
-    : 'Novo funcionário';
+  const data = employee.data;
+  const title = id ? (data ? (data.socialName ?? data.name) : 'Funcionário') : 'Novo funcionário';
+
+  const tabs: { value: Tab; label: string; show: boolean }[] = [
+    { value: 'dados', label: 'Dados', show: true },
+    { value: 'escala', label: 'Escala', show: true },
+    { value: 'beneficios', label: 'Benefícios', show: canManageBenefits },
+    { value: 'ponto', label: 'Ponto e atestados', show: canReadTime || canRegisterCertificate },
+    { value: 'acesso', label: 'Acesso ao sistema', show: true },
+    { value: 'historico', label: 'Histórico', show: true },
+  ];
+  const visible = tabs.filter((t) => t.show);
+  const tab: Tab = visible.find((t) => t.value === params.get('aba'))?.value ?? 'dados';
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6">
+    <div className="mx-auto max-w-4xl space-y-6">
       <Button asChild variant="ghost" size="sm">
         <Link to="/pessoas">
           <ArrowLeftIcon />
           Funcionários
         </Link>
       </Button>
-      <div className="flex flex-wrap items-center gap-2">
-        <h1 className="text-2xl font-semibold">{title}</h1>
-        {employee.data?.status === 'terminated' ? (
-          <Badge variant="secondary">Desligado</Badge>
+      <div>
+        <div className="flex flex-wrap items-center gap-2">
+          <h1 className="text-2xl font-semibold">{title}</h1>
+          {data?.status === 'terminated' ? <Badge variant="secondary">Desligado</Badge> : null}
+        </div>
+        {data ? (
+          <p className="text-sm text-muted-foreground">
+            Matrícula {data.registrationNumber}
+            {data.position ? ` · ${data.position.name}` : ''} · {data.unit.name}
+          </p>
         ) : null}
       </div>
       {employee.isError ? (
         <Alert variant="destructive">{errorMessage(employee.error)}</Alert>
       ) : null}
-      <Card>
-        <CardContent className="pt-6">
-          {id !== undefined && employee.isPending ? (
-            <Skeleton className="h-96 w-full" />
-          ) : (
-            <EmployeeForm key={employee.data?.id ?? 'novo'} employee={employee.data} />
-          )}
-        </CardContent>
-      </Card>
-      {employee.data && (canReadTime || canRegisterCertificate) ? (
-        <div className="flex flex-wrap gap-2">
-          {canReadTime ? (
-            <Button asChild variant="outline">
-              <Link to={`/pessoas/${employee.data.id}/espelho`}>Ver espelho de ponto</Link>
-            </Button>
+
+      {id === undefined ? (
+        <Card>
+          <CardContent className="pt-6">
+            <EmployeeForm employee={undefined} />
+          </CardContent>
+        </Card>
+      ) : employee.isPending ? (
+        <Skeleton className="h-96 w-full" />
+      ) : data ? (
+        <Tabs.Root
+          value={tab}
+          onValueChange={(value) =>
+            setParams(value === 'dados' ? {} : { aba: value }, { replace: true })
+          }
+        >
+          <Tabs.List aria-label="Seções do funcionário" className="flex overflow-x-auto border-b">
+            {visible.map((t) => (
+              <Tabs.Trigger key={t.value} value={t.value} className={TAB_CLASS}>
+                {t.label}
+              </Tabs.Trigger>
+            ))}
+          </Tabs.List>
+
+          <Tabs.Content value="dados" className="pt-6 outline-none">
+            {canManage ? null : (
+              <Alert className="mb-4">
+                Seu perfil só consulta o cadastro. Alterações são feitas pelo RH.
+              </Alert>
+            )}
+            <Card>
+              <CardContent className="pt-6">
+                <EmployeeForm key={data.id} employee={data} />
+              </CardContent>
+            </Card>
+          </Tabs.Content>
+          <Tabs.Content value="escala" className="pt-6 outline-none">
+            <EmployeeSchedulePanel employeeId={data.id} />
+          </Tabs.Content>
+          {canManageBenefits ? (
+            <Tabs.Content value="beneficios" className="pt-6 outline-none">
+              <EmployeeBenefitsPanel employeeId={data.id} />
+            </Tabs.Content>
           ) : null}
-          {canRegisterCertificate ? (
-            <Button asChild variant="outline">
-              <Link to={`/pessoas/${employee.data.id}/atestado`}>Registrar atestado</Link>
-            </Button>
+          {canReadTime || canRegisterCertificate ? (
+            <Tabs.Content value="ponto" className="pt-6 outline-none">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Ponto e atestados</CardTitle>
+                  <CardDescription>
+                    O espelho mostra as marcações e os ajustes do mês. Atestados enviados e
+                    analisados também aparecem no histórico.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="flex flex-wrap gap-2">
+                  {canReadTime ? (
+                    <Button asChild variant="outline">
+                      <Link to={`/pessoas/${data.id}/espelho`}>Ver espelho de ponto</Link>
+                    </Button>
+                  ) : null}
+                  {canRegisterCertificate ? (
+                    <Button asChild variant="outline">
+                      <Link to={`/pessoas/${data.id}/atestado`}>Registrar atestado</Link>
+                    </Button>
+                  ) : null}
+                </CardContent>
+              </Card>
+            </Tabs.Content>
           ) : null}
-        </div>
+          <Tabs.Content value="acesso" className="pt-6 outline-none">
+            <AccountPanel employee={data} />
+          </Tabs.Content>
+          <Tabs.Content value="historico" className="pt-6 outline-none">
+            <Card>
+              <CardContent className="pt-6">
+                <EmployeeHistory employeeId={data.id} />
+              </CardContent>
+            </Card>
+          </Tabs.Content>
+        </Tabs.Root>
       ) : null}
-      {employee.data ? <EmployeeSchedulePanel employeeId={employee.data.id} /> : null}
-      {employee.data ? <AccountPanel employee={employee.data} /> : null}
     </div>
   );
 }
@@ -265,7 +350,7 @@ function EmployeeFormFields({
             <Input {...field} {...form.register('terminationDate', optional)} type="date" />
           )}
         </FormField>
-        <FormField label="Unidade" error={errors.unitId?.message}>
+        <FormField label="Posto de trabalho" error={errors.unitId?.message}>
           {(field) => (
             <Select {...field} {...form.register('unitId')}>
               <option value="">Selecione</option>

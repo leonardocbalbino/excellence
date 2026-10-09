@@ -30,11 +30,15 @@ export function sessionHandlers(permissions: Permission[], access: Partial<MyAcc
     http.get(`${API}/me/access`, () =>
       HttpResponse.json({
         permissions,
+        hasEmployeeRecord: false,
+        hasPatrolRoutes: false,
         mfaSetupRequired: false,
         passwordChangeRequired: false,
         ...access,
       }),
     ),
+    // Mural de comunicados: consultado pelo menu em qualquer área.
+    http.get(`${API}/me/announcements`, () => HttpResponse.json({ items: [], pending: 0 })),
   ];
 }
 

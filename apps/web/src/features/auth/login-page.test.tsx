@@ -7,7 +7,13 @@ import { safeNext } from './safe-next';
 
 function accessHandler() {
   return http.get(`${API}/me/access`, () =>
-    HttpResponse.json({ permissions: [], mfaSetupRequired: false, passwordChangeRequired: false }),
+    HttpResponse.json({
+      permissions: [],
+      hasEmployeeRecord: false,
+      hasPatrolRoutes: false,
+      mfaSetupRequired: false,
+      passwordChangeRequired: false,
+    }),
   );
 }
 
@@ -90,7 +96,8 @@ describe('Login', () => {
     await user.click(screen.getByRole('button', { name: 'Verificar' }));
     await waitFor(() => expect(router.state.location.pathname).toBe('/'));
     expect(authorization).toBe('Bearer mfa-token');
-    expect(await screen.findByRole('heading', { name: 'Olá, Ana' })).toBeInTheDocument();
+    // Sem cadastro de funcionário nem gestão: o início só orienta a falar com o RH.
+    expect(await screen.findByRole('heading', { name: 'Tudo pronto' })).toBeInTheDocument();
   });
 });
 

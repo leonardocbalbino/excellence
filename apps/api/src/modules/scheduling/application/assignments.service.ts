@@ -185,19 +185,39 @@ export class AssignmentsService {
   }
 
   private async plan(employeeId: string, from: string, to: string): Promise<PlannedDay[]> {
+    return (await this.planMany([employeeId], from, to)).get(employeeId) ?? [];
+  }
+
+  /**
+   * Escala prevista de vários funcionários de uma vez (quadro do dia da gestão). Sem
+   * checagem de escopo: quem chama já filtrou os funcionários pelo escopo da permissão.
+   */
+  async planMany(
+    employeeIds: readonly string[],
+    from: string,
+    to: string,
+  ): Promise<Map<string, PlannedDay[]>> {
+    const result = new Map<string, PlannedDay[]>();
+    if (employeeIds.length === 0) return result;
     const client = this.db.client;
-    const employee = await client.employee.findUniqueOrThrow({
-      where: { id: employeeId },
-      select: { unit: { select: { id: true, state: true, city: true } } },
-    });
-    const [assignments, holidays] = await Promise.all([
+    const [employees, assignments, holidays] = await Promise.all([
+      client.employee.findMany({
+        where: { id: { in: [...employeeIds] } },
+        select: { id: true, unit: { select: { id: true, state: true, city: true } } },
+      }),
       client.employeeScheduleAssignment.findMany({
         where: {
-          employeeId,
+          employeeId: { in: [...employeeIds] },
           startDate: { lte: toCalendarDate(to) },
           OR: [{ endDate: null }, { endDate: { gte: toCalendarDate(from) } }],
         },
-        select: { scheduleId: true, startDate: true, endDate: true, cycleStartDate: true },
+        select: {
+          employeeId: true,
+          scheduleId: true,
+          startDate: true,
+          endDate: true,
+          cycleStartDate: true,
+        },
       }),
       client.holiday.findMany({
         where: { date: { gte: toCalendarDate(from), lte: toCalendarDate(to) } },
@@ -239,18 +259,27 @@ export class AssignmentsService {
     const scheduleMap = new Map<string, PlannerSchedule>(
       schedules.map((s) => [s.id, { ...s, days: s.days.map((d) => d.shift) }]),
     );
-    return planDays({
-      from,
-      to,
-      assignments: assignments.map((a) => ({
-        scheduleId: a.scheduleId,
-        startDate: fromCalendarDate(a.startDate),
-        endDate: fromCalendarDate(a.endDate),
-        cycleStartDate: fromCalendarDate(a.cycleStartDate),
-      })),
-      schedules: scheduleMap,
-      holidays: holidays.map((h) => ({ ...h, date: fromCalendarDate(h.date) })),
-      unit: employee.unit,
-    });
+    const plannerHolidays = holidays.map((h) => ({ ...h, date: fromCalendarDate(h.date) }));
+    for (const employee of employees) {
+      result.set(
+        employee.id,
+        planDays({
+          from,
+          to,
+          assignments: assignments
+            .filter((a) => a.employeeId === employee.id)
+            .map((a) => ({
+              scheduleId: a.scheduleId,
+              startDate: fromCalendarDate(a.startDate),
+              endDate: fromCalendarDate(a.endDate),
+              cycleStartDate: fromCalendarDate(a.cycleStartDate),
+            })),
+          schedules: scheduleMap,
+          holidays: plannerHolidays,
+          unit: employee.unit,
+        }),
+      );
+    }
+    return result;
   }
 }

@@ -23,6 +23,8 @@ export const ProblemType = {
   MfaSetupRequired: 'urn:excellence:problem:mfa-setup-required',
   PrivilegeEscalation: 'urn:excellence:problem:privilege-escalation',
   LastAdministrator: 'urn:excellence:problem:last-administrator',
+  MfaNotEnabled: 'urn:excellence:problem:mfa-not-enabled',
+  OwnMfaReset: 'urn:excellence:problem:own-mfa-reset',
   RoleInUse: 'urn:excellence:problem:role-in-use',
   SystemRole: 'urn:excellence:problem:system-role',
   // Arquivos
@@ -45,11 +47,23 @@ export const ProblemType = {
   SelfieRequired: 'urn:excellence:problem:selfie-required',
   OutsideGeofence: 'urn:excellence:problem:outside-geofence',
   IdempotencyMismatch: 'urn:excellence:problem:idempotency-mismatch',
+  OfflineEntryRejected: 'urn:excellence:problem:offline-entry-rejected',
   AdjustmentNotPending: 'urn:excellence:problem:adjustment-not-pending',
   SelfApproval: 'urn:excellence:problem:self-approval',
   MedicalCertificateNotPending: 'urn:excellence:problem:medical-certificate-not-pending',
   AnnouncementNotEditable: 'urn:excellence:problem:announcement-not-editable',
   MedicalCertificateOverlap: 'urn:excellence:problem:medical-certificate-overlap',
+  BenefitOverlap: 'urn:excellence:problem:benefit-overlap',
+  ConversationClosed: 'urn:excellence:problem:conversation-closed',
+  PayrollClosed: 'urn:excellence:problem:payroll-closed',
+  // Rondas
+  PatrolNotAssigned: 'urn:excellence:problem:patrol-not-assigned',
+  PatrolRunOpen: 'urn:excellence:problem:patrol-run-open',
+  PatrolRunFinished: 'urn:excellence:problem:patrol-run-finished',
+  PatrolInvalidCode: 'urn:excellence:problem:patrol-invalid-code',
+  PatrolPointNotInRun: 'urn:excellence:problem:patrol-point-not-in-run',
+  PatrolPointAlreadyChecked: 'urn:excellence:problem:patrol-point-already-checked',
+  PatrolOutOfOrder: 'urn:excellence:problem:patrol-out-of-order',
 } as const;
 
 export type ProblemType = (typeof ProblemType)[keyof typeof ProblemType];

@@ -5,6 +5,7 @@ import {
   type MedicalCertificateSensitive,
   type medicalCertificateInputSchema,
   type medicalCertificateListQuerySchema,
+  PREVIEWABLE_CONTENT_TYPES,
   ProblemType,
   timeToMinutes,
 } from '@excellence/shared';
@@ -147,11 +148,17 @@ export class MedicalCertificatesService {
     return this.get(id);
   }
 
+  /**
+   * Atestados no escopo. Os do próprio usuário ficam de fora (segregação): ele não pode
+   * analisá-los e os acompanha em "Meus atestados".
+   */
   async list(query: ListQuery, grant: AccessGrant): Promise<MedicalCertificate[]> {
     if (!grant.scope) return [];
-    const scope = employeeScopeWhere(grant.scope, await this.employees.actor(grant));
+    const actor = await this.employees.actor(grant);
+    const scope = employeeScopeWhere(grant.scope, actor);
     if (!scope) return [];
     const filters: Prisma.MedicalCertificateWhereInput[] = [{ employee: scope }];
+    if (actor.employeeId) filters.push({ employeeId: { not: actor.employeeId } });
     if (query.status) filters.push({ status: query.status });
     if (query.employeeId) filters.push({ employeeId: query.employeeId });
     if (query.from) filters.push({ endDate: { gte: toCalendarDate(query.from) } });
@@ -176,7 +183,18 @@ export class MedicalCertificatesService {
     });
     if (!row) throw new NotFoundException('Atestado não encontrado.');
     await this.employees.get(row.employeeId, grant);
-    return { id: row.id, cid: row.cid, document: await this.files.createDownloadLink(row.fileId) };
+    const file = await this.db.client.storedFile.findUniqueOrThrow({
+      where: { id: row.fileId },
+      select: { contentType: true },
+    });
+    const previewable = PREVIEWABLE_CONTENT_TYPES.includes(file.contentType);
+    return {
+      id: row.id,
+      cid: row.cid,
+      document: await this.files.createDownloadLink(row.fileId),
+      preview: previewable ? await this.files.createDownloadLink(row.fileId, 'inline') : null,
+      contentType: file.contentType,
+    };
   }
 
   async accept(id: string, note: string | null, grant: AccessGrant): Promise<MedicalCertificate> {

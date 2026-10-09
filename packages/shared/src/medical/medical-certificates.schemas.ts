@@ -102,7 +102,11 @@ export type MedicalCertificate = z.infer<typeof medicalCertificateSchema>;
 export const medicalCertificateSensitiveSchema = z.object({
   id: z.uuid(),
   cid: z.string().nullable(),
+  /** Link para baixar o arquivo. */
   document: downloadLinkSchema,
+  /** Link para ver no navegador (null quando o tipo não abre sozinho, ex.: HEIC). */
+  preview: downloadLinkSchema.nullable(),
+  contentType: z.string(),
 });
 export type MedicalCertificateSensitive = z.infer<typeof medicalCertificateSensitiveSchema>;
 

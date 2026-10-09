@@ -134,8 +134,8 @@ export function RoleForm({ catalog, role, readOnly, onSubmit }: RoleFormProps) {
           </p>
         ) : null}
         <p className="text-sm text-muted-foreground">
-          A escolha de unidades e departamentos específicos fica disponível com o cadastro de
-          unidades.
+          A escolha de postos de trabalho e departamentos específicos fica disponível com o cadastro
+          de postos.
         </p>
         {errors.scopes ? (
           <p className="text-sm text-destructive">

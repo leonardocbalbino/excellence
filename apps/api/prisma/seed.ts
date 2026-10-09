@@ -13,6 +13,7 @@ import {
   type RoleTemplate,
 } from '../src/modules/access-control/domain/default-roles';
 import { PasswordHasher } from '../src/modules/auth/infrastructure/password-hasher';
+import { newCodeToken } from '../src/modules/patrols/domain/code';
 import { nationalHolidaySuggestions } from '../src/modules/scheduling/domain/national-holidays';
 
 export const SEED_COMPANY_ID = '01900000-0000-7000-8000-000000000001';
@@ -26,8 +27,10 @@ export const SEED_ROLE_IDS: Record<RoleTemplate['key'], string> = {
 
 export const SEED_UNITS = {
   matriz: '01900000-0000-7000-8000-000000000301',
-  campinas: '01900000-0000-7000-8000-000000000302',
 } as const;
+
+/** Filial de Campinas dos seeds antigos (removida: a empresa de exemplo tem só a Matriz). */
+const LEGACY_BRANCH_ID = '01900000-0000-7000-8000-000000000302';
 
 const SEED_DEPARTMENTS = {
   operacoes: '01900000-0000-7000-8000-000000000401',
@@ -84,14 +87,15 @@ const SEED_EMPLOYEES = [
   {
     id: '01900000-0000-7000-8000-000000000701',
     registrationNumber: '0001',
-    name: 'Ana Administradora',
+    name: 'Marina Analista',
     cpf: fakeCpf('100000001'),
     hireDate: '2020-01-06',
     unitId: SEED_UNITS.matriz,
     departmentId: SEED_DEPARTMENTS.administrativo,
     positionId: SEED_POSITIONS.analista,
     managerId: null,
-    userId: SEED_USERS[0].id,
+    // Sem conta: o Administrador (SEED_USERS[0]) não é funcionário e não bate ponto.
+    userId: null,
   },
   {
     id: '01900000-0000-7000-8000-000000000702',
@@ -135,7 +139,7 @@ const SEED_EMPLOYEES = [
     name: 'Carla Nunes',
     cpf: fakeCpf('100000005'),
     hireDate: '2024-02-01',
-    unitId: SEED_UNITS.campinas,
+    unitId: SEED_UNITS.matriz,
     departmentId: SEED_DEPARTMENTS.operacoes,
     positionId: SEED_POSITIONS.vigilante,
     managerId: '01900000-0000-7000-8000-000000000703',
@@ -147,7 +151,7 @@ const SEED_EMPLOYEES = [
     name: 'Diego Ramos',
     cpf: fakeCpf('100000006'),
     hireDate: '2024-07-22',
-    unitId: SEED_UNITS.campinas,
+    unitId: SEED_UNITS.matriz,
     departmentId: SEED_DEPARTMENTS.operacoes,
     positionId: SEED_POSITIONS.vigilante,
     managerId: null,
@@ -163,14 +167,15 @@ export async function seed(prisma: PrismaClient, password: string): Promise<void
 
   await prisma.company.upsert({
     where: { id: companyId },
-    update: {},
+    // Fuso sempre reaplicado: a empresa de exemplo fica em São Luís (MA).
+    update: { timezone: 'America/Fortaleza' },
     create: {
       id: companyId,
       name: 'Empresa Exemplo',
       legalName: 'Empresa Exemplo Serviços Ltda.',
       // CNPJ fictício com dígitos verificadores válidos.
       cnpj: '11222333000181',
-      timezone: 'America/Sao_Paulo',
+      timezone: 'America/Fortaleza',
     },
   });
 
@@ -211,37 +216,26 @@ export async function seed(prisma: PrismaClient, password: string): Promise<void
   const units = [
     {
       id: SEED_UNITS.matriz,
-      name: 'Matriz — São Paulo',
+      name: 'Matriz — São Luís',
       code: 'MATRIZ',
-      street: 'Avenida Paulista',
-      number: '1000',
-      district: 'Bela Vista',
-      city: 'São Paulo',
-      state: 'SP',
-      postalCode: '01310100',
-      latitude: -23.5653,
-      longitude: -46.6515,
+      street: 'Avenida Santos Dumont',
+      number: 'S/N',
+      district: 'Anil',
+      city: 'São Luís',
+      state: 'MA',
+      postalCode: '65137000',
+      // Trecho da Av. Santos Dumont no Anil (OpenStreetMap).
+      latitude: -2.5496,
+      longitude: -44.2394,
       geofenceRadiusMeters: 150,
-    },
-    {
-      id: SEED_UNITS.campinas,
-      name: 'Filial — Campinas',
-      code: 'CAMPINAS',
-      street: 'Avenida Francisco Glicério',
-      number: '500',
-      district: 'Centro',
-      city: 'Campinas',
-      state: 'SP',
-      postalCode: '13012000',
-      latitude: -22.9056,
-      longitude: -47.0608,
-      geofenceRadiusMeters: 200,
+      timezone: null,
     },
   ];
   for (const unit of units) {
     await prisma.unit.upsert({
       where: { id: unit.id },
-      update: {},
+      // Reaplica o endereço de exemplo (bancos antigos tinham a Matriz em São Paulo).
+      update: unit,
       create: { ...unit, companyId },
     });
   }
@@ -299,7 +293,8 @@ export async function seed(prisma: PrismaClient, password: string): Promise<void
   for (const { managerId: _manager, hireDate, ...employee } of SEED_EMPLOYEES) {
     await prisma.employee.upsert({
       where: { id: employee.id },
-      update: {},
+      // Nome e conta seguem o seed (bancos antigos tinham o Administrador ligado a um cadastro).
+      update: { name: employee.name, userId: employee.userId, unitId: employee.unitId },
       create: { ...employee, companyId, hireDate: date(hireDate), unionId: SEED_UNION_ID },
     });
   }
@@ -307,7 +302,19 @@ export async function seed(prisma: PrismaClient, password: string): Promise<void
     if (managerId) await prisma.employee.update({ where: { id }, data: { managerId } });
   }
 
+  // Bancos antigos tinham a filial de Campinas. Sem histórico, ela é excluída; com histórico
+  // (marcações de ponto e outros registros append-only apontam a unidade), fica inativa.
+  if (await prisma.unit.findUnique({ where: { id: LEGACY_BRANCH_ID }, select: { id: true } })) {
+    try {
+      await prisma.unit.delete({ where: { id: LEGACY_BRANCH_ID } });
+    } catch {
+      await prisma.unit.update({ where: { id: LEGACY_BRANCH_ID }, data: { isActive: false } });
+    }
+  }
+
   await seedScheduling(prisma);
+  await seedPatrols(prisma);
+  await seedBenefitsAndPayroll(prisma);
 }
 
 const SEED_SHIFTS = {
@@ -428,6 +435,159 @@ async function seedScheduling(prisma: PrismaClient): Promise<void> {
   }
 }
 
+const SEED_PATROL_POINTS = [
+  ['01900000-0000-7000-8000-000000000a01', 'Portão principal'],
+  ['01900000-0000-7000-8000-000000000a02', 'Estacionamento'],
+  ['01900000-0000-7000-8000-000000000a03', 'Galpão'],
+  ['01900000-0000-7000-8000-000000000a04', 'Portão dos fundos'],
+] as const;
+const SEED_PATROL_ROUTE_ID = '01900000-0000-7000-8000-000000000b01';
+
+/** Rondas: 4 pontos na Matriz e a rota "Perímetro" do vigilante Fábio (ADR 0016). */
+async function seedPatrols(prisma: PrismaClient): Promise<void> {
+  const companyId = SEED_COMPANY_ID;
+  const unitId = SEED_UNITS.matriz;
+  for (const [id, name] of SEED_PATROL_POINTS) {
+    await prisma.patrolPoint.upsert({
+      where: { id },
+      update: {},
+      create: { id, companyId, unitId, name, codeToken: newCodeToken() },
+    });
+  }
+  await prisma.patrolRoute.upsert({
+    where: { id: SEED_PATROL_ROUTE_ID },
+    update: {},
+    create: {
+      id: SEED_PATROL_ROUTE_ID,
+      companyId,
+      unitId,
+      name: 'Perímetro',
+      description: 'Volta completa pelos portões, estacionamento e galpão.',
+      expectedMinutes: 40,
+      // A cada 2 horas no turno diurno (07:00–19:00), todos os dias.
+      startMinutes: [8 * 60, 10 * 60, 12 * 60, 14 * 60, 16 * 60, 18 * 60],
+      weekdays: [0, 1, 2, 3, 4, 5, 6],
+    },
+  });
+  const routeId = SEED_PATROL_ROUTE_ID;
+  if ((await prisma.patrolRoutePoint.count({ where: { routeId } })) === 0) {
+    await prisma.patrolRoutePoint.createMany({
+      data: SEED_PATROL_POINTS.map(([pointId], position) => ({
+        routeId,
+        pointId,
+        position,
+        companyId,
+      })),
+    });
+    await prisma.patrolRouteAssignee.createMany({
+      data: [{ routeId, employeeId: '01900000-0000-7000-8000-000000000704', companyId }],
+    });
+  }
+}
+
+const SEED_BENEFITS = {
+  transporte: '01900000-0000-7000-8000-000000000c01',
+  refeicao: '01900000-0000-7000-8000-000000000c02',
+  saude: '01900000-0000-7000-8000-000000000c03',
+} as const;
+
+/** Salários dos cargos, benefícios atribuídos e links úteis (ADR 0017). */
+async function seedBenefitsAndPayroll(prisma: PrismaClient): Promise<void> {
+  const companyId = SEED_COMPANY_ID;
+  const salaries = [
+    [SEED_POSITIONS.vigilante, 235_000],
+    [SEED_POSITIONS.supervisor, 420_000],
+    [SEED_POSITIONS.analista, 380_000],
+  ] as const;
+  for (const [id, cents] of salaries) {
+    // Não sobrescreve um salário já ajustado pelo RH.
+    await prisma.position.updateMany({
+      where: { id, baseSalaryCents: null },
+      data: { baseSalaryCents: cents },
+    });
+  }
+
+  const benefits = [
+    {
+      id: SEED_BENEFITS.transporte,
+      name: 'Vale-transporte',
+      kind: 'transport' as const,
+      provider: 'Transporte coletivo de São Luís',
+      description: 'Deslocamento casa–trabalho. Desconto de até 6% do salário base.',
+      howToUse: 'O crédito cai no seu cartão de transporte no primeiro dia útil do mês.',
+      defaultCompanyValueCents: 22_000,
+    },
+    {
+      id: SEED_BENEFITS.refeicao,
+      name: 'Vale-refeição',
+      kind: 'meal' as const,
+      provider: 'Cartão refeição',
+      description: 'R$ 35 por dia trabalhado, creditado no cartão.',
+      howToUse: 'Use o cartão em restaurantes credenciados. Saldo no aplicativo do cartão.',
+      defaultCompanyValueCents: 77_000,
+    },
+    {
+      id: SEED_BENEFITS.saude,
+      name: 'Plano de saúde',
+      kind: 'health' as const,
+      provider: 'Operadora de exemplo',
+      description: 'Plano enfermaria com coparticipação. Dependentes podem ser incluídos.',
+      howToUse: 'Carteirinha digital no aplicativo da operadora. Rede credenciada no site.',
+      defaultCompanyValueCents: 45_000,
+    },
+  ];
+  for (const benefit of benefits) {
+    await prisma.benefit.upsert({
+      where: { id: benefit.id },
+      update: { provider: benefit.provider, howToUse: benefit.howToUse },
+      create: { ...benefit, companyId },
+    });
+  }
+
+  // Todos os funcionários com cadastro recebem os três benefícios desde a admissão.
+  for (const employee of SEED_EMPLOYEES) {
+    if ((await prisma.employeeBenefit.count({ where: { employeeId: employee.id } })) > 0) continue;
+    await prisma.employeeBenefit.createMany({
+      data: [
+        [SEED_BENEFITS.transporte, 22_000, 14_100],
+        [SEED_BENEFITS.refeicao, 77_000, 0],
+        [SEED_BENEFITS.saude, 45_000, 6_000],
+      ].map(([benefitId, companyValueCents, employeeDiscountCents]) => ({
+        companyId,
+        employeeId: employee.id,
+        benefitId: String(benefitId),
+        companyValueCents: Number(companyValueCents),
+        employeeDiscountCents: Number(employeeDiscountCents),
+        startDate: date(employee.hireDate),
+        createdBy: SEED_USERS[1].id,
+      })),
+    });
+  }
+
+  const links = [
+    [
+      '01900000-0000-7000-8000-000000000d01',
+      'Carteira de Trabalho Digital',
+      'https://www.gov.br/trabalho-e-emprego/pt-br/servicos/trabalhador/carteira-de-trabalho',
+      'Governo',
+    ],
+    [
+      '01900000-0000-7000-8000-000000000d02',
+      'Consulta ao FGTS',
+      'https://www.fgts.gov.br/',
+      'Governo',
+    ],
+    ['01900000-0000-7000-8000-000000000d03', 'Meu INSS', 'https://meu.inss.gov.br/', 'Governo'],
+  ] as const;
+  for (const [id, name, url, category] of links) {
+    await prisma.usefulLink.upsert({
+      where: { id },
+      update: {},
+      create: { id, companyId, name, url, category, position: links.findIndex((l) => l[0] === id) },
+    });
+  }
+}
+
 async function main(): Promise<void> {
   for (const file of ['.env', '../../.env']) {
     try {
@@ -445,7 +605,7 @@ async function main(): Promise<void> {
   try {
     await seed(prisma, password);
     process.stdout.write(
-      `Seed concluído: empresa, 2 unidades, 4 perfis, ${SEED_USERS.length} usuários e ${SEED_EMPLOYEES.length} funcionários (senha em SEED_PASSWORD).\n`,
+      `Seed concluído: empresa, 1 unidade, 4 perfis, ${SEED_USERS.length} usuários e ${SEED_EMPLOYEES.length} funcionários (senha em SEED_PASSWORD).\n`,
     );
   } finally {
     await prisma.$disconnect();

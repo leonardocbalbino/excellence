@@ -148,3 +148,43 @@ export const changePasswordInputSchema = z.object({
   newPassword: z.string().min(8, 'Use pelo menos 8 caracteres').max(256),
 });
 export type ChangePasswordInput = z.input<typeof changePasswordInputSchema>;
+
+// ─── Histórico do funcionário ─────────────────────────────────────────────────────
+
+export const employeeHistoryKindSchema = z.enum([
+  'hired',
+  'terminated',
+  'record_created',
+  'record_updated',
+  'account_created',
+  'schedule_assigned',
+  'schedule_unassigned',
+  'benefit_assigned',
+  'benefit_updated',
+  'benefit_removed',
+  'certificate_submitted',
+  'certificate_reviewed',
+  'adjustment_requested',
+  'adjustment_decided',
+]);
+export type EmployeeHistoryKind = z.infer<typeof employeeHistoryKindSchema>;
+
+/**
+ * Um acontecimento na linha do tempo do funcionário: cadastro e alterações (campo a campo),
+ * conta de acesso, escalas, benefícios, atestados e ajustes de ponto. Cada tipo só aparece
+ * para quem tem a permissão do módulo.
+ */
+export const employeeHistoryEventSchema = z.object({
+  id: z.string(),
+  at: z.iso.datetime({ offset: true }),
+  /** Evento de data (admissão, desligamento): sem horário. */
+  dateOnly: z.boolean(),
+  kind: employeeHistoryKindSchema,
+  title: z.string(),
+  description: z.string().nullable(),
+  actor: z.object({ id: z.uuid(), name: z.string() }).nullable(),
+  changes: z.array(
+    z.object({ label: z.string(), before: z.string().nullable(), after: z.string().nullable() }),
+  ),
+});
+export type EmployeeHistoryEvent = z.infer<typeof employeeHistoryEventSchema>;

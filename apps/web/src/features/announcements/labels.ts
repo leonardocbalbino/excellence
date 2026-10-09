@@ -1,6 +1,8 @@
 import type { Announcement } from '@excellence/shared';
 
 export const announcementsQueryKey = ['announcements'] as const;
+/** Mural do próprio usuário (tela de comunicados, início e aviso no cabeçalho). */
+export const myFeedQueryKey = [...announcementsQueryKey, 'me'] as const;
 
 export const ANNOUNCEMENT_STATUS: Record<Announcement['status'], string> = {
   draft: 'Rascunho',

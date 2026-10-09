@@ -9,7 +9,9 @@ import {
 } from '@excellence/shared';
 import { useQuery } from '@tanstack/react-query';
 import type { z } from 'zod';
+import { formatBRL } from '@/lib/format';
 import { useApi } from '@/lib/services';
+import { useCan } from '../access/access';
 import { CatalogPage } from './catalog-page';
 import {
   departmentsQueryKey,
@@ -44,7 +46,7 @@ export function DepartmentsPage() {
     <CatalogPage<Department>
       config={{
         title: 'Departamentos',
-        description: 'Áreas da empresa, gerais ou de uma unidade específica.',
+        description: 'Áreas da empresa, gerais ou de um posto de trabalho específico.',
         singular: 'departamento',
         ready: units.isSuccess,
         managePermission: 'departments:manage',
@@ -55,16 +57,16 @@ export function DepartmentsPage() {
           { name: 'code', label: 'Código', kind: 'text', optional: true },
           {
             name: 'unitId',
-            label: 'Unidade',
+            label: 'Posto de trabalho',
             kind: 'select',
             optional: true,
-            hint: 'Vazio = vale para todas as unidades.',
+            hint: 'Vazio = vale para todos os postos.',
             options: units.data?.map((u) => ({ value: u.id, label: u.name })) ?? [],
           },
         ],
         columns: [
           { header: 'Código', cell: (d) => d.code ?? '—' },
-          { header: 'Unidade', cell: (d) => unitName(d.unitId) ?? 'Todas' },
+          { header: 'Posto', cell: (d) => unitName(d.unitId) ?? 'Todos' },
         ],
         defaults: (d) => ({
           name: d?.name ?? '',
@@ -84,11 +86,15 @@ export function DepartmentsPage() {
 
 export function PositionsPage() {
   const api = useApi();
+  // Salário base: só quem fecha a folha vê e altera (ADR 0017).
+  const canSalary = useCan('payroll:manage');
   return (
     <CatalogPage<Position>
       config={{
         title: 'Cargos',
-        description: 'Cargos e funções, com o código CBO quando houver.',
+        description: canSalary
+          ? 'Cargos e funções, com o código CBO e o salário base usado no fechamento do mês.'
+          : 'Cargos e funções, com o código CBO quando houver.',
         singular: 'cargo',
         managePermission: 'positions:manage',
         queryKey: positionsQueryKey,
@@ -102,11 +108,28 @@ export function PositionsPage() {
             optional: true,
             hint: 'Classificação Brasileira de Ocupações (6 dígitos).',
           },
+          ...(canSalary
+            ? [
+                {
+                  name: 'baseSalary',
+                  label: 'Salário base (R$)',
+                  kind: 'number' as const,
+                  optional: true,
+                  hint: 'Mensal. Ex.: 2350,50',
+                },
+              ]
+            : []),
         ],
-        columns: [{ header: 'CBO', cell: (p) => p.cbo ?? '—' }],
+        columns: [
+          { header: 'CBO', cell: (p) => p.cbo ?? '—' },
+          ...(canSalary
+            ? [{ header: 'Salário base', cell: (p: Position) => formatBRL(p.baseSalary) }]
+            : []),
+        ],
         defaults: (p) => ({
           name: p?.name ?? '',
           cbo: p?.cbo ?? null,
+          baseSalary: p?.baseSalary ?? null,
           isActive: p?.isActive ?? true,
         }),
         list: (includeInactive) => api.positions.list(includeInactive),

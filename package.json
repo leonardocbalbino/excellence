@@ -19,9 +19,6 @@
     "infra:down": "docker compose down",
     "prepare": "husky"
   },
-  "lint-staged": {
-    "*.{ts,tsx,js,mjs,cjs,json,md,yml,yaml,css}": "prettier --write"
-  },
   "devDependencies": {
     "@commitlint/cli": "^21.2.3",
     "@commitlint/config-conventional": "^21.2.3",

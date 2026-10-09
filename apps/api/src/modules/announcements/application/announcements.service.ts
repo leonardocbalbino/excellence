@@ -448,7 +448,7 @@ export class AnnouncementsService {
         : 0,
     ]);
     if (units !== unitIds.length) {
-      throw invalidReference('audience.unitIds', 'Unidade não encontrada.');
+      throw invalidReference('audience.unitIds', 'Posto de trabalho não encontrado.');
     }
     if (departments !== departmentIds.length) {
       throw invalidReference('audience.departmentIds', 'Departamento não encontrado.');
@@ -456,7 +456,7 @@ export class AnnouncementsService {
     if (!canAddress(requireScope(grant), { unitIds, departmentIds })) {
       throw invalidReference(
         'audience',
-        'Seu acesso só permite comunicados para as unidades e departamentos do seu escopo.',
+        'Seu acesso só permite comunicados para os postos e departamentos do seu escopo.',
       );
     }
   }

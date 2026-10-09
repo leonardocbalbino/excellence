@@ -1,6 +1,8 @@
 import { Controller, Get, Header, HttpStatus, Post, Put } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiProduces, ApiTags } from '@nestjs/swagger';
 import {
+  type EmployeeHistoryEvent,
+  employeeHistoryEventSchema,
   createAccountInputSchema,
   type CreatedAccount,
   createdAccountSchema,
@@ -22,6 +24,7 @@ import {
   AnyAuthenticated,
   RequirePermission,
 } from '../../access-control/http/access.decorators';
+import { EmployeeHistoryService } from '../application/employee-history.service';
 import { EmployeeImportService } from '../application/employee-import.service';
 import { EmployeesService } from '../application/employees.service';
 
@@ -34,6 +37,7 @@ export class EmployeesController {
   constructor(
     private readonly employees: EmployeesService,
     private readonly imports: EmployeeImportService,
+    private readonly history: EmployeeHistoryService,
   ) {}
 
   @Get()
@@ -74,6 +78,19 @@ export class EmployeesController {
   @ZodResponse(HttpStatus.OK, employeeSchema)
   get(@ZodParam('id', idParam) id: string, @Access() grant: AccessGrant): Promise<Employee> {
     return this.employees.get(id, grant);
+  }
+
+  @Get(':id/history')
+  @RequirePermission('employees:read')
+  @ApiOperation({
+    summary: 'Linha do tempo do funcionário (cada fonte conforme as permissões do perfil)',
+  })
+  @ZodResponse(HttpStatus.OK, z.array(employeeHistoryEventSchema))
+  historyOf(
+    @ZodParam('id', idParam) id: string,
+    @Access() grant: AccessGrant,
+  ): Promise<EmployeeHistoryEvent[]> {
+    return this.history.history(id, grant);
   }
 
   @Post()

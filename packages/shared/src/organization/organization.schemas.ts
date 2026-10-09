@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import {
   cnpjSchema,
+  moneySchema,
   optionalText,
   postalCodeSchema,
   stateSchema,
@@ -93,7 +94,7 @@ export const unitInputSchema = z
       ctx.addIssue({
         code: 'custom',
         path: ['geofenceRadiusMeters'],
-        message: 'A cerca virtual exige as coordenadas da unidade',
+        message: 'A cerca virtual exige as coordenadas do posto',
       });
     }
   });
@@ -124,6 +125,8 @@ export const positionSchema = z.object({
   name: z.string(),
   /** Código CBO (Classificação Brasileira de Ocupações), 6 dígitos. */
   cbo: z.string().nullable(),
+  /** Salário base do cargo, em reais. Só aparece para quem tem `payroll:manage`. */
+  baseSalary: z.number().nullable(),
   isActive: z.boolean(),
 });
 export type Position = z.infer<typeof positionSchema>;
@@ -137,6 +140,8 @@ export const positionInputSchema = z.object({
     .pipe(z.string().regex(/^\d{6}$/, 'CBO deve ter 6 dígitos'))
     .nullish()
     .transform((v) => v ?? null),
+  /** Em reais; ignorado para quem não tem `payroll:manage` (o valor atual é mantido). */
+  baseSalary: moneySchema.nullish(),
   isActive: z.boolean().default(true),
 });
 export type PositionInput = z.input<typeof positionInputSchema>;

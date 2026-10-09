@@ -17,13 +17,17 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { errorMessage, useApi } from '@/lib/services';
+import { errorMessage, useApi, useSession } from '@/lib/services';
 import { myAccessQueryKey, useCan } from '../access/access';
 import { rolesQueryKey, usersQueryKey } from './query-keys';
 
 export function UsersPage() {
   const api = useApi();
   const canManage = useCan('users:manage');
+  const canResetMfa = useCan('users:reset_mfa');
+  const showActions = canManage || canResetMfa;
+  const session = useSession();
+  const meId = session.status === 'authenticated' ? session.user.id : null;
   const users = useQuery({ queryKey: usersQueryKey, queryFn: () => api.access.users.list() });
   const roles = useQuery({
     queryKey: rolesQueryKey,
@@ -46,7 +50,7 @@ export function UsersPage() {
               <TableHead>Usuário</TableHead>
               <TableHead>Perfis</TableHead>
               <TableHead>Situação</TableHead>
-              {canManage ? <TableHead className="sr-only">Ações</TableHead> : null}
+              {showActions ? <TableHead className="sr-only">Ações</TableHead> : null}
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -91,16 +95,21 @@ export function UsersPage() {
                       {user.isActive ? 'Ativo' : 'Inativo'}
                       {user.mfaEnabled ? ' · MFA ativo' : ''}
                     </TableCell>
-                    {canManage ? (
-                      <TableCell className="text-right">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setEditing(user.id)}
-                          aria-label={`Editar perfis de ${user.name}`}
-                        >
-                          Editar perfis
-                        </Button>
+                    {showActions ? (
+                      <TableCell className="space-x-2 text-right whitespace-nowrap">
+                        {canResetMfa && user.mfaEnabled && user.id !== meId ? (
+                          <ResetMfaButton user={user} />
+                        ) : null}
+                        {canManage ? (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setEditing(user.id)}
+                            aria-label={`Editar perfis de ${user.name}`}
+                          >
+                            Editar perfis
+                          </Button>
+                        ) : null}
                       </TableCell>
                     ) : null}
                   </TableRow>
@@ -174,5 +183,50 @@ function AssignRolesForm({
         </Button>
       </div>
     </form>
+  );
+}
+
+/**
+ * Redefine o MFA de quem perdeu o celular: o autenticador e os códigos de recuperação deixam
+ * de valer e as sessões abertas são encerradas. A API recusa o próprio usuário e quem tem
+ * permissões que o solicitante não tem.
+ */
+function ResetMfaButton({ user }: { user: UserWithRoles }) {
+  const api = useApi();
+  const queryClient = useQueryClient();
+  const reset = useMutation({
+    mutationFn: () => api.access.users.resetMfa(user.id),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: usersQueryKey });
+      toast.success(
+        `MFA de ${user.name} redefinido. No próximo login, ele cadastra o autenticador de novo.`,
+      );
+    },
+    onError: (error) => {
+      toast.error(errorMessage(error));
+    },
+  });
+  return (
+    <Button
+      variant="outline"
+      size="sm"
+      disabled={reset.isPending}
+      aria-label={`Redefinir MFA de ${user.name}`}
+      onClick={() => {
+        if (
+          window.confirm(
+            `Redefinir a verificação em duas etapas de ${user.name}?\n\n` +
+              'O autenticador e os códigos de recuperação atuais deixam de valer, as sessões ' +
+              'abertas são encerradas e, no próximo login, a pessoa cadastra um novo ' +
+              'autenticador. Confirme a identidade dela antes.',
+          )
+        ) {
+          reset.mutate();
+        }
+      }}
+    >
+      {reset.isPending ? <Spinner /> : null}
+      Redefinir MFA
+    </Button>
   );
 }

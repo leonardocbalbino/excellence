@@ -57,3 +57,23 @@ export const optionalText = (max: number) =>
     .max(max)
     .nullish()
     .transform((value) => (value?.length ? value : null));
+
+/** Valor em reais com até 2 casas (a API guarda em centavos). */
+export const moneySchema = z
+  .number()
+  .min(0, 'Valor não pode ser negativo')
+  .max(10_000_000)
+  .refine((value) => Math.abs(Math.round(value * 100) - value * 100) < 1e-6, 'Use até 2 casas');
+
+export function toCents(value: number): number {
+  return Math.round(value * 100);
+}
+
+export function fromCents(cents: number): number {
+  return cents / 100;
+}
+
+/** Valor opcional em reais → centavos (vazio continua vazio). */
+export function optionalCents(value: number | null | undefined): number | null {
+  return value === null || value === undefined ? null : toCents(value);
+}

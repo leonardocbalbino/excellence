@@ -1,6 +1,12 @@
 import { ApiError } from '@excellence/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { CheckCircle2Icon, FingerprintIcon, MapPinIcon, MapPinOffIcon } from 'lucide-react';
+import {
+  CheckCircle2Icon,
+  ClipboardListIcon,
+  FingerprintIcon,
+  MapPinIcon,
+  MapPinOffIcon,
+} from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { Alert } from '@/components/ui/alert';
@@ -95,6 +101,12 @@ export function ClockPage() {
 
   return (
     <div className="mx-auto max-w-md space-y-6">
+      <Button asChild variant="outline" size="lg" className="w-full">
+        <Link to="/ponto/espelho">
+          <ClipboardListIcon />
+          Visualizar espelho de ponto
+        </Link>
+      </Button>
       <Card>
         <CardContent className="grid gap-6 pt-6 text-center">
           <div>
@@ -199,11 +211,6 @@ export function ClockPage() {
               ))}
             </ul>
           )}
-          <p className="mt-4 text-sm">
-            <Link to="/meu-ponto" className="text-primary hover:underline">
-              Ver meu espelho de ponto e pedir ajustes
-            </Link>
-          </p>
         </CardContent>
       </Card>
     </div>

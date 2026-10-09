@@ -54,7 +54,7 @@ const flexible: PlannerSchedule = {
   weeklyMinutes: 2640,
 };
 
-const unit = { id: 'u1', state: 'SP', city: 'São Paulo' };
+const unit = { id: 'u1', state: 'MA', city: 'São Luís' };
 const schedules = new Map([fiveTwo, twelveThirtySix, flexible].map((s) => [s.id, s]));
 const holiday = (overrides: Partial<PlannerHoliday>): PlannerHoliday => ({
   id: 'h',
@@ -178,19 +178,19 @@ describe('feriados', () => {
   it.each([
     [holiday({ scope: 'national' }), true],
     [holiday({ scope: 'company' }), true],
-    [holiday({ scope: 'state', state: 'SP' }), true],
+    [holiday({ scope: 'state', state: 'MA' }), true],
     [holiday({ scope: 'state', state: 'RJ' }), false],
-    [holiday({ scope: 'city', state: 'SP', city: 'sao paulo' }), true],
-    [holiday({ scope: 'city', state: 'SP', city: 'Campinas' }), false],
+    [holiday({ scope: 'city', state: 'MA', city: 'sao luis' }), true],
+    [holiday({ scope: 'city', state: 'MA', city: 'Imperatriz' }), false],
     [holiday({ scope: 'unit', unitId: 'u1' }), true],
     [holiday({ scope: 'unit', unitId: 'u2' }), false],
-  ])('%j se aplica à unidade de SP: %s', (h, expected) => {
+  ])('%j se aplica à unidade de São Luís: %s', (h, expected) => {
     expect(holidayApplies(h, unit)).toBe(expected);
   });
 
   it('feriado estadual não se aplica a unidade sem endereço', () => {
     expect(
-      holidayApplies(holiday({ scope: 'state', state: 'SP' }), {
+      holidayApplies(holiday({ scope: 'state', state: 'MA' }), {
         id: 'x',
         state: null,
         city: null,

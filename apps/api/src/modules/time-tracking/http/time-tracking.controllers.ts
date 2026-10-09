@@ -11,6 +11,9 @@ import {
   clockReceiptSchema,
   type ClockSettings,
   clockSettingsSchema,
+  type DailyAttendance,
+  dailyAttendanceQuerySchema,
+  dailyAttendanceSchema,
   type TimeEntry,
   timeEntryListQuerySchema,
   timeEntrySchema,
@@ -121,6 +124,17 @@ export class MyTimeController {
 @Controller('time-entries')
 export class TimeEntriesController {
   constructor(private readonly time: TimeTrackingService) {}
+
+  @Get('daily')
+  @RequirePermission('time_entries:read')
+  @ApiOperation({ summary: 'Quadro do dia: marcações e escala dos funcionários no escopo' })
+  @ZodResponse(HttpStatus.OK, dailyAttendanceSchema)
+  daily(
+    @ZodQuery(dailyAttendanceQuerySchema) query: z.output<typeof dailyAttendanceQuerySchema>,
+    @Access() grant: AccessGrant,
+  ): Promise<DailyAttendance> {
+    return this.time.daily(query.date, query.unitId, grant);
+  }
 
   @Get(':id/receipt')
   @AnyAuthenticated()

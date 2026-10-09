@@ -1,6 +1,8 @@
 packages:
   - apps/api
   - apps/web
+  # App Expo (fase 2, ADR 0019). A primeira instalação baixa o React Native (centenas de MB).
+  - apps/mobile
   - packages/*
 allowBuilds:
   '@swc/core': true

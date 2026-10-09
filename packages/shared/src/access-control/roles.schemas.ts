@@ -61,6 +61,13 @@ export type AssignRolesInput = z.input<typeof assignRolesInputSchema>;
 /** Permissões efetivas do usuário logado, para o web montar menus e rotas. */
 export const myAccessSchema = z.object({
   permissions: z.array(permissionSchema),
+  /**
+   * O usuário está ligado a um cadastro de funcionário: bate ponto, tem escala e envia
+   * atestados. Quem só administra (sem cadastro) não tem a área pessoal.
+   */
+  hasEmployeeRecord: z.boolean(),
+  /** Tem rota de ronda ativa atribuída (mostra "Rondas" na área pessoal). */
+  hasPatrolRoutes: z.boolean(),
   /** O perfil exige MFA e o usuário ainda não ativou: o acesso fica bloqueado até ativar. */
   mfaSetupRequired: z.boolean(),
   /** Senha temporária: o acesso fica bloqueado até a troca. */

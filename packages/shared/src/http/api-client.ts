@@ -66,6 +66,7 @@ import {
   type EmployeeListQuery,
   employeeListQuerySchema,
   employeePageSchema,
+  employeeHistoryEventSchema,
   employeeSchema,
 } from '../workforce/employees.schemas.js';
 import {
@@ -93,9 +94,54 @@ import {
   type ClockSettings,
   chainVerificationSchema,
   clockSettingsSchema,
+  type DailyAttendanceQuery,
+  dailyAttendanceSchema,
   timeEntrySchema,
   timesheetSchema,
 } from '../time-tracking/time-tracking.schemas.js';
+import {
+  myPatrolsSchema,
+  type PatrolCheckinInput,
+  patrolCheckinInputSchema,
+  patrolBoardSchema,
+  patrolPointInputSchema,
+  patrolPointSchema,
+  patrolRouteInputSchema,
+  patrolRouteSchema,
+  type PatrolRunFinish,
+  patrolRunFinishSchema,
+  patrolRunSchema,
+  patrolRunStartSchema,
+} from '../patrols/patrols.schemas.js';
+import {
+  benefitInputSchema,
+  benefitSchema,
+  type EmployeeBenefitInput,
+  employeeBenefitInputSchema,
+  employeeBenefitSchema,
+  myBenefitSchema,
+  usefulLinkInputSchema,
+  usefulLinkSchema,
+} from '../benefits/benefits.schemas.js';
+import {
+  myPayrollPreviewSchema,
+  payrollGenerateSchema,
+  payrollPeriodDetailSchema,
+  payrollPeriodSchema,
+} from '../payroll/payroll.schemas.js';
+import {
+  conversationDetailSchema,
+  type ConversationListQuery,
+  type ConversationMessageInput,
+  conversationMessageInputSchema,
+  conversationMessageSchema,
+  type ConversationStart,
+  conversationStartSchema,
+  conversationSummarySchema,
+  conversationUnreadSchema,
+  type PushDeviceInput,
+  pushDeviceInputSchema,
+} from '../conversations/conversations.schemas.js';
 import {
   type AnnouncementInput,
   announcementInputSchema,
@@ -296,6 +342,159 @@ export function createApiClient(options: ApiClientOptions) {
     departments: crud('/departments', departmentSchema, departmentInputSchema),
     positions: crud('/positions', positionSchema, positionInputSchema),
     unions: crud('/unions', laborUnionSchema, laborUnionInputSchema),
+    patrolPoints: {
+      ...crud('/patrol-points', patrolPointSchema, patrolPointInputSchema),
+      /** Gera um novo QR: o impresso antes deixa de valer. */
+      regenerateCode: (id: string) =>
+        request('POST', `/patrol-points/${encodeURIComponent(id)}/code`, {
+          schema: patrolPointSchema,
+        }),
+    },
+    patrolRoutes: crud('/patrol-routes', patrolRouteSchema, patrolRouteInputSchema),
+    benefits: {
+      ...crud('/benefits', benefitSchema, benefitInputSchema),
+      mine: () => request('GET', '/me/benefits', { schema: z.array(myBenefitSchema) }),
+      ofEmployee: (employeeId: string) =>
+        request('GET', `/employees/${encodeURIComponent(employeeId)}/benefits`, {
+          schema: z.array(employeeBenefitSchema),
+        }),
+      assign: (employeeId: string, input: EmployeeBenefitInput) =>
+        request('POST', `/employees/${encodeURIComponent(employeeId)}/benefits`, {
+          body: input,
+          bodySchema: employeeBenefitInputSchema,
+          schema: employeeBenefitSchema,
+        }),
+      updateAssignment: (employeeId: string, id: string, input: EmployeeBenefitInput) =>
+        request(
+          'PUT',
+          `/employees/${encodeURIComponent(employeeId)}/benefits/${encodeURIComponent(id)}`,
+          { body: input, bodySchema: employeeBenefitInputSchema, schema: employeeBenefitSchema },
+        ),
+      removeAssignment: (employeeId: string, id: string) =>
+        request(
+          'DELETE',
+          `/employees/${encodeURIComponent(employeeId)}/benefits/${encodeURIComponent(id)}`,
+        ),
+    },
+    conversations: {
+      // ─── Funcionário ───
+      mine: () =>
+        request('GET', '/me/conversations', { schema: z.array(conversationSummarySchema) }),
+      start: (input: ConversationStart) =>
+        request('POST', '/me/conversations', {
+          body: input,
+          bodySchema: conversationStartSchema,
+          schema: conversationDetailSchema,
+        }),
+      /** Abrir marca como lidas as mensagens do RH. */
+      openMine: (id: string) =>
+        request('GET', `/me/conversations/${encodeURIComponent(id)}`, {
+          schema: conversationDetailSchema,
+        }),
+      replyMine: (id: string, input: ConversationMessageInput) =>
+        request('POST', `/me/conversations/${encodeURIComponent(id)}/messages`, {
+          body: input,
+          bodySchema: conversationMessageInputSchema,
+          schema: conversationMessageSchema,
+        }),
+      myUnread: () =>
+        request('GET', '/me/conversations/unread', { schema: conversationUnreadSchema }),
+      /** Link temporário de um anexo da conversa (funcionário ou RH). */
+      attachment: (conversationId: string, fileId: string) =>
+        request(
+          'GET',
+          `/conversations/${encodeURIComponent(conversationId)}/attachments/${encodeURIComponent(fileId)}`,
+          { schema: downloadLinkSchema },
+        ),
+      // ─── RH ───
+      list: (query: ConversationListQuery = {}) =>
+        request('GET', '/conversations', { query, schema: z.array(conversationSummarySchema) }),
+      get: (id: string) =>
+        request('GET', `/conversations/${encodeURIComponent(id)}`, {
+          schema: conversationDetailSchema,
+        }),
+      reply: (id: string, input: ConversationMessageInput) =>
+        request('POST', `/conversations/${encodeURIComponent(id)}/messages`, {
+          body: input,
+          bodySchema: conversationMessageInputSchema,
+          schema: conversationMessageSchema,
+        }),
+      close: (id: string) =>
+        request('POST', `/conversations/${encodeURIComponent(id)}/close`, {
+          schema: conversationSummarySchema,
+        }),
+      reopen: (id: string) =>
+        request('POST', `/conversations/${encodeURIComponent(id)}/reopen`, {
+          schema: conversationSummarySchema,
+        }),
+      unread: () => request('GET', '/conversations/unread', { schema: conversationUnreadSchema }),
+    },
+    push: {
+      /** Registra o aparelho para receber notificações (app mobile). */
+      register: (input: PushDeviceInput) =>
+        request('POST', '/me/push-devices', { body: input, bodySchema: pushDeviceInputSchema }),
+      unregister: (token: string) =>
+        request('DELETE', `/me/push-devices/${encodeURIComponent(token)}`),
+    },
+    usefulLinks: {
+      ...crud('/useful-links', usefulLinkSchema, usefulLinkInputSchema),
+      mine: () => request('GET', '/me/useful-links', { schema: z.array(usefulLinkSchema) }),
+    },
+    payroll: {
+      list: () => request('GET', '/payroll-periods', { schema: z.array(payrollPeriodSchema) }),
+      get: (id: string) =>
+        request('GET', `/payroll-periods/${encodeURIComponent(id)}`, {
+          schema: payrollPeriodDetailSchema,
+        }),
+      /** Gera (ou gera de novo, se não estiver fechado) o fechamento do mês. */
+      generate: (month: string) =>
+        request('POST', '/payroll-periods', {
+          body: { month },
+          bodySchema: payrollGenerateSchema,
+          schema: payrollPeriodDetailSchema,
+        }),
+      publish: (id: string) =>
+        request('POST', `/payroll-periods/${encodeURIComponent(id)}/publish`, {
+          schema: payrollPeriodSchema,
+        }),
+      close: (id: string) =>
+        request('POST', `/payroll-periods/${encodeURIComponent(id)}/close`, {
+          schema: payrollPeriodSchema,
+        }),
+      /** Arquivo CSV para o escritório de contabilidade. */
+      exportCsv: (id: string) =>
+        requestText('GET', `/payroll-periods/${encodeURIComponent(id)}/export`),
+      mine: () =>
+        request('GET', '/me/payroll-previews', { schema: z.array(myPayrollPreviewSchema) }),
+    },
+    patrols: {
+      mine: () => request('GET', '/me/patrols', { schema: myPatrolsSchema }),
+      /** Inicia a ronda. Use a mesma idempotencyKey ao reenviar. */
+      start: (routeId: string, idempotencyKey: string) =>
+        request('POST', '/me/patrol-runs', {
+          body: { routeId },
+          bodySchema: patrolRunStartSchema,
+          schema: patrolRunSchema,
+          headers: { 'Idempotency-Key': idempotencyKey },
+        }),
+      checkin: (runId: string, input: PatrolCheckinInput, idempotencyKey: string) =>
+        request('POST', `/me/patrol-runs/${encodeURIComponent(runId)}/checkins`, {
+          body: input,
+          bodySchema: patrolCheckinInputSchema,
+          schema: patrolRunSchema,
+          headers: { 'Idempotency-Key': idempotencyKey },
+        }),
+      finish: (runId: string, input: PatrolRunFinish = {}) =>
+        request('POST', `/me/patrol-runs/${encodeURIComponent(runId)}/finish`, {
+          body: input,
+          bodySchema: patrolRunFinishSchema,
+          schema: patrolRunSchema,
+        }),
+      board: (date: string) =>
+        request('GET', '/patrol-runs/board', { query: { date }, schema: patrolBoardSchema }),
+      get: (runId: string) =>
+        request('GET', `/patrol-runs/${encodeURIComponent(runId)}`, { schema: patrolRunSchema }),
+    },
     shifts: crud('/shifts', shiftSchema, shiftInputSchema),
     workSchedules: crud('/work-schedules', workScheduleSchema, workScheduleInputSchema),
     holidays: {
@@ -350,6 +549,9 @@ export function createApiClient(options: ApiClientOptions) {
           query: { month },
           schema: timesheetSchema,
         }),
+      /** Quadro do dia: marcações e escala de cada funcionário no escopo. */
+      daily: (query: DailyAttendanceQuery) =>
+        request('GET', '/time-entries/daily', { query, schema: dailyAttendanceSchema }),
       verify: (employeeId: string) =>
         request('GET', `/employees/${encodeURIComponent(employeeId)}/time-entries-verification`, {
           schema: chainVerificationSchema,
@@ -528,6 +730,11 @@ export function createApiClient(options: ApiClientOptions) {
       get: (id: string) =>
         request('GET', `/employees/${encodeURIComponent(id)}`, { schema: employeeSchema }),
       mine: () => request('GET', '/me/employee', { schema: employeeSchema }),
+      /** Linha do tempo do funcionário (cadastro, escalas, benefícios, atestados, ajustes). */
+      history: (id: string) =>
+        request('GET', `/employees/${encodeURIComponent(id)}/history`, {
+          schema: z.array(employeeHistoryEventSchema),
+        }),
       create: (input: EmployeeInput) =>
         request('POST', '/employees', {
           body: input,
@@ -622,6 +829,11 @@ export function createApiClient(options: ApiClientOptions) {
       },
       users: {
         list: () => request('GET', '/users', { schema: z.array(userWithRolesSchema) }),
+        /** Apaga o MFA do usuário e encerra as sessões: no próximo login ele cadastra de novo. */
+        resetMfa: (userId: string) =>
+          request('POST', `/users/${encodeURIComponent(userId)}/mfa/reset`, {
+            schema: userWithRolesSchema,
+          }),
         assignRoles: (userId: string, input: AssignRolesInput) =>
           request('PUT', `/users/${encodeURIComponent(userId)}/roles`, {
             body: input,

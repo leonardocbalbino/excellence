@@ -10,6 +10,8 @@ import { MedicalModule } from './medical/medical.module';
 import { TimeTrackingModule } from './time-tracking/time-tracking.module';
 import { AbsencesModule } from './absences/absences.module';
 import { PatrolsModule } from './patrols/patrols.module';
+import { BenefitsModule } from './benefits/benefits.module';
+import { PayrollModule } from './payroll/payroll.module';
 import { CommunicationModule } from './communication/communication.module';
 import { NormativeModule } from './normative/normative.module';
 import { DisciplinaryModule } from './disciplinary/disciplinary.module';
@@ -38,6 +40,8 @@ import { FilesModule } from './files/files.module';
     AnnouncementsModule,
     AbsencesModule,
     PatrolsModule,
+    BenefitsModule,
+    PayrollModule,
     CommunicationModule,
     NormativeModule,
     DisciplinaryModule,

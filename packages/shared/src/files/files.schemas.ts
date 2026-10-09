@@ -12,6 +12,7 @@ export const FILE_PURPOSES = {
   selfie: { contentTypes: ['image/jpeg', 'image/png', 'image/webp'], maxBytes: 5 * MB },
   patrol_occurrence: { contentTypes: IMAGES, maxBytes: 10 * MB },
   document: { contentTypes: ['application/pdf'], maxBytes: 20 * MB },
+  conversation_attachment: { contentTypes: ['application/pdf', ...IMAGES], maxBytes: 10 * MB },
   spreadsheet_import: {
     contentTypes: ['text/csv', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'],
     maxBytes: 10 * MB,
@@ -19,6 +20,14 @@ export const FILE_PURPOSES = {
 } as const satisfies Record<string, { contentTypes: readonly string[]; maxBytes: number }>;
 
 export type FilePurpose = keyof typeof FILE_PURPOSES;
+
+/** Tipos que o navegador mostra sozinho (PDF e imagens comuns; HEIC só baixando). */
+export const PREVIEWABLE_CONTENT_TYPES: readonly string[] = [
+  'application/pdf',
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+];
 
 export const filePurposeSchema = z.enum(
   Object.keys(FILE_PURPOSES) as [FilePurpose, ...FilePurpose[]],

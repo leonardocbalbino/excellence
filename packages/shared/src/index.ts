@@ -13,3 +13,7 @@ export * from './scheduling/scheduling.schemas.js';
 export * from './time-tracking/time-tracking.schemas.js';
 export * from './medical/medical-certificates.schemas.js';
 export * from './announcements/announcements.schemas.js';
+export * from './patrols/patrols.schemas.js';
+export * from './benefits/benefits.schemas.js';
+export * from './payroll/payroll.schemas.js';
+export * from './conversations/conversations.schemas.js';

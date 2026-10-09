@@ -1,6 +1,6 @@
 import { formatCpf } from '@excellence/shared';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
-import { FileUpIcon, PlusIcon, SearchIcon } from 'lucide-react';
+import { EyeIcon, FileUpIcon, HistoryIcon, PencilIcon, PlusIcon, SearchIcon } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router';
 import { Alert } from '@/components/ui/alert';
@@ -103,7 +103,7 @@ export function EmployeesPage() {
         </div>
         {canReadUnits ? (
           <div className="grid w-full gap-2 sm:w-56">
-            <Label htmlFor="employee-unit">Unidade</Label>
+            <Label htmlFor="employee-unit">Posto de trabalho</Label>
             <Select
               id="employee-unit"
               value={filters.unitId}
@@ -155,20 +155,23 @@ export function EmployeesPage() {
               <TableHead>Nome</TableHead>
               <TableHead>Matrícula</TableHead>
               <TableHead>CPF</TableHead>
-              <TableHead>Unidade</TableHead>
+              <TableHead>Posto</TableHead>
               <TableHead>Cargo</TableHead>
+              <TableHead>
+                <span className="sr-only">Ações</span>
+              </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {employees.isPending ? (
               <TableRow>
-                <TableCell colSpan={5}>
+                <TableCell colSpan={6}>
                   <Skeleton className="h-6 w-full" />
                 </TableCell>
               </TableRow>
             ) : employees.data?.items.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={5} className="text-center text-muted-foreground">
+                <TableCell colSpan={6} className="text-center text-muted-foreground">
                   Nenhum funcionário encontrado.
                 </TableCell>
               </TableRow>
@@ -192,6 +195,22 @@ export function EmployeesPage() {
                   <TableCell className="whitespace-nowrap">{formatCpf(employee.cpf)}</TableCell>
                   <TableCell>{employee.unit.name}</TableCell>
                   <TableCell>{employee.position?.name ?? '—'}</TableCell>
+                  <TableCell className="text-right whitespace-nowrap">
+                    <Button asChild variant="outline" size="sm">
+                      <Link to={`/pessoas/${employee.id}`}>
+                        {canManage ? <PencilIcon /> : <EyeIcon />}
+                        {canManage ? 'Editar' : 'Ver'}
+                        <span className="sr-only"> {employee.socialName ?? employee.name}</span>
+                      </Link>
+                    </Button>
+                    <Button asChild variant="ghost" size="sm">
+                      <Link to={`/pessoas/${employee.id}?aba=historico`}>
+                        <HistoryIcon />
+                        Histórico
+                        <span className="sr-only"> de {employee.socialName ?? employee.name}</span>
+                      </Link>
+                    </Button>
+                  </TableCell>
                 </TableRow>
               ))
             )}

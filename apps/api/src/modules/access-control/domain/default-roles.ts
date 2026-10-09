@@ -42,6 +42,8 @@ export const DEFAULT_ROLE_TEMPLATES: readonly RoleTemplate[] = [
     permissions: [
       'roles:read',
       'users:read',
+      // Perdeu o celular: o RH redefine o MFA (não o de quem tem mais permissões que ele).
+      'users:reset_mfa',
       ...STRUCTURE_READ,
       'units:manage',
       'departments:manage',
@@ -61,21 +63,30 @@ export const DEFAULT_ROLE_TEMPLATES: readonly RoleTemplate[] = [
       'medical_certificates:manage',
       'medical_certificates:review',
       'announcements:manage',
+      'patrols:read',
+      'patrols:manage',
+      'useful_links:manage',
+      'benefits:manage',
+      'payroll:manage',
     ],
     scopes: [{ type: 'company' }],
   },
   {
     key: 'manager',
     name: 'Gestor',
-    description: 'Aprova ajustes e ausências da equipe e acompanha rondas.',
+    description: 'Aprova ajustes e ausências da equipe, muda a escala dela e acompanha rondas.',
     requiresMfa: false,
     permissions: [
       ...STRUCTURE_READ,
       'employees:read',
       'schedules:read',
+      // Muda a escala dos liderados (escopo: própria equipe; nunca a própria).
+      'schedules:assign',
       'time_entries:read',
       'time_adjustments:approve',
       'medical_certificates:read',
+      // Acompanha as rondas da equipe.
+      'patrols:read',
     ],
     scopes: [{ type: 'own_team' }],
   },

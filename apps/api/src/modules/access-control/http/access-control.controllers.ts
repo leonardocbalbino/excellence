@@ -17,8 +17,10 @@ import {
 } from '@excellence/shared';
 import { z } from 'zod';
 import { ZodBody, ZodParam, ZodResponse } from '../../../common/openapi/zod-openapi';
+import { PrismaService } from '../../../infrastructure/prisma/prisma.service';
 import { permissionParts } from '../application/permission-catalog';
 import { RolesService } from '../application/roles.service';
+import { UserMfaService } from '../application/user-mfa.service';
 import { UserRolesService } from '../application/user-roles.service';
 import { Access, type AccessGrant, AnyAuthenticated, RequirePermission } from './access.decorators';
 
@@ -98,7 +100,10 @@ export class RolesController {
 @ApiBearerAuth()
 @Controller('users')
 export class UserRolesController {
-  constructor(private readonly userRoles: UserRolesService) {}
+  constructor(
+    private readonly userRoles: UserRolesService,
+    private readonly userMfa: UserMfaService,
+  ) {}
 
   @Get()
   @RequirePermission('users:read')
@@ -119,20 +124,51 @@ export class UserRolesController {
   ): Promise<UserWithRoles> {
     return this.userRoles.assign(id, body.roleIds, grant);
   }
+
+  @Post(':id/mfa/reset')
+  @RequirePermission('users:reset_mfa')
+  @ApiOperation({
+    summary: 'Redefine o MFA de outro usuário (perdeu o celular) e encerra as sessões dele',
+  })
+  @ZodResponse(HttpStatus.CREATED, userWithRolesSchema)
+  resetMfa(
+    @ZodParam('id', z.uuid()) id: string,
+    @Access() grant: AccessGrant,
+  ): Promise<UserWithRoles> {
+    return this.userMfa.reset(id, grant);
+  }
 }
 
 @ApiTags('access-control')
 @ApiBearerAuth()
 @Controller('me')
 export class MyAccessController {
+  constructor(private readonly prisma: PrismaService) {}
+
   @Get('access')
   @AnyAuthenticated({ allowPendingSetup: true })
   @ApiOperation({ summary: 'Permissões efetivas do usuário logado' })
   @ZodResponse(HttpStatus.OK, myAccessSchema)
-  myAccess(@Access() grant: AccessGrant): MyAccess {
+  async myAccess(@Access() grant: AccessGrant): Promise<MyAccess> {
     const access = grant.access;
+    // Rota liberada antes do MFA/troca de senha: filtra a empresa explicitamente.
+    const employee = await this.prisma.employee.findFirst({
+      where: { userId: grant.userId, companyId: grant.companyId },
+      select: { id: true },
+    });
+    const patrolRoutes = employee
+      ? await this.prisma.patrolRouteAssignee.count({
+          where: {
+            companyId: grant.companyId,
+            employeeId: employee.id,
+            route: { isActive: true },
+          },
+        })
+      : 0;
     return {
       permissions: access ? [...access.permissions.keys()].sort() : [],
+      hasEmployeeRecord: employee !== null,
+      hasPatrolRoutes: patrolRoutes > 0,
       mfaSetupRequired: access ? access.mfaRequired && !access.mfaEnabled : false,
       passwordChangeRequired: access?.passwordChangeRequired ?? false,
     };

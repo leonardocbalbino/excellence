@@ -3,8 +3,8 @@ import { formatDate } from '@/lib/format';
 
 export const CERTIFICATE_STATUS: Record<MedicalCertificate['status'], string> = {
   pending: 'Em análise',
-  accepted: 'Aceito',
-  rejected: 'Recusado',
+  accepted: 'Válido',
+  rejected: 'Inválido',
   cancelled: 'Cancelado',
 };
 

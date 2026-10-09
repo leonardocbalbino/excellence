@@ -48,7 +48,7 @@ describe('Jornada (integração)', () => {
     );
     const unit = await prisma.unit.update({
       where: { id: (await createUnit(prisma, companyId)).id },
-      data: { state: 'SP', city: 'São Paulo' },
+      data: { state: 'MA', city: 'São Luís' },
     });
     return { companyId, admin, unit, auth: await authHeader(http, admin.email) };
   }
@@ -144,7 +144,7 @@ describe('Jornada (integração)', () => {
         .post('/api/v1/work-schedules')
         .set(a.auth)
         .send({
-          name: 'X',
+          name: 'Ciclo X',
           code: null,
           kind: 'cycle',
           cycleAnchor: 'assignment',
@@ -181,7 +181,7 @@ describe('Jornada (integração)', () => {
           date: '2026-07-09',
           name: 'Revolução Constitucionalista',
           scope: 'state',
-          state: 'SP',
+          state: 'MA',
           city: 'ignorado',
           unitId: unit.id,
         })
@@ -191,7 +191,7 @@ describe('Jornada (integração)', () => {
         .parse((await http().get('/api/v1/holidays?year=2026').set(auth).expect(200)).body);
       // Campos fora da abrangência são descartados.
       expect(list).toEqual([
-        expect.objectContaining({ scope: 'state', state: 'SP', city: null, unitId: null }),
+        expect.objectContaining({ scope: 'state', state: 'MA', city: null, unitId: null }),
       ]);
       expect((await http().get('/api/v1/holidays?year=2027').set(auth)).body).toEqual([]);
 
@@ -438,6 +438,62 @@ describe('Jornada (integração)', () => {
           ).body,
         );
       expect(mine.filter((d) => d.shift).length).toBe(5);
+    });
+
+    it('gestor com schedules:assign muda a escala da equipe, mas não a própria nem a de fora', async () => {
+      const { auth, companyId, unit, fiveTwo, twelveThirtySix } = await setup();
+      const managerUser = await createTestUser(prisma, { companyId });
+      await grantRole(
+        prisma,
+        managerUser,
+        await createRole(prisma, companyId, {
+          permissions: ['employees:read', 'schedules:read', 'schedules:assign'],
+          scopes: [{ type: 'own_team' }],
+        }),
+      );
+      const managerRecord = await createEmployee(prisma, companyId, {
+        unitId: unit.id,
+        userId: managerUser.id,
+      });
+      const report = await createEmployee(prisma, companyId, {
+        unitId: unit.id,
+        managerId: managerRecord.id,
+      });
+      const stranger = await createEmployee(prisma, companyId, { unitId: unit.id });
+      for (const id of [report.id, stranger.id, managerRecord.id]) {
+        await http()
+          .post(`/api/v1/employees/${id}/schedule-assignments`)
+          .set(auth)
+          .send({ scheduleId: fiveTwo.id, startDate: '2026-01-05' })
+          .expect(201);
+      }
+
+      const managerAuth = await authHeader(http, managerUser.email);
+      const change = { scheduleId: twelveThirtySix.id, startDate: '2027-01-04' };
+      const assigned = scheduleAssignmentSchema.parse(
+        (
+          await http()
+            .post(`/api/v1/employees/${report.id}/schedule-assignments`)
+            .set(managerAuth)
+            .send(change)
+            .expect(201)
+        ).body,
+      );
+      expect(assigned.scheduleId).toBe(twelveThirtySix.id);
+      // Vínculo futuro criado por ele pode ser desfeito por ele.
+      await http()
+        .delete(`/api/v1/employees/${report.id}/schedule-assignments/${assigned.id}`)
+        .set(managerAuth)
+        .expect(204);
+
+      // Fora da equipe e o próprio registro: fora do escopo (responde como inexistente).
+      for (const id of [stranger.id, managerRecord.id]) {
+        await http()
+          .post(`/api/v1/employees/${id}/schedule-assignments`)
+          .set(managerAuth)
+          .send(change)
+          .expect(404);
+      }
     });
   });
 });
