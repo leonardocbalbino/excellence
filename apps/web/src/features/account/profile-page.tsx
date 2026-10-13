@@ -1,6 +1,7 @@
 import { type Employee, formatCpf } from '@excellence/shared';
 import { useQuery } from '@tanstack/react-query';
-import { KeyRoundIcon, LockIcon, ShieldCheckIcon, ShieldOffIcon } from 'lucide-react';
+// TODO(mfa): reativar KeyRoundIcon, ShieldCheckIcon e ShieldOffIcon junto com o MFA.
+import { LockIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Link } from 'react-router';
 import { ThemeToggle } from '@/components/theme-toggle';
@@ -11,7 +12,7 @@ import { Skeleton } from '@/components/ui/feedback';
 import { formatDate } from '@/lib/format';
 import { errorMessage, useApi } from '@/lib/services';
 import { useMyAccess } from '../access/access';
-import { MFA_SETUP_PATH, PASSWORD_PATH } from '../auth/require-auth';
+import { /* MFA_SETUP_PATH, */ PASSWORD_PATH } from '../auth/require-auth';
 
 function initials(name: string): string {
   const parts = name.trim().split(/\s+/);
@@ -121,6 +122,7 @@ export function ProfilePage() {
       <Section id="perfil-conta" title="Conta de acesso">
         <Field label="Nome na conta" value={user.name} />
         <Field label="E-mail de login" value={user.email} />
+        {/* TODO(mfa): MFA desligado temporariamente até validar com o cliente.
         <Field
           label="Verificação em duas etapas"
           value={
@@ -137,6 +139,7 @@ export function ProfilePage() {
             )
           }
         />
+        */}
       </Section>
       <section
         aria-labelledby="perfil-preferencias"
@@ -157,12 +160,14 @@ export function ProfilePage() {
             Trocar senha
           </Link>
         </Button>
+        {/* TODO(mfa): MFA desligado temporariamente até validar com o cliente.
         <Button asChild variant="outline">
           <Link to={MFA_SETUP_PATH}>
             <KeyRoundIcon />
             Segurança da conta
           </Link>
         </Button>
+        */}
       </div>
     </div>
   );

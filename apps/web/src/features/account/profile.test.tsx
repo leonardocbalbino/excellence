@@ -77,7 +77,8 @@ describe('Meu perfil', () => {
     await user.click(screen.getByRole('button', { name: `Conta de ${TEST_USER.name}` }));
     expect(await screen.findByRole('menuitem', { name: 'Meu perfil' })).toBeInTheDocument();
     expect(screen.getByRole('menuitemradio', { name: 'Escuro' })).toBeInTheDocument();
-    expect(screen.getByRole('menuitem', { name: 'Segurança da conta' })).toBeInTheDocument();
+    // TODO(mfa): voltar a exigir o item quando o MFA for reativado.
+    expect(screen.queryByRole('menuitem', { name: 'Segurança da conta' })).not.toBeInTheDocument();
     expect(screen.getByRole('menuitem', { name: 'Sair' })).toBeInTheDocument();
   });
 });

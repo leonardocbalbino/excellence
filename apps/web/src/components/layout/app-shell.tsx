@@ -6,7 +6,7 @@ import {
   CheckIcon,
   ChevronsUpDownIcon,
   ClockIcon,
-  KeyRoundIcon,
+  // KeyRoundIcon, // TODO(mfa)
   LogOutIcon,
   MenuIcon,
   UserRoundIcon,
@@ -25,7 +25,8 @@ import { THEME_OPTIONS } from '@/components/theme-options';
 import { Button } from '@/components/ui/button';
 import { useMyAccess } from '@/features/access/access';
 import { myFeedQueryKey } from '@/features/announcements/labels';
-import { MFA_SETUP_PATH } from '@/features/auth/require-auth';
+// TODO(mfa): reativar junto com o MFA.
+// import { MFA_SETUP_PATH } from '@/features/auth/require-auth';
 import { useApi, useServices, useSession } from '@/lib/services';
 import { type ThemePreference, useTheme } from '@/lib/theme';
 import { cn } from '@/lib/utils';
@@ -331,12 +332,14 @@ function AccountMenu({
               Meu perfil
             </Link>
           </DropdownMenu.Item>
+          {/* TODO(mfa): MFA desligado temporariamente até validar com o cliente.
           <DropdownMenu.Item asChild className={menuItemClass}>
             <Link to={MFA_SETUP_PATH} onClick={onNavigate}>
               <KeyRoundIcon className="size-4" aria-hidden="true" />
               Segurança da conta
             </Link>
           </DropdownMenu.Item>
+          */}
           <DropdownMenu.Item className={menuItemClass} onSelect={() => void signOut()}>
             <LogOutIcon className="size-4" aria-hidden="true" />
             Sair
