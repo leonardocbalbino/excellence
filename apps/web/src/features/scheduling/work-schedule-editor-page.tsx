@@ -1,6 +1,7 @@
 import {
   MAX_CYCLE_DAYS,
   type Shift,
+  type Unit,
   type WorkSchedule,
   type WorkScheduleInput,
   workScheduleInputSchema,
@@ -8,7 +9,7 @@ import {
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeftIcon, MinusIcon, PlusIcon, Trash2Icon } from 'lucide-react';
 import { useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import { toast } from 'sonner';
 import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -21,12 +22,20 @@ import { Select } from '@/components/ui/select';
 import { formatMinutes } from '@/lib/format';
 import { errorMessage, useApi } from '@/lib/services';
 import { useCan } from '../access/access';
+import { unitsQueryKey } from '../organization/query-keys';
 import { shiftsQueryKey, workSchedulesQueryKey } from './query-keys';
 
 const WEEKDAYS = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo'];
 
+/** Pasta do posto de onde a pessoa veio (`?posto=`): a nova escala nasce nele. */
+function folderOf(unitId: string | null): string {
+  return unitId ? `/cadastros/postos/${unitId}?aba=escalas` : '/jornada/escalas';
+}
+
 export function WorkScheduleEditorPage() {
   const { id } = useParams();
+  const [params] = useSearchParams();
+  const posto = params.get('posto');
   const api = useApi();
   const schedule = useQuery({
     queryKey: [...workSchedulesQueryKey, id],
@@ -38,14 +47,19 @@ export function WorkScheduleEditorPage() {
     queryKey: [...shiftsQueryKey, 'all'],
     queryFn: () => api.shifts.list(true),
   });
-  const loading = shifts.isPending || (id !== undefined && schedule.isPending);
+  const units = useQuery({
+    queryKey: [...unitsQueryKey, { includeInactive: true }],
+    queryFn: () => api.units.list(true),
+  });
+  const loading = shifts.isPending || units.isPending || (id !== undefined && schedule.isPending);
+  const backUnit = posto ?? schedule.data?.unit?.id ?? null;
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       <Button asChild variant="ghost" size="sm">
-        <Link to="/jornada/escalas">
+        <Link to={folderOf(posto)}>
           <ArrowLeftIcon />
-          Escalas
+          {posto ? 'Pasta do posto' : 'Escalas'}
         </Link>
       </Button>
       <h1 className="text-2xl font-semibold">
@@ -56,13 +70,16 @@ export function WorkScheduleEditorPage() {
       ) : null}
       <Card>
         <CardContent className="pt-6">
-          {loading || !shifts.data ? (
+          {loading || !shifts.data || !units.data ? (
             <Skeleton className="h-96 w-full" />
           ) : (
             <ScheduleForm
               key={schedule.data?.id ?? 'nova'}
               schedule={schedule.data}
               shifts={shifts.data}
+              units={units.data}
+              initialUnitId={posto}
+              back={folderOf(backUnit)}
             />
           )}
         </CardContent>
@@ -73,16 +90,23 @@ export function WorkScheduleEditorPage() {
 
 function ScheduleForm({
   schedule,
-  shifts,
+  shifts: allShifts,
+  units,
+  initialUnitId,
+  back,
 }: {
   schedule: WorkSchedule | undefined;
   shifts: Shift[];
+  units: Unit[];
+  initialUnitId: string | null;
+  back: string;
 }) {
   const api = useApi();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const canManage = useCan('schedules:manage');
   const [values, setValues] = useState<WorkScheduleInput>({
+    unitId: schedule ? (schedule.unit?.id ?? null) : initialUnitId,
     name: schedule?.name ?? '',
     code: schedule?.code ?? null,
     kind: schedule?.kind ?? 'cycle',
@@ -92,6 +116,8 @@ function ScheduleForm({
     notes: schedule?.notes ?? null,
     isActive: schedule?.isActive ?? true,
   });
+  // Escala de posto usa turnos gerais ou do mesmo posto; escala geral, só turnos gerais.
+  const shifts = allShifts.filter((s) => s.unit === null || s.unit.id === values.unitId);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitError, setSubmitError] = useState<unknown>(null);
   const [saving, setSaving] = useState(false);
@@ -143,7 +169,10 @@ function ScheduleForm({
         : await api.workSchedules.create(values);
       await queryClient.invalidateQueries({ queryKey: workSchedulesQueryKey });
       toast.success('Escala salva.');
-      if (!schedule) void navigate(`/jornada/escalas/${saved.id}`, { replace: true });
+      if (!schedule) {
+        const query = initialUnitId ? `?posto=${initialUnitId}` : '';
+        void navigate(`/jornada/escalas/${saved.id}${query}`, { replace: true });
+      }
     } catch (error) {
       setSubmitError(error);
     } finally {
@@ -157,7 +186,7 @@ function ScheduleForm({
       await api.workSchedules.remove(schedule.id);
       await queryClient.invalidateQueries({ queryKey: workSchedulesQueryKey });
       toast.success('Escala excluída.');
-      void navigate('/jornada/escalas', { replace: true });
+      void navigate(back, { replace: true });
     } catch (error) {
       setSubmitError(error);
     }
@@ -177,6 +206,24 @@ function ScheduleForm({
             onChange={(e) => set('name', e.target.value)}
           />
           {fieldError('name')}
+        </div>
+        <div className="grid gap-2">
+          <Label htmlFor="schedule-unit">Posto de trabalho</Label>
+          <Select
+            id="schedule-unit"
+            value={values.unitId ?? ''}
+            onChange={(e) => set('unitId', e.target.value || null)}
+          >
+            <option value="">Geral (qualquer posto)</option>
+            {units
+              .filter((u) => u.isActive || u.id === values.unitId)
+              .map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.name}
+                </option>
+              ))}
+          </Select>
+          {fieldError('unitId')}
         </div>
         <div className="grid gap-2">
           <Label htmlFor="schedule-code">Código</Label>

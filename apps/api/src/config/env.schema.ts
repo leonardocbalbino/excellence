@@ -57,6 +57,10 @@ export const envSchema = z.object({
   // interna do Docker). As URLs pré-assinadas são geradas com ele.
   S3_PUBLIC_ENDPOINT: z.url().optional(),
   FILE_URL_TTL_SECONDS: z.coerce.number().int().min(30).max(3600).default(300),
+
+  // Gera sozinho o fechamento do mês que acabou, a partir do dia 1 (ADR 0020). Desligado
+  // nos testes.
+  PAYROLL_AUTO_GENERATE: z.stringbool().default(true),
 });
 
 export type Env = z.infer<typeof envSchema>;

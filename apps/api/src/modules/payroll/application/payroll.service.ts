@@ -7,6 +7,7 @@ import {
   type PayrollPeriod,
   type PayrollPeriodDetail,
   ProblemType,
+  type UnitMonthlySummary,
 } from '@excellence/shared';
 import { ProblemException } from '../../../common/errors/problem.exception';
 import { TenantPrismaService } from '../../../infrastructure/prisma/tenant-prisma.service';
@@ -19,6 +20,7 @@ import { TimeTrackingService } from '../../time-tracking/application/time-tracki
 import { fromCalendarDate, toCalendarDate, todayIn } from '../../workforce/domain/calendar';
 import { payrollCsv } from '../domain/export-csv';
 import { cutoffDate, summarizeDays } from '../domain/month-summary';
+import { ratesForMonth, summarizeShiftPay } from '../domain/shift-pay';
 
 const PERIOD_SELECT = {
   id: true,
@@ -26,6 +28,7 @@ const PERIOD_SELECT = {
   status: true,
   cutoffDate: true,
   generatedAt: true,
+  generatedBy: true,
   publishedAt: true,
   closedAt: true,
   _count: { select: { items: true } },
@@ -37,6 +40,7 @@ interface PeriodRow {
   status: PayrollPeriod['status'];
   cutoffDate: Date;
   generatedAt: Date;
+  generatedBy: string | null;
   publishedAt: Date | null;
   closedAt: Date | null;
   _count: { items: number };
@@ -50,6 +54,7 @@ function toPeriod(row: PeriodRow): PayrollPeriod {
     cutoffDate: fromCalendarDate(row.cutoffDate),
     employees: row._count.items,
     generatedAt: row.generatedAt.toISOString(),
+    automatic: row.generatedBy === null,
     publishedAt: row.publishedAt?.toISOString() ?? null,
     closedAt: row.closedAt?.toISOString() ?? null,
   };
@@ -105,8 +110,15 @@ export class PayrollService {
     return { ...toPeriod(row), items };
   }
 
-  /** Gera o mês (ou gera de novo, enquanto não estiver fechado). */
-  async generate(month: string, grant: AccessGrant): Promise<PayrollPeriodDetail> {
+  /**
+   * Gera o mês (ou gera de novo, enquanto não estiver fechado). `automatic`: geração da
+   * virada do mês, sem pessoa responsável (`PayrollAutoGenerator`).
+   */
+  async generate(
+    month: string,
+    grant: AccessGrant,
+    automatic = false,
+  ): Promise<PayrollPeriodDetail> {
     assertCompanyWide(grant);
     const existing = await this.db.client.payrollPeriod.findUnique({
       where: { companyId_month: { companyId: grant.companyId, month } },
@@ -129,16 +141,13 @@ export class PayrollService {
     const cutoff = cutoffDate(month, today);
     const items = await this.buildItems(month, first, last, cutoff, grant);
     const now = new Date();
+    const generatedBy = automatic ? null : grant.userId;
 
     const periodId = await this.db.client.$transaction(async (tx) => {
       const period = existing
         ? await tx.payrollPeriod.update({
             where: { id: existing.id },
-            data: {
-              cutoffDate: toCalendarDate(cutoff),
-              generatedAt: now,
-              generatedBy: grant.userId,
-            },
+            data: { cutoffDate: toCalendarDate(cutoff), generatedAt: now, generatedBy },
             select: { id: true },
           })
         : await tx.payrollPeriod.create({
@@ -147,7 +156,7 @@ export class PayrollService {
               month,
               cutoffDate: toCalendarDate(cutoff),
               generatedAt: now,
-              generatedBy: grant.userId,
+              generatedBy,
             },
             select: { id: true },
           });
@@ -167,7 +176,8 @@ export class PayrollService {
           action: 'payroll.generated',
           resourceType: 'payroll_period',
           resourceId: period.id,
-          metadata: { month, cutoff, employees: items.length },
+          metadata: { month, cutoff, employees: items.length, automatic },
+          ...(automatic ? { actorUserId: null } : {}),
         },
         tx,
       );
@@ -198,6 +208,99 @@ export class PayrollService {
     return {
       fileName: `fechamento-${period.month}.csv`,
       content: payrollCsv(period.month, period.items),
+    };
+  }
+
+  /**
+   * Resumo do mês de um posto (condomínio): o consolidado de cada funcionário calculado na
+   * hora, mais os atestados e as trocas de escala do período (ADR 0020).
+   */
+  async unitSummary(
+    unitId: string,
+    month: string,
+    grant: AccessGrant,
+  ): Promise<UnitMonthlySummary> {
+    assertCompanyWide(grant);
+    const unit = await this.db.client.unit.findUnique({
+      where: { id: unitId },
+      select: { id: true, name: true },
+    });
+    if (!unit) throw new NotFoundException('Posto de trabalho não encontrado.');
+
+    const today = todayIn(await this.company.timezone());
+    const first = `${month}-01`;
+    const last = lastDayOf(month);
+    // Mês que ainda não começou: não há o que contar no ponto.
+    const cutoff = first > today ? addDays(first, -1) : cutoffDate(month, today);
+    const items = await this.buildItems(month, first, last, cutoff, grant, unitId);
+    const [period, certificates, changes] = await Promise.all([
+      this.db.client.payrollPeriod.findUnique({
+        where: { companyId_month: { companyId: grant.companyId, month } },
+        select: { id: true, status: true },
+      }),
+      this.db.client.medicalCertificate.findMany({
+        where: {
+          employee: { unitId },
+          status: { not: 'cancelled' },
+          startDate: { lte: toCalendarDate(last) },
+          endDate: { gte: toCalendarDate(first) },
+        },
+        select: {
+          id: true,
+          startDate: true,
+          endDate: true,
+          status: true,
+          employee: { select: { id: true, name: true, socialName: true } },
+        },
+        orderBy: { startDate: 'asc' },
+      }),
+      this.db.client.employeeScheduleAssignment.findMany({
+        where: {
+          employee: { unitId },
+          startDate: { gte: toCalendarDate(first), lte: toCalendarDate(last) },
+        },
+        select: {
+          startDate: true,
+          schedule: { select: { name: true } },
+          employee: { select: { id: true, name: true, socialName: true } },
+        },
+        orderBy: { startDate: 'asc' },
+      }),
+    ]);
+    const sum = (pick: (item: PayrollItem) => number) =>
+      items.reduce((total, item) => total + pick(item), 0);
+    const person = (e: { id: string; name: string; socialName: string | null }) => ({
+      id: e.id,
+      name: e.socialName ?? e.name,
+    });
+
+    return {
+      unit,
+      month,
+      cutoffDate: cutoff,
+      period,
+      items,
+      totals: {
+        employees: items.length,
+        shifts: sum((item) => item.shiftPay.shifts),
+        shiftPay: Math.round(sum((item) => item.shiftPay.total) * 100) / 100,
+        absenceDays: sum((item) => item.absenceDays),
+        justifiedDays: sum((item) => item.justifiedDays),
+        incompleteDays: sum((item) => item.incompleteDays),
+        pendingAdjustments: sum((item) => item.pendingAdjustments),
+      },
+      certificates: certificates.map((row) => ({
+        id: row.id,
+        employee: person(row.employee),
+        startDate: fromCalendarDate(row.startDate),
+        endDate: fromCalendarDate(row.endDate),
+        status: row.status,
+      })),
+      scheduleChanges: changes.map((row) => ({
+        employee: person(row.employee),
+        schedule: row.schedule.name,
+        startDate: fromCalendarDate(row.startDate),
+      })),
     };
   }
 
@@ -274,9 +377,11 @@ export class PayrollService {
     last: string,
     cutoff: string,
     grant: AccessGrant,
+    unitId?: string,
   ): Promise<PayrollItem[]> {
     const employees = await this.db.client.employee.findMany({
       where: {
+        ...(unitId ? { unitId } : {}),
         hireDate: { lte: toCalendarDate(last) },
         OR: [{ terminationDate: null }, { terminationDate: { gte: toCalendarDate(first) } }],
       },
@@ -289,6 +394,7 @@ export class PayrollService {
         cpf: true,
         hireDate: true,
         terminationDate: true,
+        unitId: true,
         unit: { select: { name: true } },
         department: { select: { name: true } },
         position: { select: { name: true, baseSalaryCents: true } },
@@ -306,6 +412,18 @@ export class PayrollService {
       },
     });
 
+    // Valor por plantão vigente no mês, por posto e escala (o funcionário conta no posto atual).
+    const unitIds = [...new Set(employees.map((e) => e.unitId))];
+    const [rateRows, schedules] = await Promise.all([
+      this.db.client.scheduleRate.findMany({
+        where: { unitId: { in: unitIds }, validFrom: { lte: month } },
+        select: { unitId: true, scheduleId: true, validFrom: true, amountCents: true },
+      }),
+      this.db.client.workSchedule.findMany({ select: { id: true, name: true } }),
+    ]);
+    const scheduleNames = new Map(schedules.map((s) => [s.id, s.name]));
+    const rates = new Map(unitIds.map((id) => [id, ratesForMonth(rateRows, id, month)]));
+
     const items: PayrollItem[] = [];
     for (const employee of employees) {
       const hire = fromCalendarDate(employee.hireDate);
@@ -314,6 +432,13 @@ export class PayrollService {
       const to = termination && termination < cutoff ? termination : cutoff;
       const timesheet = await this.timeTracking.timesheetFor(employee.id, month, grant);
       const totals = summarizeDays(timesheet.days, from, to);
+      const shiftPay = summarizeShiftPay(
+        timesheet.days,
+        from,
+        to,
+        scheduleNames,
+        rates.get(employee.unitId) ?? new Map(),
+      );
       const salaryCents = employee.position?.baseSalaryCents ?? null;
       const benefits = employee.benefits.map((b) => ({
         name: b.benefit.name,
@@ -342,6 +467,7 @@ export class PayrollService {
         benefitsDiscountTotal: fromCents(
           employee.benefits.reduce((sum, b) => sum + b.employeeDiscountCents, 0),
         ),
+        shiftPay,
       });
     }
     return items;

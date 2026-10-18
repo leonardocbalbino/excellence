@@ -128,6 +128,10 @@ import {
   payrollGenerateSchema,
   payrollPeriodDetailSchema,
   payrollPeriodSchema,
+  type ScheduleRateInput,
+  scheduleRateInputSchema,
+  scheduleRateSchema,
+  unitMonthlySummarySchema,
 } from '../payroll/payroll.schemas.js';
 import {
   conversationDetailSchema,
@@ -324,6 +328,22 @@ export function createApiClient(options: ApiClientOptions) {
     };
   }
 
+  /** Turnos e escalas: com `unitId`, só os do posto e os gerais (ADR 0020). */
+  function unitCatalog<Out extends z.ZodType, In extends z.ZodType>(
+    path: string,
+    schema: Out,
+    inputSchema: In,
+  ) {
+    return {
+      ...crud(path, schema, inputSchema),
+      list: (includeInactive = false, unitId?: string) =>
+        request('GET', path, {
+          query: { includeInactive: String(includeInactive), ...(unitId ? { unitId } : {}) },
+          schema: z.array(schema),
+        }),
+    };
+  }
+
   const noRetry = { retryOnUnauthorized: false } as const;
 
   return {
@@ -466,6 +486,28 @@ export function createApiClient(options: ApiClientOptions) {
         requestText('GET', `/payroll-periods/${encodeURIComponent(id)}/export`),
       mine: () =>
         request('GET', '/me/payroll-previews', { schema: z.array(myPayrollPreviewSchema) }),
+      /** Valores por plantão das escalas do posto, com vigência mensal. */
+      rates: (unitId: string) =>
+        request('GET', `/units/${encodeURIComponent(unitId)}/schedule-rates`, {
+          schema: z.array(scheduleRateSchema),
+        }),
+      saveRate: (unitId: string, input: ScheduleRateInput) =>
+        request('PUT', `/units/${encodeURIComponent(unitId)}/schedule-rates`, {
+          body: input,
+          bodySchema: scheduleRateInputSchema,
+          schema: scheduleRateSchema,
+        }),
+      removeRate: (unitId: string, rateId: string) =>
+        request(
+          'DELETE',
+          `/units/${encodeURIComponent(unitId)}/schedule-rates/${encodeURIComponent(rateId)}`,
+        ),
+      /** Resumo do mês do posto (calculado na hora). */
+      unitSummary: (unitId: string, month: string) =>
+        request('GET', `/units/${encodeURIComponent(unitId)}/monthly-summary`, {
+          query: { month },
+          schema: unitMonthlySummarySchema,
+        }),
     },
     patrols: {
       mine: () => request('GET', '/me/patrols', { schema: myPatrolsSchema }),
@@ -495,8 +537,8 @@ export function createApiClient(options: ApiClientOptions) {
       get: (runId: string) =>
         request('GET', `/patrol-runs/${encodeURIComponent(runId)}`, { schema: patrolRunSchema }),
     },
-    shifts: crud('/shifts', shiftSchema, shiftInputSchema),
-    workSchedules: crud('/work-schedules', workScheduleSchema, workScheduleInputSchema),
+    shifts: unitCatalog('/shifts', shiftSchema, shiftInputSchema),
+    workSchedules: unitCatalog('/work-schedules', workScheduleSchema, workScheduleInputSchema),
     holidays: {
       list: (year: number) =>
         request('GET', '/holidays', { query: { year }, schema: z.array(holidaySchema) }),
@@ -646,21 +688,11 @@ export function createApiClient(options: ApiClientOptions) {
         }),
     },
     medicalCertificates: {
-      submit: (input: MedicalCertificateInput) =>
-        request('POST', '/me/medical-certificates', {
-          body: input,
-          bodySchema: medicalCertificateInputSchema,
-          schema: medicalCertificateSchema,
-        }),
       mine: () =>
         request('GET', '/me/medical-certificates', { schema: z.array(medicalCertificateSchema) }),
       myDocument: (id: string) =>
         request('GET', `/me/medical-certificates/${encodeURIComponent(id)}/document`, {
           schema: downloadLinkSchema,
-        }),
-      cancel: (id: string) =>
-        request('POST', `/me/medical-certificates/${encodeURIComponent(id)}/cancel`, {
-          schema: medicalCertificateSchema,
         }),
       registerFor: (employeeId: string, input: MedicalCertificateInput) =>
         request('POST', `/employees/${encodeURIComponent(employeeId)}/medical-certificates`, {

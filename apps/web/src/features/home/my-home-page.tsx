@@ -210,7 +210,7 @@ export function MyHomePage() {
               Atalhos
             </h2>
             <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-              <Shortcut to="/meus-atestados" icon={FileTextIcon} label="Enviar atestado" />
+              <Shortcut to="/meus-atestados" icon={FileTextIcon} label="Meus atestados" />
               <Shortcut to="/ponto/espelho" icon={ClockIcon} label="Solicitar ajuste" />
               <Shortcut to="/beneficios" icon={GiftIcon} label="Meus benefícios" />
               <Shortcut to="/beneficios#links" icon={LinkIcon} label="Links úteis" />

@@ -15,6 +15,7 @@ import { invalidReference } from '../../organization/application/catalog-rules';
 import { EmployeesService } from '../../workforce/application/employees.service';
 import { fromCalendarDate, toCalendarDate, todayIn } from '../../workforce/domain/calendar';
 import { addDays, planDays, type PlannerSchedule } from '../domain/planner';
+import { usableIn } from '../domain/unit-owner';
 
 type AssignmentInput = z.output<typeof scheduleAssignmentInputSchema>;
 
@@ -89,10 +90,13 @@ export class AssignmentsService {
     }
     const schedule = await this.db.client.workSchedule.findUnique({
       where: { id: input.scheduleId },
-      select: { isActive: true },
+      select: { isActive: true, unitId: true },
     });
     if (!schedule?.isActive)
       throw invalidReference('scheduleId', 'Escala não encontrada ou inativa.');
+    if (!usableIn(schedule.unitId, employee.unit.id)) {
+      throw invalidReference('scheduleId', 'A escala é de outro posto de trabalho.');
+    }
 
     const startDate = toCalendarDate(input.startDate);
     const later = await this.db.client.employeeScheduleAssignment.findFirst({

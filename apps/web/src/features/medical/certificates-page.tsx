@@ -21,7 +21,7 @@ type StatusFilter = MedicalCertificate['status'] | 'all';
 /** Atestados dos funcionários no escopo. O CID só aparece sob demanda, com leitura auditada. */
 export function CertificatesPage() {
   const api = useApi();
-  const [status, setStatus] = useState<StatusFilter>('pending');
+  const [status, setStatus] = useState<StatusFilter>('all');
   const certificates = useQuery({
     queryKey: [...certificatesQueryKey, 'list', status],
     queryFn: () => api.medicalCertificates.list(status === 'all' ? {} : { status: status }),
@@ -33,7 +33,8 @@ export function CertificatesPage() {
         <div>
           <h1 className="text-2xl font-semibold">Atestados</h1>
           <p className="text-muted-foreground">
-            Análise dos atestados enviados. O efeito na folha é definido no motor de cálculo.
+            Atestados anexados pela administração. Para anexar, abra o funcionário (ou a pasta do
+            posto) e use “Anexar atestado”.
           </p>
         </div>
         <div className="grid gap-2">
@@ -190,6 +191,27 @@ function CertificateCard({ certificate }: { certificate: MedicalCertificate }) {
           )
         ) : null}
 
+        {canReview && certificate.status === 'accepted' ? (
+          <div className="grid gap-2">
+            <Label htmlFor={`review-${certificate.id}`}>Motivo para marcar como inválido</Label>
+            <div className="flex flex-wrap gap-2">
+              <Input
+                id={`review-${certificate.id}`}
+                className="min-w-48 flex-1"
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+              />
+              <Button
+                variant="outline"
+                onClick={() => reject.mutate()}
+                disabled={busy || note.trim() === ''}
+              >
+                {reject.isPending ? <Spinner /> : <XIcon />}
+                Marcar como inválido
+              </Button>
+            </div>
+          </div>
+        ) : null}
         {canReview && certificate.status === 'pending' ? (
           <>
             <div className="grid gap-2">

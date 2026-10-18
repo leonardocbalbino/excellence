@@ -11,6 +11,11 @@ export function cutoffDate(month: string, today: string): string {
   return last < today ? last : yesterday;
 }
 
+/** "2026-10" → "2026-09"; "2026-01" → "2025-12". */
+export function previousMonth(month: string): string {
+  return addDays(`${month}-01`, -1).slice(0, 7);
+}
+
 export type MonthTotals = Pick<
   PayrollItem,
   | 'plannedMinutes'

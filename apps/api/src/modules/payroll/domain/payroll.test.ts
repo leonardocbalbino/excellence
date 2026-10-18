@@ -1,7 +1,7 @@
 import type { PayrollItem, TimesheetDay } from '@excellence/shared';
 import { describe, expect, it } from 'vitest';
 import { formatHours, formatMoney, payrollCsv } from './export-csv';
-import { cutoffDate, summarizeDays } from './month-summary';
+import { cutoffDate, previousMonth, summarizeDays } from './month-summary';
 
 const shift = {
   id: '01900000-0000-7000-8000-000000000901',
@@ -40,6 +40,14 @@ const entry = {
   kind: 'clock' as const,
   geofenceStatus: 'inside' as const,
 };
+
+describe('previousMonth', () => {
+  it('volta um mês, inclusive na virada do ano', () => {
+    expect(previousMonth('2026-10')).toBe('2026-09');
+    expect(previousMonth('2026-03')).toBe('2026-02');
+    expect(previousMonth('2026-01')).toBe('2025-12');
+  });
+});
 
 describe('cutoffDate', () => {
   it('mês encerrado conta até o último dia; mês corrente, até ontem', () => {
@@ -110,6 +118,20 @@ describe('payrollCsv', () => {
     benefits: [{ name: 'VT', kind: 'transport', companyValue: 220, employeeDiscount: 141.03 }],
     benefitsCompanyTotal: 220,
     benefitsDiscountTotal: 141.03,
+    shiftPay: {
+      lines: [
+        {
+          scheduleId: '01900000-0000-7000-8000-000000000b01',
+          schedule: '12x36 diurno',
+          rate: 180,
+          shifts: 14,
+          justifiedShifts: 1,
+          amount: 2520,
+        },
+      ],
+      shifts: 14,
+      total: 2520,
+    },
   };
 
   it('formata horas e valores no padrão brasileiro', () => {
@@ -126,5 +148,6 @@ describe('payrollCsv', () => {
     expect(line).toContain('"\'=Fábio; ""Vigia"""');
     expect(line).toContain(';2350,50;160:00;158:45;-01:15;1;0;0;0;220,00;141,03;');
     expect(line).toContain('VT (Vale-transporte): empresa 220,00, desconto 141,03');
+    expect(line.endsWith(';14;2520,00;12x36 diurno: 14 x 180,00')).toBe(true);
   });
 });

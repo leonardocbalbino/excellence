@@ -55,7 +55,7 @@ pnpm start                                # abre no Expo Go ou num development b
 
 ## Fica para depois
 
-- Enviar atestado pela câmera.
+- Consultar os atestados anexados pela administração (o funcionário não envia pelo app).
 - Pedir ajuste de ponto pelo app (hoje: pelo site).
 - Notificações push (lembrete de ronda, comunicado novo).
 - Cadastro do MFA pelo app.

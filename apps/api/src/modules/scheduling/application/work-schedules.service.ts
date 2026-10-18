@@ -6,11 +6,13 @@ import { assertCompanyWide } from '../../access-control/application/access-rules
 import type { AccessGrant } from '../../access-control/http/access.decorators';
 import { AuditService, toAuditJson } from '../../audit/application/audit.service';
 import { duplicated, inUse, invalidReference } from '../../organization/application/catalog-rules';
+import { catalogWhere } from '../domain/unit-owner';
 
 type WorkScheduleInput = z.output<typeof workScheduleInputSchema>;
 
 const SCHEDULE_SELECT = {
   id: true,
+  unit: { select: { id: true, name: true } },
   name: true,
   code: true,
   kind: true,
@@ -24,6 +26,7 @@ const SCHEDULE_SELECT = {
 
 interface ScheduleRow {
   id: string;
+  unit: { id: string; name: string } | null;
   name: string;
   code: string | null;
   kind: 'cycle' | 'flexible';
@@ -38,6 +41,7 @@ interface ScheduleRow {
 function toSchedule(row: ScheduleRow): WorkSchedule {
   return {
     id: row.id,
+    unit: row.unit,
     name: row.name,
     code: row.code,
     kind: row.kind,
@@ -59,9 +63,10 @@ export class WorkSchedulesService {
     private readonly audit: AuditService,
   ) {}
 
-  async list(includeInactive: boolean): Promise<WorkSchedule[]> {
+  /** Com `unitId`, só as escalas do posto e as gerais. */
+  async list(includeInactive: boolean, unitId?: string): Promise<WorkSchedule[]> {
     const rows = await this.db.client.workSchedule.findMany({
-      where: includeInactive ? {} : { isActive: true },
+      where: { AND: [includeInactive ? {} : { isActive: true }, catalogWhere(unitId)] },
       select: SCHEDULE_SELECT,
       orderBy: { name: 'asc' },
     });
@@ -84,23 +89,43 @@ export class WorkSchedulesService {
   ): Promise<WorkSchedule> {
     assertCompanyWide(grant);
     const before = id ? await this.get(id) : null;
+    if (input.unitId) {
+      const unit = await this.db.client.unit.count({ where: { id: input.unitId } });
+      if (unit === 0) throw invalidReference('unitId', 'Posto de trabalho não encontrado.');
+    }
     const taken = await this.db.client.workSchedule.count({
-      where: { name: input.name, ...(id ? { id: { not: id } } : {}) },
+      where: { name: input.name, unitId: input.unitId, ...(id ? { id: { not: id } } : {}) },
     });
-    if (taken > 0) throw duplicated('name', 'Já existe uma escala com este nome.');
+    if (taken > 0) throw duplicated('name', 'Já existe uma escala com este nome neste posto.');
+    // Passar a escala para um posto só se ninguém de outro posto estiver nela.
+    if (id && input.unitId) {
+      const outside = await this.db.client.employeeScheduleAssignment.count({
+        where: { scheduleId: id, endDate: null, employee: { unitId: { not: input.unitId } } },
+      });
+      if (outside > 0) {
+        throw invalidReference('unitId', 'A escala tem funcionários de outros postos.');
+      }
+    }
 
-    // Escala flexível não tem dias; cíclica usa só turnos ativos da empresa.
+    // Escala flexível não tem dias; cíclica usa só turnos ativos gerais ou do mesmo posto
+    // (escala geral: só turnos gerais).
     const days = input.kind === 'cycle' ? input.days : [];
     const shiftIds = [...new Set(days.filter((d): d is string => d !== null))];
     if (shiftIds.length > 0) {
+      const owner = input.unitId ? catalogWhere(input.unitId) : { unitId: null };
       const found = await this.db.client.shift.count({
-        where: { id: { in: shiftIds }, isActive: true },
+        where: { AND: [{ id: { in: shiftIds }, isActive: true }, owner] },
       });
-      if (found !== shiftIds.length)
-        throw invalidReference('days', 'Há turnos inexistentes ou inativos no ciclo.');
+      if (found !== shiftIds.length) {
+        throw invalidReference(
+          'days',
+          'Há turnos inexistentes, inativos ou de outro posto no ciclo.',
+        );
+      }
     }
 
     const data = {
+      unitId: input.unitId,
       name: input.name,
       code: input.code,
       kind: input.kind,

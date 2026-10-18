@@ -18,28 +18,43 @@ import { formatMinutes } from '@/lib/format';
 import { errorMessage, useApi } from '@/lib/services';
 import { useCan } from '../access/access';
 import { workSchedulesQueryKey } from './query-keys';
+import { OwnerBadge } from './shifts-page';
 
 export function WorkSchedulesPage() {
+  return <WorkSchedulesList />;
+}
+
+/**
+ * Escalas. Com `unitId` (pasta do posto), lista as do posto e as gerais, e a nova escala já
+ * nasce no posto.
+ */
+export function WorkSchedulesList({ unitId }: { unitId?: string }) {
   const api = useApi();
   const canManage = useCan('schedules:manage');
   const schedules = useQuery({
-    queryKey: [...workSchedulesQueryKey, 'all'],
-    queryFn: () => api.workSchedules.list(true),
+    queryKey: [...workSchedulesQueryKey, 'all', unitId ?? 'company'],
+    queryFn: () => api.workSchedules.list(true, unitId),
   });
+  const query = unitId ? `?posto=${unitId}` : '';
+  const description =
+    'Sequência de dias de trabalho e folga que se repete (5x2, 6x1, 12x36…) ou carga flexível.';
 
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold">Escalas</h1>
+          {unitId ? (
+            <h2 className="text-lg font-semibold">Escalas</h2>
+          ) : (
+            <h1 className="text-2xl font-semibold">Escalas</h1>
+          )}
           <p className="text-muted-foreground">
-            Sequência de dias de trabalho e folga que se repete (5x2, 6x1, 12x36…) ou carga
-            flexível.
+            {unitId ? `Escalas do posto e as gerais da empresa. ${description}` : description}
           </p>
         </div>
         {canManage ? (
           <Button asChild>
-            <Link to="/jornada/escalas/nova">
+            <Link to={`/jornada/escalas/nova${query}`}>
               <PlusIcon />
               Nova escala
             </Link>
@@ -54,6 +69,7 @@ export function WorkSchedulesPage() {
           <TableHeader>
             <TableRow>
               <TableHead>Escala</TableHead>
+              <TableHead>Posto</TableHead>
               <TableHead>Tipo</TableHead>
               <TableHead className="text-right">Funcionários</TableHead>
             </TableRow>
@@ -61,13 +77,13 @@ export function WorkSchedulesPage() {
           <TableBody>
             {schedules.isPending ? (
               <TableRow>
-                <TableCell colSpan={3}>
+                <TableCell colSpan={4}>
                   <Skeleton className="h-6 w-full" />
                 </TableCell>
               </TableRow>
             ) : schedules.data?.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={3} className="text-center text-muted-foreground">
+                <TableCell colSpan={4} className="text-center text-muted-foreground">
                   Nenhuma escala cadastrada.
                 </TableCell>
               </TableRow>
@@ -78,7 +94,7 @@ export function WorkSchedulesPage() {
                   <TableRow key={schedule.id}>
                     <TableCell>
                       <Link
-                        to={`/jornada/escalas/${schedule.id}`}
+                        to={`/jornada/escalas/${schedule.id}${query}`}
                         className="font-medium text-primary hover:underline"
                       >
                         {schedule.name}
@@ -88,6 +104,9 @@ export function WorkSchedulesPage() {
                           Inativa
                         </Badge>
                       )}
+                    </TableCell>
+                    <TableCell>
+                      <OwnerBadge unit={schedule.unit} />
                     </TableCell>
                     <TableCell>
                       {schedule.kind === 'flexible'

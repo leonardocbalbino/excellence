@@ -39,6 +39,9 @@ const HEADER = [
   'Benefícios (valor empresa)',
   'Benefícios (desconto funcionário)',
   'Benefícios (detalhe)',
+  'Plantões trabalhados',
+  'Valor dos plantões',
+  'Plantões (detalhe)',
 ];
 
 /**
@@ -69,6 +72,14 @@ export function payrollCsv(month: string, items: readonly PayrollItem[]): string
       .map(
         (b) =>
           `${b.name} (${BENEFIT_KIND_LABELS[b.kind]}): empresa ${formatMoney(b.companyValue)}, desconto ${formatMoney(b.employeeDiscount)}`,
+      )
+      .join(' | '),
+    item.shiftPay.shifts,
+    formatMoney(item.shiftPay.total),
+    item.shiftPay.lines
+      .map(
+        (line) =>
+          `${line.schedule}: ${line.shifts} x ${line.rate === null ? 'sem valor' : formatMoney(line.rate)}`,
       )
       .join(' | '),
   ]);

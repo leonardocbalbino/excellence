@@ -134,7 +134,7 @@ export function EmployeeEditorPage() {
             </Card>
           </Tabs.Content>
           <Tabs.Content value="escala" className="pt-6 outline-none">
-            <EmployeeSchedulePanel employeeId={data.id} />
+            <EmployeeSchedulePanel employeeId={data.id} unitId={data.unit.id} />
           </Tabs.Content>
           {canManageBenefits ? (
             <Tabs.Content value="beneficios" className="pt-6 outline-none">
@@ -159,7 +159,7 @@ export function EmployeeEditorPage() {
                   ) : null}
                   {canRegisterCertificate ? (
                     <Button asChild variant="outline">
-                      <Link to={`/pessoas/${data.id}/atestado`}>Registrar atestado</Link>
+                      <Link to={`/pessoas/${data.id}/atestado`}>Anexar atestado</Link>
                     </Button>
                   ) : null}
                 </CardContent>
@@ -259,6 +259,10 @@ function EmployeeFormFields({
   const navigate = useNavigate();
   const canManage = useCan('employees:manage');
   const [submitError, setSubmitError] = useState<unknown>(null);
+  // Novo funcionário a partir da pasta do posto (`?posto=`): já vem com o posto.
+  const [params] = useSearchParams();
+  const posto = params.get('posto');
+  const initialUnit = units.some((unit) => unit.id === posto) ? (posto ?? '') : '';
 
   const form = useForm<EmployeeInput>({
     resolver: zodResolver(employeeInputSchema),
@@ -273,7 +277,7 @@ function EmployeeFormFields({
       phone: employee?.phone ?? null,
       hireDate: employee?.hireDate ?? '',
       terminationDate: employee?.terminationDate ?? null,
-      unitId: employee?.unit.id ?? '',
+      unitId: employee?.unit.id ?? initialUnit,
       departmentId: employee?.department?.id ?? null,
       positionId: employee?.position?.id ?? null,
       unionId: employee?.union?.id ?? null,

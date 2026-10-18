@@ -48,6 +48,7 @@ model Company {
   workSchedules       WorkSchedule[]
   holidays            Holiday[]
   scheduleAssignments EmployeeScheduleAssignment[]
+  scheduleRates       ScheduleRate[]
   clockSettings       ClockSettings?
   nsrCounter          NsrCounter?
   timeEntries         TimeEntry[]
@@ -347,6 +348,9 @@ model Unit {
   patrolPoints  PatrolPoint[]
   patrolRoutes  PatrolRoute[]
   patrolRuns    PatrolRun[]
+  shifts        Shift[]
+  workSchedules WorkSchedule[]
+  scheduleRates ScheduleRate[]
 
   @@unique([companyId, code])
   @@unique([id, companyId])
@@ -475,6 +479,8 @@ model Employee {
 model Shift {
   id           String   @id @default(uuid(7)) @db.Uuid
   companyId    String   @map("company_id") @db.Uuid
+  // Posto (condomínio) dono do turno; null = turno geral da empresa.
+  unitId       String?  @map("unit_id") @db.Uuid
   name         String   @db.Citext
   code         String?
   startMinute  Int      @map("start_minute") @db.SmallInt
@@ -485,10 +491,13 @@ model Shift {
   updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   company      Company           @relation(fields: [companyId], references: [id])
+  unit         Unit?             @relation(fields: [unitId, companyId], references: [id, companyId], onDelete: Restrict)
   scheduleDays WorkScheduleDay[]
 
-  @@unique([companyId, name])
+  // Nome único por posto (e entre os gerais): índice "shifts_unit_name_key" em SQL, com
+  // NULLS NOT DISTINCT.
   @@unique([id, companyId])
+  @@index([companyId, unitId])
   @@map("shifts")
 }
 
@@ -509,6 +518,8 @@ enum CycleAnchor {
 model WorkSchedule {
   id            String       @id @default(uuid(7)) @db.Uuid
   companyId     String       @map("company_id") @db.Uuid
+  // Posto (condomínio) dono da escala; null = escala geral da empresa.
+  unitId        String?      @map("unit_id") @db.Uuid
   name          String       @db.Citext
   code          String?
   kind          ScheduleKind
@@ -521,12 +532,39 @@ model WorkSchedule {
   updatedAt     DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   company     Company                      @relation(fields: [companyId], references: [id])
+  unit        Unit?                        @relation(fields: [unitId, companyId], references: [id, companyId], onDelete: Restrict)
   days        WorkScheduleDay[]
   assignments EmployeeScheduleAssignment[]
+  rates       ScheduleRate[]
 
-  @@unique([companyId, name])
+  // Nome único por posto (e entre as gerais): índice "work_schedules_unit_name_key" em SQL,
+  // com NULLS NOT DISTINCT.
   @@unique([id, companyId])
+  @@index([companyId, unitId])
   @@map("work_schedules")
+}
+
+/// Valor pago por plantão trabalhado numa escala, no posto, a partir de um mês. Vale até o
+/// mês anterior ao próximo valor cadastrado: o reajuste entra sozinho na virada do mês.
+model ScheduleRate {
+  id          String   @id @default(uuid(7)) @db.Uuid
+  companyId   String   @map("company_id") @db.Uuid
+  unitId      String   @map("unit_id") @db.Uuid
+  scheduleId  String   @map("schedule_id") @db.Uuid
+  // AAAA-MM: primeiro mês em que o valor vale.
+  validFrom   String   @map("valid_from") @db.Char(7)
+  amountCents Int      @map("amount_cents")
+  createdBy   String   @map("created_by") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  company  Company      @relation(fields: [companyId], references: [id])
+  unit     Unit         @relation(fields: [unitId, companyId], references: [id, companyId], onDelete: Restrict)
+  schedule WorkSchedule @relation(fields: [scheduleId, companyId], references: [id, companyId], onDelete: Cascade)
+
+  @@unique([unitId, scheduleId, validFrom])
+  @@index([companyId, unitId])
+  @@map("schedule_rates")
 }
 
 /// Dia do ciclo da escala: um turno ou folga (shift_id nulo).
@@ -1157,7 +1195,8 @@ model PayrollPeriod {
   status      PayrollStatus @default(draft)
   cutoffDate  DateTime      @map("cutoff_date") @db.Date
   generatedAt DateTime      @map("generated_at") @db.Timestamptz(6)
-  generatedBy String        @map("generated_by") @db.Uuid
+  // null = gerado automaticamente na virada do mês.
+  generatedBy String?       @map("generated_by") @db.Uuid
   publishedAt DateTime?     @map("published_at") @db.Timestamptz(6)
   publishedBy String?       @map("published_by") @db.Uuid
   closedAt    DateTime?     @map("closed_at") @db.Timestamptz(6)

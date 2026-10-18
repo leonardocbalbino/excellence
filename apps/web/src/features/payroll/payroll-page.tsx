@@ -125,7 +125,14 @@ export function PayrollPage() {
                   </TableCell>
                   <TableCell>{period.employees}</TableCell>
                   <TableCell>{formatDate(period.cutoffDate)}</TableCell>
-                  <TableCell>{new Date(period.generatedAt).toLocaleString('pt-BR')}</TableCell>
+                  <TableCell>
+                    {new Date(period.generatedAt).toLocaleString('pt-BR')}
+                    {period.automatic ? (
+                      <span className="block text-xs text-muted-foreground">
+                        Gerado sozinho na virada do mês
+                      </span>
+                    ) : null}
+                  </TableCell>
                 </TableRow>
               ))
             )}

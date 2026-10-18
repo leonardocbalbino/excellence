@@ -1,4 +1,4 @@
-import { Controller, Get, HttpStatus, Post, Res } from '@nestjs/common';
+import { Controller, Delete, Get, HttpCode, HttpStatus, Post, Put, Res } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiProduces, ApiTags } from '@nestjs/swagger';
 import {
   type MyPayrollPreview,
@@ -8,10 +8,16 @@ import {
   type PayrollPeriodDetail,
   payrollPeriodDetailSchema,
   payrollPeriodSchema,
+  type ScheduleRate,
+  scheduleRateInputSchema,
+  scheduleRateSchema,
+  type UnitMonthlySummary,
+  unitMonthlySummaryQuerySchema,
+  unitMonthlySummarySchema,
 } from '@excellence/shared';
 import type { Response } from 'express';
 import { z } from 'zod';
-import { ZodBody, ZodParam, ZodResponse } from '../../../common/openapi/zod-openapi';
+import { ZodBody, ZodParam, ZodQuery, ZodResponse } from '../../../common/openapi/zod-openapi';
 import {
   Access,
   type AccessGrant,
@@ -19,6 +25,7 @@ import {
   RequirePermission,
 } from '../../access-control/http/access.decorators';
 import { PayrollService } from '../application/payroll.service';
+import { ScheduleRatesService } from '../application/schedule-rates.service';
 
 const idParam = z.uuid();
 
@@ -82,6 +89,63 @@ export class PayrollController {
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="${file.fileName}"`);
     return file.content;
+  }
+}
+
+/** Pasta do posto (condomínio): valores por plantão e resumo do mês (ADR 0020). */
+@ApiTags('payroll')
+@ApiBearerAuth()
+@Controller('units/:unitId')
+export class UnitPayController {
+  constructor(
+    private readonly payroll: PayrollService,
+    private readonly rates: ScheduleRatesService,
+  ) {}
+
+  @Get('schedule-rates')
+  @RequirePermission('payroll:manage')
+  @ApiOperation({ summary: 'Valores por plantão das escalas do posto, com vigência' })
+  @ZodResponse(HttpStatus.OK, z.array(scheduleRateSchema))
+  listRates(
+    @ZodParam('unitId', idParam) unitId: string,
+    @Access() grant: AccessGrant,
+  ): Promise<ScheduleRate[]> {
+    return this.rates.list(unitId, grant);
+  }
+
+  @Put('schedule-rates')
+  @RequirePermission('payroll:manage')
+  @ApiOperation({ summary: 'Cadastra (ou corrige) o valor por plantão a partir de um mês' })
+  @ZodResponse(HttpStatus.OK, scheduleRateSchema)
+  saveRate(
+    @ZodParam('unitId', idParam) unitId: string,
+    @ZodBody(scheduleRateInputSchema) body: z.output<typeof scheduleRateInputSchema>,
+    @Access() grant: AccessGrant,
+  ): Promise<ScheduleRate> {
+    return this.rates.save(unitId, body, grant);
+  }
+
+  @Delete('schedule-rates/:rateId')
+  @RequirePermission('payroll:manage')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  removeRate(
+    @ZodParam('unitId', idParam) unitId: string,
+    @ZodParam('rateId', idParam) rateId: string,
+    @Access() grant: AccessGrant,
+  ): Promise<void> {
+    return this.rates.remove(unitId, rateId, grant);
+  }
+
+  @Get('monthly-summary')
+  @RequirePermission('payroll:manage')
+  @ApiOperation({ summary: 'Resumo do mês do posto: plantões, valores, faltas e atestados' })
+  @ZodResponse(HttpStatus.OK, unitMonthlySummarySchema)
+  summary(
+    @ZodParam('unitId', idParam) unitId: string,
+    @ZodQuery(unitMonthlySummaryQuerySchema) query: z.output<typeof unitMonthlySummaryQuerySchema>,
+    @Access() grant: AccessGrant,
+  ): Promise<UnitMonthlySummary> {
+    return this.payroll.unitSummary(unitId, query.month, grant);
   }
 }
 

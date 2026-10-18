@@ -63,6 +63,8 @@ export interface CatalogConfig<T extends CatalogItem> {
   ready?: boolean;
   /** Ações extras no cabeçalho (ex.: imprimir QR codes). */
   actions?: ReactNode;
+  /** Dentro de outra página (ex.: aba da pasta do posto): título de seção, não de página. */
+  embedded?: boolean;
 }
 
 /** Página de cadastro simples: lista com edição no próprio lugar. */
@@ -79,7 +81,11 @@ export function CatalogPage<T extends CatalogItem>({ config }: { config: Catalog
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold">{config.title}</h1>
+          {config.embedded ? (
+            <h2 className="text-lg font-semibold">{config.title}</h2>
+          ) : (
+            <h1 className="text-2xl font-semibold">{config.title}</h1>
+          )}
           <p className="text-muted-foreground">{config.description}</p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -108,11 +114,11 @@ export function CatalogPage<T extends CatalogItem>({ config }: { config: Catalog
 
       <div className="flex items-center gap-2">
         <Checkbox
-          id="catalog-inactive"
+          id={`catalog-inactive-${config.singular}`}
           checked={includeInactive}
           onCheckedChange={(checked) => setIncludeInactive(checked === true)}
         />
-        <Label htmlFor="catalog-inactive">Mostrar inativos</Label>
+        <Label htmlFor={`catalog-inactive-${config.singular}`}>Mostrar inativos</Label>
       </div>
       {items.isError ? <Alert variant="destructive">{errorMessage(items.error)}</Alert> : null}
       <Card>

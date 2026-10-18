@@ -4,6 +4,8 @@
     "role_scopes_unique",
     "time_entries_single_disregard",
     "patrol_runs_one_open",
-    "patrol_runs_one_per_slot"
+    "patrol_runs_one_per_slot",
+    "shifts_unit_name_key",
+    "work_schedules_unit_name_key"
   ]
 }

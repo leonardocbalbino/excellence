@@ -152,11 +152,16 @@ export function PayrollPeriodPage() {
         </Alert>
       ) : null}
 
-      <div className="grid grid-cols-2 gap-3 md:gap-4 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 md:gap-4 xl:grid-cols-5">
         <StatCard label="Funcionários" value={data.items.length} />
         <StatCard
           label="Salários base"
           value={formatBRL(data.items.reduce((sum, i) => sum + (i.baseSalary ?? 0), 0))}
+        />
+        <StatCard
+          label="Plantões (valor)"
+          value={formatBRL(data.items.reduce((sum, i) => sum + i.shiftPay.total, 0))}
+          note={`${data.items.reduce((sum, i) => sum + i.shiftPay.shifts, 0)} plantões trabalhados`}
         />
         <StatCard
           label="Benefícios (empresa)"
@@ -191,6 +196,7 @@ export function PayrollPeriodPage() {
                 <th className="px-3 py-2 font-semibold">Faltas</th>
                 <th className="px-3 py-2 font-semibold">Atestado</th>
                 <th className="px-3 py-2 font-semibold">Incompletos</th>
+                <th className="px-3 py-2 font-semibold">Plantões</th>
                 <th className="py-2 pl-3 font-semibold">Benefícios</th>
               </tr>
             </thead>
@@ -237,6 +243,18 @@ export function PayrollPeriodPage() {
                   </td>
                   <td className="px-3 py-3">{item.justifiedDays}</td>
                   <td className="px-3 py-3">{item.incompleteDays}</td>
+                  <td className="px-3 py-3">
+                    {item.shiftPay.shifts > 0 ? (
+                      <>
+                        {formatBRL(item.shiftPay.total)}
+                        <span className="block text-xs text-muted-foreground">
+                          {item.shiftPay.shifts} plantão(ões)
+                        </span>
+                      </>
+                    ) : (
+                      '—'
+                    )}
+                  </td>
                   <td className="py-3 pl-3">
                     {formatBRL(item.benefitsCompanyTotal)}
                     <span className="block text-xs text-muted-foreground">

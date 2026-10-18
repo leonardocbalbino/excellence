@@ -1,6 +1,7 @@
 import { z } from 'zod';
-import { calendarDateSchema } from '../br/fields.js';
+import { calendarDateSchema, moneySchema } from '../br/fields.js';
 import { benefitKindSchema } from '../benefits/benefits.schemas.js';
+import { medicalCertificateStatusSchema } from '../medical/medical-certificates.schemas.js';
 import { monthSchema } from '../time-tracking/time-tracking.schemas.js';
 
 const isoInstant = z.iso.datetime({ offset: true });
@@ -21,6 +22,30 @@ export const PAYROLL_STATUS_LABELS: Record<PayrollStatus, string> = {
   published: 'Prévia publicada',
   closed: 'Fechado',
 };
+
+/**
+ * Plantões do mês por escala, com o valor por plantão vigente no posto (ADR 0020). Plantão
+ * trabalhado = dia com turno previsto na escala e ao menos uma marcação. Dias com turno
+ * cobertos por atestado aceito aparecem em `justifiedShifts`, sem valor: o abono depende de
+ * regra legal e de convenção (P-017).
+ */
+export const shiftPayLineSchema = z.object({
+  scheduleId: z.uuid(),
+  schedule: z.string(),
+  /** Valor por plantão vigente no mês; null = sem valor cadastrado no posto. */
+  rate: z.number().nullable(),
+  shifts: z.number().int(),
+  justifiedShifts: z.number().int(),
+  amount: z.number(),
+});
+export type ShiftPayLine = z.infer<typeof shiftPayLineSchema>;
+
+export const shiftPaySchema = z.object({
+  lines: z.array(shiftPayLineSchema),
+  shifts: z.number().int(),
+  total: z.number(),
+});
+export type ShiftPay = z.infer<typeof shiftPaySchema>;
 
 export const payrollItemSchema = z.object({
   employee: z.object({
@@ -59,6 +84,8 @@ export const payrollItemSchema = z.object({
   ),
   benefitsCompanyTotal: z.number(),
   benefitsDiscountTotal: z.number(),
+  /** Fechamentos gerados antes dos valores por plantão não têm o campo. */
+  shiftPay: shiftPaySchema.default({ lines: [], shifts: 0, total: 0 }),
 });
 export type PayrollItem = z.infer<typeof payrollItemSchema>;
 
@@ -70,6 +97,8 @@ export const payrollPeriodSchema = z.object({
   cutoffDate: calendarDateSchema,
   employees: z.number().int(),
   generatedAt: isoInstant,
+  /** Gerado sozinho na virada do mês (sem pessoa responsável). */
+  automatic: z.boolean(),
   publishedAt: isoInstant.nullable(),
   closedAt: isoInstant.nullable(),
 });
@@ -92,3 +121,67 @@ export const myPayrollPreviewSchema = z.object({
   item: payrollItemSchema,
 });
 export type MyPayrollPreview = z.infer<typeof myPayrollPreviewSchema>;
+
+// ─── Valor por plantão (ADR 0020) ───────────────────────────────────────────────────
+
+/** Valor por plantão de uma escala no posto, a partir de um mês (vigência). */
+export const scheduleRateSchema = z.object({
+  id: z.uuid(),
+  scheduleId: z.uuid(),
+  scheduleName: z.string(),
+  /** Primeiro mês em que o valor vale (AAAA-MM). */
+  validFrom: monthSchema,
+  amount: z.number(),
+});
+export type ScheduleRate = z.infer<typeof scheduleRateSchema>;
+
+export const scheduleRateInputSchema = z.object({
+  scheduleId: z.uuid(),
+  validFrom: monthSchema,
+  amount: moneySchema,
+});
+export type ScheduleRateInput = z.input<typeof scheduleRateInputSchema>;
+
+// ─── Resumo mensal do posto ─────────────────────────────────────────────────────────
+
+export const unitMonthlySummaryQuerySchema = z.object({ month: monthSchema });
+
+/**
+ * Tudo o que aconteceu no posto (condomínio) no mês: o consolidado de cada funcionário
+ * (plantões, valores, faltas, atestados), os atestados do período e as trocas de escala.
+ * Calculado na hora, com os dados atuais; o fechamento oficial continua em Folha.
+ */
+export const unitMonthlySummarySchema = z.object({
+  unit: z.object({ id: z.uuid(), name: z.string() }),
+  month: monthSchema,
+  cutoffDate: calendarDateSchema,
+  /** Fechamento do mês já gerado para a empresa, se houver. */
+  period: z.object({ id: z.uuid(), status: payrollStatusSchema }).nullable(),
+  items: z.array(payrollItemSchema),
+  totals: z.object({
+    employees: z.number().int(),
+    shifts: z.number().int(),
+    shiftPay: z.number(),
+    absenceDays: z.number().int(),
+    justifiedDays: z.number().int(),
+    incompleteDays: z.number().int(),
+    pendingAdjustments: z.number().int(),
+  }),
+  certificates: z.array(
+    z.object({
+      id: z.uuid(),
+      employee: z.object({ id: z.uuid(), name: z.string() }),
+      startDate: calendarDateSchema,
+      endDate: calendarDateSchema,
+      status: medicalCertificateStatusSchema,
+    }),
+  ),
+  scheduleChanges: z.array(
+    z.object({
+      employee: z.object({ id: z.uuid(), name: z.string() }),
+      schedule: z.string(),
+      startDate: calendarDateSchema,
+    }),
+  ),
+});
+export type UnitMonthlySummary = z.infer<typeof unitMonthlySummarySchema>;

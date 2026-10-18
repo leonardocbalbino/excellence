@@ -161,6 +161,7 @@ describe('Folha de pagamento (RH)', () => {
       cutoffDate: '2026-08-31',
       employees: 1,
       generatedAt: '2026-09-02T12:00:00.000Z',
+      automatic: false,
       publishedAt: null,
       closedAt: null,
       items: [
@@ -182,6 +183,7 @@ describe('Folha de pagamento (RH)', () => {
           benefits: [],
           benefitsCompanyTotal: 0,
           benefitsDiscountTotal: 0,
+          shiftPay: { lines: [], shifts: 0, total: 0 },
         },
       ],
     };

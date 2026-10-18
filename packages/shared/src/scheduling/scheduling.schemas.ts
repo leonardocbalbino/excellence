@@ -22,10 +22,27 @@ export function shiftSpanMinutes(start: string, end: string): number {
   return span > 0 ? span : span + 1440;
 }
 
+// ─── Posto dono ───────────────────────────────────────────────────────────────────
+
+/**
+ * Turnos e escalas pertencem a um posto (condomínio) ou são gerais da empresa (`null`). Uma
+ * escala de posto usa turnos gerais ou do mesmo posto; uma escala geral, só turnos gerais.
+ */
+export const ownerUnitSchema = z.object({ id: z.uuid(), name: z.string() }).nullable();
+
+/** Filtro das listas: com `unitId`, só os cadastros do posto e os gerais. */
+export const scheduleCatalogQuerySchema = z.object({
+  includeInactive: z.stringbool().default(false),
+  unitId: z.uuid().optional(),
+});
+export type ScheduleCatalogQuery = z.input<typeof scheduleCatalogQuerySchema>;
+
 // ─── Turnos ───────────────────────────────────────────────────────────────────────
 
 export const shiftSchema = z.object({
   id: z.uuid(),
+  /** Posto dono; null = turno geral. */
+  unit: ownerUnitSchema,
   name: z.string(),
   code: z.string().nullable(),
   start: timeOfDaySchema,
@@ -47,6 +64,11 @@ export type Shift = z.infer<typeof shiftSchema>;
  */
 export const shiftInputSchema = z
   .object({
+    /** Posto dono; vazio = turno geral. */
+    unitId: z
+      .uuid()
+      .nullish()
+      .transform((v) => v ?? null),
     name: z.string().trim().min(2).max(80),
     code: optionalText(20),
     start: timeOfDaySchema,
@@ -86,6 +108,8 @@ export const cycleAnchorSchema = z.enum(['monday', 'assignment']);
 
 export const workScheduleSchema = z.object({
   id: z.uuid(),
+  /** Posto dono; null = escala geral. */
+  unit: ownerUnitSchema,
   name: z.string(),
   code: z.string().nullable(),
   kind: scheduleKindSchema,
@@ -104,6 +128,11 @@ export const MAX_CYCLE_DAYS = 56;
 
 export const workScheduleInputSchema = z
   .object({
+    /** Posto dono; vazio = escala geral. */
+    unitId: z
+      .uuid()
+      .nullish()
+      .transform((v) => v ?? null),
     name: z.string().trim().min(2).max(80),
     code: optionalText(20),
     kind: scheduleKindSchema,

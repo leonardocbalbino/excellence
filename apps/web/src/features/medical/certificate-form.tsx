@@ -186,7 +186,7 @@ export function CertificateForm({
       <div className="flex gap-2">
         <Button type="submit" disabled={saving}>
           {saving ? <Spinner /> : null}
-          Enviar atestado
+          Anexar atestado
         </Button>
         {onCancel ? (
           <Button type="button" variant="ghost" onClick={onCancel}>
