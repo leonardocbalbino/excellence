@@ -1,12 +1,14 @@
-import { useQuery } from '@tanstack/react-query';
-import { FilePlusIcon, PlusIcon } from 'lucide-react';
+import type { Employee } from '@excellence/shared';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { FilePlusIcon, PlusIcon, UserPlusIcon, XIcon } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router';
+import { toast } from 'sonner';
 import { Alert } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
-import { Skeleton } from '@/components/ui/feedback';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Skeleton, Spinner } from '@/components/ui/feedback';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import {
@@ -30,6 +32,7 @@ export function UnitEmployeesTab({ unitId }: { unitId: string }) {
   const canAttach = useCan('medical_certificates:manage');
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState<'active' | 'terminated' | 'all'>('active');
+  const [linking, setLinking] = useState(false);
   const employees = useQuery({
     queryKey: [...employeesQueryKey, 'unit', unitId, { search, status }],
     queryFn: () =>
@@ -64,14 +67,21 @@ export function UnitEmployeesTab({ unitId }: { unitId: string }) {
           </Select>
         </div>
         {canManage ? (
-          <Button asChild>
-            <Link to={`/pessoas/novo?posto=${unitId}`}>
-              <PlusIcon />
-              Novo funcionário
-            </Link>
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" onClick={() => setLinking(true)} disabled={linking}>
+              <UserPlusIcon />
+              Adicionar já cadastrado
+            </Button>
+            <Button asChild>
+              <Link to={`/pessoas/novo?posto=${unitId}`}>
+                <PlusIcon />
+                Novo funcionário
+              </Link>
+            </Button>
+          </div>
         ) : null}
       </div>
+      {linking ? <LinkEmployeePanel unitId={unitId} onClose={() => setLinking(false)} /> : null}
       {employees.isError ? (
         <Alert variant="destructive">{errorMessage(employees.error)}</Alert>
       ) : null}
@@ -139,5 +149,109 @@ export function UnitEmployeesTab({ unitId }: { unitId: string }) {
         </p>
       ) : null}
     </div>
+  );
+}
+
+/**
+ * Busca um funcionário já cadastrado (de outro posto) e o traz para este posto. Quem está numa
+ * escala do posto antigo precisa trocar de escala antes; a API explica quando for o caso.
+ */
+function LinkEmployeePanel({ unitId, onClose }: { unitId: string; onClose: () => void }) {
+  const api = useApi();
+  const queryClient = useQueryClient();
+  const [search, setSearch] = useState('');
+  const [moving, setMoving] = useState<string | null>(null);
+  const [error, setError] = useState<unknown>(null);
+  const term = search.trim();
+  const found = useQuery({
+    queryKey: [...employeesQueryKey, 'link', term],
+    queryFn: () => api.employees.list({ search: term, status: 'active', pageSize: 20 }),
+    enabled: term.length >= 2,
+  });
+  const candidates = found.data?.items.filter((e) => e.unit.id !== unitId) ?? [];
+
+  const move = async (employee: Employee) => {
+    const name = employee.socialName ?? employee.name;
+    if (!window.confirm(`Trazer ${name} do posto "${employee.unit.name}" para este posto?`)) return;
+    setError(null);
+    setMoving(employee.id);
+    try {
+      await api.employees.moveToUnit(employee.id, { unitId });
+      await queryClient.invalidateQueries({ queryKey: employeesQueryKey });
+      toast.success(`${name} agora está neste posto.`);
+    } catch (err) {
+      setError(err);
+    } finally {
+      setMoving(null);
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-start justify-between gap-2">
+        <div className="space-y-1">
+          <CardTitle>Adicionar funcionário já cadastrado</CardTitle>
+          <CardDescription>
+            Busque pelo nome, matrícula ou CPF. O funcionário sai do posto atual e passa a ser
+            deste.
+          </CardDescription>
+        </div>
+        <Button variant="ghost" size="sm" onClick={onClose} aria-label="Fechar">
+          <XIcon />
+        </Button>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <Input
+          aria-label="Buscar funcionário já cadastrado"
+          placeholder="Digite ao menos 2 letras"
+          className="max-w-sm"
+          autoFocus
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+        {error ? <Alert variant="destructive">{errorMessage(error)}</Alert> : null}
+        {found.isError ? <Alert variant="destructive">{errorMessage(found.error)}</Alert> : null}
+        {term.length < 2 ? null : found.isPending ? (
+          <Skeleton className="h-6 w-full" />
+        ) : candidates.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            Nenhum funcionário ativo de outro posto encontrado.
+          </p>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Funcionário</TableHead>
+                <TableHead>Matrícula</TableHead>
+                <TableHead>Posto atual</TableHead>
+                <TableHead className="sr-only">Ações</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {candidates.map((employee) => (
+                <TableRow key={employee.id}>
+                  <TableCell className="font-medium">
+                    {employee.socialName ?? employee.name}
+                  </TableCell>
+                  <TableCell>{employee.registrationNumber}</TableCell>
+                  <TableCell>{employee.unit.name}</TableCell>
+                  <TableCell className="text-right">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={moving !== null}
+                      onClick={() => void move(employee)}
+                    >
+                      {moving === employee.id ? <Spinner /> : <UserPlusIcon />}
+                      Trazer para este posto
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+      </CardContent>
+    </Card>
   );
 }

@@ -68,6 +68,8 @@ import {
   employeePageSchema,
   employeeHistoryEventSchema,
   employeeSchema,
+  type EmployeeUnitInput,
+  employeeUnitInputSchema,
 } from '../workforce/employees.schemas.js';
 import {
   type HolidayInput,
@@ -777,6 +779,13 @@ export function createApiClient(options: ApiClientOptions) {
         request('PUT', `/employees/${encodeURIComponent(id)}`, {
           body: input,
           bodySchema: employeeInputSchema,
+          schema: employeeSchema,
+        }),
+      /** Traz um funcionário já cadastrado para o posto `unitId`. */
+      moveToUnit: (id: string, input: EmployeeUnitInput) =>
+        request('PUT', `/employees/${encodeURIComponent(id)}/unit`, {
+          body: input,
+          bodySchema: employeeUnitInputSchema,
           schema: employeeSchema,
         }),
       createAccount: (id: string, input: CreateAccountInput) =>

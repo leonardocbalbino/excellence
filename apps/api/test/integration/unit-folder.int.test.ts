@@ -1,6 +1,8 @@
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import {
+  employeeSchema,
   PERMISSION_KEYS,
+  problemDetailsSchema,
   scheduleRateSchema,
   shiftSchema,
   unitMonthlySummarySchema,
@@ -12,7 +14,7 @@ import { z } from 'zod';
 import type { PrismaClient } from '../../src/generated/prisma/client';
 import { authHeader, createRole, grantRole } from './support/access';
 import { createTestPrisma, createTestUser } from './support/db';
-import { createEmployee, createUnit } from './support/organization';
+import { createDepartment, createEmployee, createUnit } from './support/organization';
 import { createTestApp } from './support/test-app';
 
 /** Pasta do posto (ADR 0020): escalas próprias, valor por plantão e resumo do mês. */
@@ -131,6 +133,41 @@ describe('Pasta do posto (integração)', () => {
       .set(auth)
       .send({ scheduleId: scale.id, startDate: '2026-10-01' })
       .expect(201);
+  });
+
+  it('traz funcionário já cadastrado para o posto; escala do posto antigo impede', async () => {
+    const { companyId, maple, other, auth } = await scenario();
+    const otherDept = await createDepartment(prisma, companyId, { unitId: other.id });
+    const moving = await createEmployee(prisma, companyId, {
+      unitId: other.id,
+      departmentId: otherDept.id,
+    });
+    const res = await http()
+      .put(`/api/v1/employees/${moving.id}/unit`)
+      .set(auth)
+      .send({ unitId: maple.id })
+      .expect(200);
+    const moved = employeeSchema.parse(res.body);
+    expect(moved.unit).toEqual({ id: maple.id, name: 'Maple Bear' });
+    // O departamento era do posto antigo e sai do cadastro.
+    expect(moved.department).toBeNull();
+
+    // Quem está numa escala do Maple Bear precisa trocar de escala antes de sair.
+    const day = await shift(auth, { name: '12h diurno', unitId: maple.id });
+    const scale = workScheduleSchema.parse(
+      (await schedule(auth, { name: '12x36 diurno', unitId: maple.id, days: [day.id, null] })).body,
+    );
+    await http()
+      .post(`/api/v1/employees/${moved.id}/schedule-assignments`)
+      .set(auth)
+      .send({ scheduleId: scale.id, startDate: '2026-10-01' })
+      .expect(201);
+    const blocked = await http()
+      .put(`/api/v1/employees/${moved.id}/unit`)
+      .set(auth)
+      .send({ unitId: other.id })
+      .expect(422);
+    expect(problemDetailsSchema.parse(blocked.body).detail).toContain('12x36 diurno');
   });
 
   it('valor por plantão com vigência e resumo do mês do posto', async () => {

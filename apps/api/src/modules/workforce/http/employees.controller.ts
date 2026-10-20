@@ -15,6 +15,7 @@ import {
   type EmployeePage,
   employeePageSchema,
   employeeSchema,
+  employeeUnitInputSchema,
 } from '@excellence/shared';
 import { z } from 'zod';
 import { ZodBody, ZodParam, ZodQuery, ZodResponse } from '../../../common/openapi/zod-openapi';
@@ -112,6 +113,18 @@ export class EmployeesController {
     @Access() grant: AccessGrant,
   ): Promise<Employee> {
     return this.employees.update(id, body, grant);
+  }
+
+  @Put(':id/unit')
+  @RequirePermission('employees:manage')
+  @ApiOperation({ summary: 'Traz um funcionário já cadastrado para outro posto' })
+  @ZodResponse(HttpStatus.OK, employeeSchema)
+  moveToUnit(
+    @ZodParam('id', idParam) id: string,
+    @ZodBody(employeeUnitInputSchema) body: z.output<typeof employeeUnitInputSchema>,
+    @Access() grant: AccessGrant,
+  ): Promise<Employee> {
+    return this.employees.moveToUnit(id, body.unitId, grant);
   }
 
   @Post(':id/account')

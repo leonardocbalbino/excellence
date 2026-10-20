@@ -1,4 +1,10 @@
-import type { ScheduleRate, Unit, UnitMonthlySummary, WorkSchedule } from '@excellence/shared';
+import type {
+  Employee,
+  ScheduleRate,
+  Unit,
+  UnitMonthlySummary,
+  WorkSchedule,
+} from '@excellence/shared';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
@@ -157,6 +163,54 @@ describe('Pasta do posto (condomínio)', () => {
     expect(screen.getByText('Fábio Vigia', { selector: 'a' })).toBeInTheDocument();
     expect(screen.getByText(/8 ×/)).toBeInTheDocument();
     expect(screen.getByText('Atestados do mês')).toBeInTheDocument();
+  });
+
+  it('traz para o posto um funcionário já cadastrado em outro posto', async () => {
+    const elsewhere: Employee = {
+      id: EMPLOYEE_ID,
+      registrationNumber: '0004',
+      name: 'Fábio Vigia',
+      socialName: null,
+      cpf: '10000000442',
+      pis: null,
+      birthDate: null,
+      email: null,
+      phone: null,
+      hireDate: '2023-05-15',
+      terminationDate: null,
+      status: 'active',
+      unit: { id: '01900000-0000-7000-8000-000000000a02', name: 'Outro condomínio' },
+      department: null,
+      position: null,
+      union: null,
+      manager: null,
+      userId: null,
+    };
+    let sent: unknown;
+    server.use(
+      ...sessionHandlers(['units:read', 'employees:read', 'employees:manage']),
+      http.get(`${API}/units/:id`, () => HttpResponse.json(unit)),
+      http.get(`${API}/employees`, ({ request }) => {
+        const inUnit = new URL(request.url).searchParams.get('unitId') === UNIT_ID;
+        const items = inUnit ? (sent ? [{ ...elsewhere, unit }] : []) : [elsewhere];
+        return HttpResponse.json({ items, total: items.length, page: 1, pageSize: 100 });
+      }),
+      http.put(`${API}/employees/:id/unit`, async ({ request }) => {
+        sent = await request.json();
+        return HttpResponse.json({ ...elsewhere, unit: { id: UNIT_ID, name: 'Maple Bear' } });
+      }),
+    );
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+    renderApp(`/cadastros/postos/${UNIT_ID}`);
+    expect(await screen.findByText('Nenhum funcionário neste posto.')).toBeInTheDocument();
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Adicionar já cadastrado' }));
+    await user.type(screen.getByLabelText('Buscar funcionário já cadastrado'), 'Fábio');
+    expect(await screen.findByRole('cell', { name: 'Outro condomínio' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Trazer para este posto' }));
+    await waitFor(() => expect(sent).toEqual({ unitId: UNIT_ID }));
+    expect(await screen.findByRole('link', { name: 'Fábio Vigia' })).toBeInTheDocument();
   });
 
   it('sem permissão de folha, a pasta não mostra valores nem resumo', async () => {

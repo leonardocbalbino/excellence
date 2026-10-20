@@ -65,6 +65,10 @@ export const employeeInputSchema = z
   });
 export type EmployeeInput = z.input<typeof employeeInputSchema>;
 
+/** Leva um funcionário já cadastrado para outro posto (pasta do posto, ADR 0020). */
+export const employeeUnitInputSchema = z.object({ unitId: z.uuid() });
+export type EmployeeUnitInput = z.input<typeof employeeUnitInputSchema>;
+
 export const employeeListQuerySchema = z.object({
   /** Busca por nome, nome social, matrícula ou CPF. */
   search: z.string().trim().max(100).optional(),

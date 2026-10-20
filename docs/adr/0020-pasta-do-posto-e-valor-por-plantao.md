@@ -22,6 +22,10 @@ documento à administração, e a administração anexa ao sistema.
   resumo exigem `payroll:manage`.
 - A partir da pasta, "Novo funcionário", "Nova escala" e "Anexar atestado" já chegam com o posto
   e voltam para a pasta.
+- "Adicionar já cadastrado" busca um funcionário ativo de outro posto e o traz para este
+  (`PUT /employees/:id/unit`, `employees:manage`). O departamento do posto antigo sai do
+  cadastro; o departamento geral fica. Quem está, ou vai entrar, numa escala do posto antigo
+  precisa trocar de escala antes (422 com o nome da escala).
 
 **Escalas e turnos do posto**
 
