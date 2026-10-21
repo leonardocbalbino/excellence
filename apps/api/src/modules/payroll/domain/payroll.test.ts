@@ -132,6 +132,17 @@ describe('payrollCsv', () => {
       shifts: 14,
       total: 2520,
     },
+    dailyBenefits: {
+      food: null,
+      transport: {
+        days: 22,
+        dailyValue: 10,
+        total: 220,
+        calculated: { days: 22, dailyValue: 10, total: 220 },
+        adjustment: null,
+      },
+      total: 220,
+    },
   };
 
   it('formata horas e valores no padrão brasileiro', () => {
@@ -148,6 +159,9 @@ describe('payrollCsv', () => {
     expect(line).toContain('"\'=Fábio; ""Vigia"""');
     expect(line).toContain(';2350,50;160:00;158:45;-01:15;1;0;0;0;220,00;141,03;');
     expect(line).toContain('VT (Vale-transporte): empresa 220,00, desconto 141,03');
-    expect(line.endsWith(';14;2520,00;12x36 diurno: 14 x 180,00')).toBe(true);
+    // VA e VT no fim: sem VA (colunas vazias), VT 22 dias × 10,00, total 220,00.
+    expect(line.endsWith(';14;2520,00;12x36 diurno: 14 x 180,00;;;;22;10,00;220,00;220,00')).toBe(
+      true,
+    );
   });
 });

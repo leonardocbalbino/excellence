@@ -1,4 +1,4 @@
-import { BENEFIT_KIND_LABELS, type PayrollItem } from '@excellence/shared';
+import { BENEFIT_KIND_LABELS, type DailyBenefitLine, type PayrollItem } from '@excellence/shared';
 
 /** 510 → "08:30"; -75 → "-01:15". */
 export function formatHours(minutes: number): string {
@@ -42,7 +42,19 @@ const HEADER = [
   'Plantões trabalhados',
   'Valor dos plantões',
   'Plantões (detalhe)',
+  'VA (dias)',
+  'VA (valor diário)',
+  'VA (total)',
+  'VT (dias)',
+  'VT (valor diário)',
+  'VT (total)',
+  'VA + VT',
 ];
+
+/** Dias, valor diário e total do VA ou VT; vazio quando o funcionário não tem o benefício. */
+function dailyCells(line: DailyBenefitLine | null): (string | number)[] {
+  return line ? [line.days, formatMoney(line.dailyValue), formatMoney(line.total)] : ['', '', ''];
+}
 
 /**
  * CSV do fechamento para o escritório de contabilidade: separador ";", decimais com vírgula
@@ -82,6 +94,9 @@ export function payrollCsv(month: string, items: readonly PayrollItem[]): string
           `${line.schedule}: ${line.shifts} x ${line.rate === null ? 'sem valor' : formatMoney(line.rate)}`,
       )
       .join(' | '),
+    ...dailyCells(item.dailyBenefits.food),
+    ...dailyCells(item.dailyBenefits.transport),
+    formatMoney(item.dailyBenefits.total),
   ]);
   const lines = [[`Competência ${month}`], HEADER, ...rows].map((row) => row.map(cell).join(';'));
   return `\uFEFF${lines.join('\r\n')}\r\n`;

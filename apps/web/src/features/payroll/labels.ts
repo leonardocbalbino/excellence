@@ -1,5 +1,6 @@
 export const payrollQueryKey = ['payroll-periods'] as const;
 export const myPayrollQueryKey = ['me', 'payroll-previews'] as const;
+export const benefitDaysQueryKey = ['benefit-days'] as const;
 
 /** Baixa um texto como arquivo (o CSV da contabilidade, com BOM para o Excel). */
 export function downloadText(content: string, fileName: string, type: string): void {

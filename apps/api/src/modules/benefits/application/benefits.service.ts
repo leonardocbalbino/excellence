@@ -5,6 +5,7 @@ import {
   type EmployeeBenefit,
   type employeeBenefitInputSchema,
   fromCents,
+  isDailyCalculation,
   type MyBenefit,
   optionalCents,
   ProblemType,
@@ -32,27 +33,36 @@ const BENEFIT_SELECT = {
   provider: true,
   description: true,
   howToUse: true,
+  calculation: true,
   defaultCompanyValueCents: true,
   defaultEmployeeDiscountCents: true,
+  defaultDailyValueCents: true,
   isActive: true,
 } as const;
 
 type BenefitRow = Prisma.BenefitGetPayload<{ select: typeof BENEFIT_SELECT }>;
 
 function toBenefit(row: BenefitRow): Benefit {
-  const { defaultCompanyValueCents, defaultEmployeeDiscountCents, ...rest } = row;
+  const {
+    defaultCompanyValueCents,
+    defaultEmployeeDiscountCents,
+    defaultDailyValueCents,
+    ...rest
+  } = row;
   return {
     ...rest,
     defaultCompanyValue:
       defaultCompanyValueCents === null ? null : fromCents(defaultCompanyValueCents),
     defaultEmployeeDiscount:
       defaultEmployeeDiscountCents === null ? null : fromCents(defaultEmployeeDiscountCents),
+    defaultDailyValue: defaultDailyValueCents === null ? null : fromCents(defaultDailyValueCents),
   };
 }
 
 const ASSIGNMENT_SELECT = {
   id: true,
   companyValueCents: true,
+  dailyValueCents: true,
   employeeDiscountCents: true,
   startDate: true,
   endDate: true,
@@ -73,8 +83,14 @@ function toAssignment(row: AssignmentRow, today: string): EmployeeBenefit {
   return {
     id: row.id,
     employee: { id: row.employee.id, name: row.employee.socialName ?? row.employee.name },
-    benefit: { id: row.benefit.id, name: row.benefit.name, kind: row.benefit.kind },
+    benefit: {
+      id: row.benefit.id,
+      name: row.benefit.name,
+      kind: row.benefit.kind,
+      calculation: row.benefit.calculation,
+    },
     companyValue: fromCents(row.companyValueCents),
+    dailyValue: row.dailyValueCents === null ? null : fromCents(row.dailyValueCents),
     employeeDiscount: fromCents(row.employeeDiscountCents),
     startDate: fromCalendarDate(row.startDate),
     endDate: fromCalendarDate(row.endDate),
@@ -135,8 +151,10 @@ export class BenefitsService {
       provider: input.provider,
       description: input.description,
       howToUse: input.howToUse,
+      calculation: input.calculation,
       defaultCompanyValueCents: optionalCents(input.defaultCompanyValue),
       defaultEmployeeDiscountCents: optionalCents(input.defaultEmployeeDiscount),
+      defaultDailyValueCents: optionalCents(input.defaultDailyValue),
       isActive: input.isActive,
     };
     return this.db.client.$transaction(async (tx) => {
@@ -146,6 +164,13 @@ export class BenefitsService {
             data: { ...data, companyId: grant.companyId },
             select: BENEFIT_SELECT,
           });
+      // Benefício que passou a ser por dia: quem já tinha recebe o valor diário sugerido.
+      if (id && isDailyCalculation(input.calculation) && data.defaultDailyValueCents !== null) {
+        await tx.employeeBenefit.updateMany({
+          where: { benefitId: id, dailyValueCents: null },
+          data: { dailyValueCents: data.defaultDailyValueCents },
+        });
+      }
       const after = toBenefit(row);
       await this.audit.record(
         {
@@ -211,10 +236,17 @@ export class BenefitsService {
     }
     const benefit = await this.db.client.benefit.findUnique({
       where: { id: input.benefitId },
-      select: { isActive: true },
+      select: { isActive: true, calculation: true, defaultDailyValueCents: true },
     });
     if (!benefit?.isActive) {
       throw invalidReference('benefitId', 'Benefício não encontrado ou inativo.');
+    }
+    const daily = isDailyCalculation(benefit.calculation);
+    const dailyValueCents = daily
+      ? (optionalCents(input.dailyValue) ?? benefit.defaultDailyValueCents)
+      : null;
+    if (daily && dailyValueCents === null) {
+      throw invalidReference('dailyValue', 'Informe o valor por dia.');
     }
     if (input.startDate < employee.hireDate) {
       throw invalidReference('startDate', 'O benefício não pode começar antes da admissão.');
@@ -234,7 +266,9 @@ export class BenefitsService {
 
     const data = {
       benefitId: input.benefitId,
-      companyValueCents: toCents(input.companyValue),
+      // Por dia: o valor do mês sai do ponto (tela de VA/VT); não há valor mensal fixo.
+      companyValueCents: daily ? 0 : toCents(input.companyValue),
+      dailyValueCents,
       employeeDiscountCents: toCents(input.employeeDiscount),
       startDate: start,
       endDate: end,
@@ -306,12 +340,14 @@ export class BenefitsService {
       const {
         defaultCompanyValue: _v,
         defaultEmployeeDiscount: _d,
+        defaultDailyValue: _dv,
         ...benefit
       } = toBenefit(row.benefit);
       return {
         id: row.id,
         benefit,
         companyValue: fromCents(row.companyValueCents),
+        dailyValue: row.dailyValueCents === null ? null : fromCents(row.dailyValueCents),
         employeeDiscount: fromCents(row.employeeDiscountCents),
         startDate: fromCalendarDate(row.startDate),
         endDate: fromCalendarDate(row.endDate),

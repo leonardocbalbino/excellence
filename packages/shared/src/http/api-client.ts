@@ -126,6 +126,9 @@ import {
   usefulLinkSchema,
 } from '../benefits/benefits.schemas.js';
 import {
+  type BenefitDaysAdjustmentInput,
+  benefitDaysAdjustmentInputSchema,
+  benefitDaysSummarySchema,
   myPayrollPreviewSchema,
   payrollGenerateSchema,
   payrollPeriodDetailSchema,
@@ -510,6 +513,18 @@ export function createApiClient(options: ApiClientOptions) {
           query: { month },
           schema: unitMonthlySummarySchema,
         }),
+      /** VA e VT do mês por funcionário, com o resumo da empresa e dos postos. */
+      benefitDays: (month: string) =>
+        request('GET', '/benefit-days', { query: { month }, schema: benefitDaysSummarySchema }),
+      /** Lança (ou troca) a exceção no VA ou VT de um funcionário no mês. */
+      adjustBenefitDays: (input: BenefitDaysAdjustmentInput) =>
+        request('PUT', '/benefit-days/adjustments', {
+          body: input,
+          bodySchema: benefitDaysAdjustmentInputSchema,
+        }),
+      /** Desfaz a exceção: o valor volta a ser o calculado. */
+      removeBenefitDaysAdjustment: (id: string) =>
+        request('DELETE', `/benefit-days/adjustments/${encodeURIComponent(id)}`),
     },
     patrols: {
       mine: () => request('GET', '/me/patrols', { schema: myPatrolsSchema }),

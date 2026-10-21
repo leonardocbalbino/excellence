@@ -1,6 +1,10 @@
 import { Controller, Delete, Get, HttpCode, HttpStatus, Post, Put, Res } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiProduces, ApiTags } from '@nestjs/swagger';
 import {
+  benefitDaysAdjustmentInputSchema,
+  benefitDaysQuerySchema,
+  type BenefitDaysSummary,
+  benefitDaysSummarySchema,
   type MyPayrollPreview,
   myPayrollPreviewSchema,
   payrollGenerateSchema,
@@ -24,10 +28,53 @@ import {
   AnyAuthenticated,
   RequirePermission,
 } from '../../access-control/http/access.decorators';
+import { BenefitDaysService } from '../application/benefit-days.service';
 import { PayrollService } from '../application/payroll.service';
 import { ScheduleRatesService } from '../application/schedule-rates.service';
 
 const idParam = z.uuid();
+
+/** VA e VT calculados por dia pelo ponto, com as exceções antes do fechamento (ADR 0021). */
+@ApiTags('payroll')
+@ApiBearerAuth()
+@Controller('benefit-days')
+export class BenefitDaysController {
+  constructor(private readonly benefitDays: BenefitDaysService) {}
+
+  @Get()
+  @RequirePermission('payroll:manage')
+  @ApiOperation({ summary: 'VA e VT do mês por funcionário, com o resumo da empresa e dos postos' })
+  @ZodResponse(HttpStatus.OK, benefitDaysSummarySchema)
+  summary(
+    @ZodQuery(benefitDaysQuerySchema) query: z.output<typeof benefitDaysQuerySchema>,
+    @Access() grant: AccessGrant,
+  ): Promise<BenefitDaysSummary> {
+    return this.benefitDays.summary(query.month, grant);
+  }
+
+  @Put('adjustments')
+  @RequirePermission('payroll:manage')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Lança (ou troca) a exceção no VA ou VT de um funcionário no mês' })
+  adjust(
+    @ZodBody(benefitDaysAdjustmentInputSchema)
+    body: z.output<typeof benefitDaysAdjustmentInputSchema>,
+    @Access() grant: AccessGrant,
+  ): Promise<void> {
+    return this.benefitDays.adjust(body, grant);
+  }
+
+  @Delete('adjustments/:id')
+  @RequirePermission('payroll:manage')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Desfaz a exceção (volta ao valor calculado)' })
+  removeAdjustment(
+    @ZodParam('id', idParam) id: string,
+    @Access() grant: AccessGrant,
+  ): Promise<void> {
+    return this.benefitDays.removeAdjustment(id, grant);
+  }
+}
 
 @ApiTags('payroll')
 @ApiBearerAuth()

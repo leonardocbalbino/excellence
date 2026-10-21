@@ -33,7 +33,11 @@ export default function BenefitsScreen() {
           {item.benefit.description ? <Label>{item.benefit.description}</Label> : null}
           <View style={styles.row}>
             <Label tone="muted">Pago pela empresa</Label>
-            <Label style={{ fontWeight: '700' }}>{formatBRL(item.companyValue)}/mês</Label>
+            <Label style={{ fontWeight: '700' }}>
+              {item.dailyValue !== null
+                ? `${formatBRL(item.dailyValue)}/dia`
+                : `${formatBRL(item.companyValue)}/mês`}
+            </Label>
           </View>
           <View style={styles.row}>
             <Label tone="muted">Seu desconto</Label>

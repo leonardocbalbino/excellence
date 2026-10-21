@@ -1,6 +1,9 @@
 import {
   type Benefit,
+  BENEFIT_CALCULATION_LABELS,
   BENEFIT_KIND_LABELS,
+  benefitCalculationSchema,
+  isDailyCalculation,
   type BenefitInput,
   benefitInputSchema,
   benefitKindSchema,
@@ -50,10 +53,28 @@ export function BenefitsCatalogPage() {
             hint: 'Cartão, aplicativo, rede credenciada, contato…',
           },
           {
+            name: 'calculation',
+            label: 'Regra de cálculo',
+            kind: 'select',
+            options: benefitCalculationSchema.options.map((c) => ({
+              value: c,
+              label: BENEFIT_CALCULATION_LABELS[c],
+            })),
+            hint: 'Por dia: só VA e VT. O valor do mês sai do ponto (Remuneração › VA/VT).',
+          },
+          {
+            name: 'defaultDailyValue',
+            label: 'Valor diário sugerido (R$/dia)',
+            kind: 'number',
+            optional: true,
+            hint: 'Só para cálculo por dia. Pode mudar por funcionário.',
+          },
+          {
             name: 'defaultCompanyValue',
             label: 'Valor sugerido pago pela empresa (R$/mês)',
             kind: 'number',
             optional: true,
+            hint: 'Só para valor fixo por mês.',
           },
           {
             name: 'defaultEmployeeDiscount',
@@ -65,7 +86,14 @@ export function BenefitsCatalogPage() {
         columns: [
           { header: 'Tipo', cell: (b) => BENEFIT_KIND_LABELS[b.kind] },
           { header: 'Fornecedor', cell: (b) => b.provider ?? '—' },
-          { header: 'Valor sugerido', cell: (b) => formatBRL(b.defaultCompanyValue) },
+          { header: 'Cálculo', cell: (b) => BENEFIT_CALCULATION_LABELS[b.calculation] },
+          {
+            header: 'Valor sugerido',
+            cell: (b) =>
+              isDailyCalculation(b.calculation)
+                ? `${formatBRL(b.defaultDailyValue)}/dia`
+                : formatBRL(b.defaultCompanyValue),
+          },
         ],
         defaults: (b) => ({
           name: b?.name ?? '',
@@ -73,6 +101,8 @@ export function BenefitsCatalogPage() {
           provider: b?.provider ?? null,
           description: b?.description ?? null,
           howToUse: b?.howToUse ?? null,
+          calculation: b?.calculation ?? 'monthly',
+          defaultDailyValue: b?.defaultDailyValue ?? null,
           defaultCompanyValue: b?.defaultCompanyValue ?? null,
           defaultEmployeeDiscount: b?.defaultEmployeeDiscount ?? null,
           isActive: b?.isActive ?? true,

@@ -53,8 +53,9 @@ export function MyBenefitsPage() {
           </h2>
           {benefits.data && benefits.data.length > 0 ? (
             <p className="text-sm text-muted-foreground">
-              A empresa investe <strong>{formatBRL(totalCompany)}</strong>/mês · seu desconto{' '}
-              <strong>{formatBRL(totalDiscount)}</strong>/mês
+              A empresa investe <strong>{formatBRL(totalCompany)}</strong>/mês
+              {benefits.data.some((b) => b.dailyValue !== null) ? ' (mais VA/VT por dia)' : ''} ·
+              seu desconto <strong>{formatBRL(totalDiscount)}</strong>/mês
             </p>
           ) : null}
         </div>
@@ -92,7 +93,11 @@ export function MyBenefitsPage() {
                 <dl className="grid grid-cols-2 gap-2 rounded-lg bg-muted/50 p-3 text-sm">
                   <div>
                     <dt className="text-muted-foreground">Pago pela empresa</dt>
-                    <dd className="font-semibold">{formatBRL(item.companyValue)}/mês</dd>
+                    <dd className="font-semibold">
+                      {item.dailyValue !== null
+                        ? `${formatBRL(item.dailyValue)} por dia trabalhado`
+                        : `${formatBRL(item.companyValue)}/mês`}
+                    </dd>
                   </div>
                   <div>
                     <dt className="text-muted-foreground">Seu desconto</dt>
