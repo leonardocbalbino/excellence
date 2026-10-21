@@ -22,6 +22,7 @@ import {
   SendIcon,
   ShieldCheckIcon,
   StethoscopeIcon,
+  TicketIcon,
   UserRoundIcon,
   UsersIcon,
   WalletIcon,
@@ -106,6 +107,12 @@ export const MANAGEMENT_NAV: readonly NavSection[] = [
         label: 'Folha de pagamento',
         to: '/gestao/folha',
         icon: WalletIcon,
+        permission: 'payroll:manage',
+      },
+      {
+        label: 'VA/VT',
+        to: '/gestao/va-vt',
+        icon: TicketIcon,
         permission: 'payroll:manage',
       },
       {

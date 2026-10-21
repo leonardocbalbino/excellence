@@ -1,4 +1,4 @@
-import { BENEFIT_KIND_LABELS, type EmployeeBenefit } from '@excellence/shared';
+import { BENEFIT_KIND_LABELS, type EmployeeBenefit, isDailyCalculation } from '@excellence/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { GiftIcon, PlusIcon, Trash2Icon } from 'lucide-react';
 import { useState } from 'react';
@@ -31,12 +31,17 @@ export function EmployeeBenefitsPanel({ employeeId }: { employeeId: string }) {
   const [discount, setDiscount] = useState('');
   const [startDate, setStartDate] = useState(todayIso());
   const refresh = () => queryClient.invalidateQueries({ queryKey: key });
+  const chosen = catalog.data?.find((b) => b.id === benefitId);
+  // VA/VT por dia: informa-se o valor diário; o valor do mês sai do ponto.
+  const daily = chosen ? isDailyCalculation(chosen.calculation) : false;
 
   const assign = useMutation({
     mutationFn: () =>
       api.benefits.assign(employeeId, {
         benefitId,
-        companyValue: numberOrNull(companyValue) ?? 0,
+        ...(daily
+          ? { dailyValue: numberOrNull(companyValue) }
+          : { companyValue: numberOrNull(companyValue) ?? 0 }),
         employeeDiscount: numberOrNull(discount) ?? 0,
         startDate,
       }),
@@ -54,6 +59,7 @@ export function EmployeeBenefitsPanel({ employeeId }: { employeeId: string }) {
       api.benefits.updateAssignment(employeeId, item.id, {
         benefitId: item.benefit.id,
         companyValue: item.companyValue,
+        dailyValue: item.dailyValue,
         employeeDiscount: item.employeeDiscount,
         startDate: item.startDate,
         endDate:
@@ -100,8 +106,11 @@ export function EmployeeBenefitsPanel({ employeeId }: { employeeId: string }) {
                     · {BENEFIT_KIND_LABELS[item.benefit.kind]}
                   </span>
                   <span className="block text-xs text-muted-foreground">
-                    Empresa {formatBRL(item.companyValue)} · desconto{' '}
-                    {formatBRL(item.employeeDiscount)} · desde {formatDate(item.startDate)}
+                    {item.dailyValue !== null
+                      ? `${formatBRL(item.dailyValue)}/dia trabalhado`
+                      : `Empresa ${formatBRL(item.companyValue)}`}{' '}
+                    · desconto {formatBRL(item.employeeDiscount)} · desde{' '}
+                    {formatDate(item.startDate)}
                     {item.endDate ? ` até ${formatDate(item.endDate)}` : ''}
                   </span>
                 </span>
@@ -152,15 +161,19 @@ export function EmployeeBenefitsPanel({ employeeId }: { employeeId: string }) {
               value={benefitId}
               onChange={(e) => {
                 setBenefitId(e.target.value);
-                const chosen = catalog.data?.find((b) => b.id === e.target.value);
+                const next = catalog.data?.find((b) => b.id === e.target.value);
+                const suggested =
+                  next && isDailyCalculation(next.calculation)
+                    ? next.defaultDailyValue
+                    : next?.defaultCompanyValue;
                 setCompanyValue(
-                  chosen && chosen.defaultCompanyValue !== null
-                    ? String(chosen.defaultCompanyValue).replace('.', ',')
+                  suggested !== null && suggested !== undefined
+                    ? String(suggested).replace('.', ',')
                     : '',
                 );
                 setDiscount(
-                  chosen && chosen.defaultEmployeeDiscount !== null
-                    ? String(chosen.defaultEmployeeDiscount).replace('.', ',')
+                  next && next.defaultEmployeeDiscount !== null
+                    ? String(next.defaultEmployeeDiscount).replace('.', ',')
                     : '',
                 );
               }}
@@ -183,7 +196,9 @@ export function EmployeeBenefitsPanel({ employeeId }: { employeeId: string }) {
             />
           </div>
           <div className="grid gap-1.5">
-            <Label htmlFor="benefit-value">Valor pago pela empresa (R$/mês)</Label>
+            <Label htmlFor="benefit-value">
+              {daily ? 'Valor por dia trabalhado (R$/dia)' : 'Valor pago pela empresa (R$/mês)'}
+            </Label>
             <Input
               id="benefit-value"
               inputMode="decimal"

@@ -153,6 +153,11 @@ export const routes: RouteObject[] = [
             'payroll:manage',
           ),
           management(
+            'gestao/va-vt',
+            async () => (await import('@/features/payroll/benefit-days-page')).BenefitDaysPage,
+            'payroll:manage',
+          ),
+          management(
             'gestao/beneficios',
             async () =>
               (await import('@/features/benefits/benefits-catalog-page')).BenefitsCatalogPage,

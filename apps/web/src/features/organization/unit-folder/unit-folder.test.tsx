@@ -91,6 +91,7 @@ const summary: UnitMonthlySummary = {
         shifts: 8,
         total: 1440,
       },
+      dailyBenefits: { food: null, transport: null, total: 0 },
     },
   ],
   totals: {

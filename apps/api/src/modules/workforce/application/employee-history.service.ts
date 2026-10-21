@@ -175,8 +175,13 @@ export class EmployeeHistoryService {
             brDate(meta.startDate) ? `desde ${String(brDate(meta.startDate))}` : null,
             brDate(meta.endDate) ? `até ${String(brDate(meta.endDate))}` : null,
           ];
+          // VA/VT por dia: o valor do mês sai do ponto; o que foi cadastrado é o valor diário.
+          const company =
+            typeof meta.dailyValue === 'number'
+              ? `${money(meta.dailyValue)}/dia`
+              : `empresa ${money(meta.companyValue)}`;
           const values = canSeeBenefitValues
-            ? `empresa ${money(meta.companyValue)}, desconto ${money(meta.employeeDiscount)}`
+            ? `${company}, desconto ${money(meta.employeeDiscount)}`
             : null;
           push(
             {

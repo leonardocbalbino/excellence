@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { calendarDateSchema, moneySchema } from '../br/fields.js';
-import { benefitKindSchema } from '../benefits/benefits.schemas.js';
+import { benefitKindSchema, dailyBenefitKindSchema } from '../benefits/benefits.schemas.js';
 import { medicalCertificateStatusSchema } from '../medical/medical-certificates.schemas.js';
 import { monthSchema } from '../time-tracking/time-tracking.schemas.js';
 
@@ -47,6 +47,43 @@ export const shiftPaySchema = z.object({
 });
 export type ShiftPay = z.infer<typeof shiftPaySchema>;
 
+// ─── VA/VT por dia (ADR 0021) ───────────────────────────────────────────────────────
+
+/** Valores calculados pelo ponto e pelas regras do benefício, antes de qualquer ajuste. */
+const dailyBenefitAmountsSchema = z.object({
+  days: z.number().int(),
+  /** Valor-base diário. Com mais de um benefício do tipo (ex.: ônibus + metrô), a soma. */
+  dailyValue: z.number(),
+  total: z.number(),
+});
+
+/**
+ * VA ou VT do funcionário no mês. `days`, `dailyValue` e `total` são os valores que valem
+ * (com o ajuste, se houver); `calculated` guarda o que o sistema calculou.
+ */
+export const dailyBenefitLineSchema = dailyBenefitAmountsSchema.extend({
+  calculated: dailyBenefitAmountsSchema,
+  /** Exceção lançada pelo RH antes do fechamento; o que não foi informado segue o cálculo. */
+  adjustment: z
+    .object({
+      id: z.uuid(),
+      days: z.number().int().nullable(),
+      dailyValue: z.number().nullable(),
+      reason: z.string(),
+    })
+    .nullable(),
+});
+export type DailyBenefitLine = z.infer<typeof dailyBenefitLineSchema>;
+
+/** VA e VT do mês; null = o funcionário não tem o benefício no mês (nem ajuste). */
+export const dailyBenefitsSchema = z.object({
+  food: dailyBenefitLineSchema.nullable(),
+  transport: dailyBenefitLineSchema.nullable(),
+  /** VA + VT. */
+  total: z.number(),
+});
+export type DailyBenefits = z.infer<typeof dailyBenefitsSchema>;
+
 export const payrollItemSchema = z.object({
   employee: z.object({
     id: z.uuid(),
@@ -82,10 +119,13 @@ export const payrollItemSchema = z.object({
       employeeDiscount: z.number(),
     }),
   ),
+  /** Inclui o VA e o VT do mês (`dailyBenefits.total`). */
   benefitsCompanyTotal: z.number(),
   benefitsDiscountTotal: z.number(),
   /** Fechamentos gerados antes dos valores por plantão não têm o campo. */
   shiftPay: shiftPaySchema.default({ lines: [], shifts: 0, total: 0 }),
+  /** Fechamentos gerados antes do VA/VT por dia não têm o campo. */
+  dailyBenefits: dailyBenefitsSchema.default({ food: null, transport: null, total: 0 }),
 });
 export type PayrollItem = z.infer<typeof payrollItemSchema>;
 
@@ -185,3 +225,60 @@ export const unitMonthlySummarySchema = z.object({
   ),
 });
 export type UnitMonthlySummary = z.infer<typeof unitMonthlySummarySchema>;
+
+// ─── Tela de VA/VT (ADR 0021) ───────────────────────────────────────────────────────
+
+export const benefitDaysQuerySchema = z.object({ month: monthSchema });
+
+const dailyBenefitTotalsSchema = z.object({ days: z.number().int(), total: z.number() });
+
+const benefitDaysTotalsSchema = z.object({
+  employees: z.number().int(),
+  food: dailyBenefitTotalsSchema,
+  transport: dailyBenefitTotalsSchema,
+  /** VA + VT. */
+  total: z.number(),
+});
+
+/**
+ * VA e VT do mês de cada funcionário, com o total geral e o resumo da empresa e de cada
+ * posto. Mês aberto: calculado na hora. Mês fechado: os valores congelados no fechamento.
+ */
+export const benefitDaysSummarySchema = z.object({
+  month: monthSchema,
+  cutoffDate: calendarDateSchema,
+  period: z.object({ id: z.uuid(), status: payrollStatusSchema }).nullable(),
+  rows: z.array(
+    z.object({
+      employee: z.object({ id: z.uuid(), name: z.string(), registrationNumber: z.string() }),
+      unit: z.string(),
+      food: dailyBenefitLineSchema.nullable(),
+      transport: dailyBenefitLineSchema.nullable(),
+      total: z.number(),
+    }),
+  ),
+  /** Resumo mensal da empresa. */
+  totals: benefitDaysTotalsSchema,
+  /** O mesmo resumo por posto de trabalho. */
+  units: z.array(benefitDaysTotalsSchema.extend({ unit: z.string() })),
+});
+export type BenefitDaysSummary = z.infer<typeof benefitDaysSummarySchema>;
+
+/**
+ * Exceção no VA ou VT de um funcionário no mês. O que ficar vazio segue o cálculo; o total
+ * é sempre dias × valor diário. Só antes do fechamento.
+ */
+export const benefitDaysAdjustmentInputSchema = z
+  .object({
+    employeeId: z.uuid(),
+    month: monthSchema,
+    kind: dailyBenefitKindSchema,
+    days: z.number().int().min(0).max(31).nullish(),
+    dailyValue: moneySchema.nullish(),
+    reason: z.string().trim().min(3, 'Informe o motivo').max(500),
+  })
+  .refine((v) => (v.days ?? null) !== null || (v.dailyValue ?? null) !== null, {
+    path: ['days'],
+    message: 'Informe os dias ou o valor diário',
+  });
+export type BenefitDaysAdjustmentInput = z.input<typeof benefitDaysAdjustmentInputSchema>;

@@ -489,6 +489,7 @@ const SEED_BENEFITS = {
   transporte: '01900000-0000-7000-8000-000000000c01',
   refeicao: '01900000-0000-7000-8000-000000000c02',
   saude: '01900000-0000-7000-8000-000000000c03',
+  alimentacao: '01900000-0000-7000-8000-000000000c04',
 } as const;
 
 /** Salários dos cargos, benefícios atribuídos e links úteis (ADR 0017). */
@@ -515,7 +516,18 @@ async function seedBenefitsAndPayroll(prisma: PrismaClient): Promise<void> {
       provider: 'Transporte coletivo de São Luís',
       description: 'Deslocamento casa–trabalho. Desconto de até 6% do salário base.',
       howToUse: 'O crédito cai no seu cartão de transporte no primeiro dia útil do mês.',
-      defaultCompanyValueCents: 22_000,
+      calculation: 'per_worked_day' as const,
+      defaultDailyValueCents: 1_000,
+    },
+    {
+      id: SEED_BENEFITS.alimentacao,
+      name: 'Vale-alimentação',
+      kind: 'food' as const,
+      provider: 'Cartão alimentação',
+      description: 'R$ 25 por dia trabalhado, creditado no cartão.',
+      howToUse: 'Use o cartão em supermercados credenciados. Saldo no aplicativo do cartão.',
+      calculation: 'per_worked_day' as const,
+      defaultDailyValueCents: 2_500,
     },
     {
       id: SEED_BENEFITS.refeicao,
@@ -544,24 +556,48 @@ async function seedBenefitsAndPayroll(prisma: PrismaClient): Promise<void> {
     });
   }
 
-  // Todos os funcionários com cadastro recebem os três benefícios desde a admissão.
+  // Todos os funcionários com cadastro recebem os benefícios desde a admissão (VA e VT por
+  // dia trabalhado; os outros com valor fixo por mês).
+  const assignments = [
+    {
+      benefitId: SEED_BENEFITS.transporte,
+      companyValueCents: 0,
+      dailyValueCents: 1_000,
+      employeeDiscountCents: 14_100,
+    },
+    {
+      benefitId: SEED_BENEFITS.alimentacao,
+      companyValueCents: 0,
+      dailyValueCents: 2_500,
+      employeeDiscountCents: 0,
+    },
+    {
+      benefitId: SEED_BENEFITS.refeicao,
+      companyValueCents: 77_000,
+      dailyValueCents: null,
+      employeeDiscountCents: 0,
+    },
+    {
+      benefitId: SEED_BENEFITS.saude,
+      companyValueCents: 45_000,
+      dailyValueCents: null,
+      employeeDiscountCents: 6_000,
+    },
+  ];
   for (const employee of SEED_EMPLOYEES) {
-    if ((await prisma.employeeBenefit.count({ where: { employeeId: employee.id } })) > 0) continue;
-    await prisma.employeeBenefit.createMany({
-      data: [
-        [SEED_BENEFITS.transporte, 22_000, 14_100],
-        [SEED_BENEFITS.refeicao, 77_000, 0],
-        [SEED_BENEFITS.saude, 45_000, 6_000],
-      ].map(([benefitId, companyValueCents, employeeDiscountCents]) => ({
-        companyId,
-        employeeId: employee.id,
-        benefitId: String(benefitId),
-        companyValueCents: Number(companyValueCents),
-        employeeDiscountCents: Number(employeeDiscountCents),
-        startDate: date(employee.hireDate),
-        createdBy: SEED_USERS[1].id,
-      })),
-    });
+    for (const assignment of assignments) {
+      const where = { employeeId: employee.id, benefitId: assignment.benefitId };
+      if ((await prisma.employeeBenefit.count({ where })) > 0) continue;
+      await prisma.employeeBenefit.create({
+        data: {
+          ...assignment,
+          companyId,
+          employeeId: employee.id,
+          startDate: date(employee.hireDate),
+          createdBy: SEED_USERS[1].id,
+        },
+      });
+    }
   }
 
   const links = [

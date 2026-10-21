@@ -1,5 +1,6 @@
 import { HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
 import {
+  BENEFIT_KIND_LABELS,
   fromCents,
   type MyPayrollPreview,
   type PayrollItem,
@@ -7,6 +8,7 @@ import {
   type PayrollPeriod,
   type PayrollPeriodDetail,
   ProblemType,
+  toCents,
   type UnitMonthlySummary,
 } from '@excellence/shared';
 import { ProblemException } from '../../../common/errors/problem.exception';
@@ -18,6 +20,7 @@ import { CompanyService } from '../../organization/application/company.service';
 import { addDays } from '../../scheduling/domain/planner';
 import { TimeTrackingService } from '../../time-tracking/application/time-tracking.service';
 import { fromCalendarDate, toCalendarDate, todayIn } from '../../workforce/domain/calendar';
+import { type DailyAssignment, summarizeDailyBenefits } from '../domain/daily-benefits';
 import { payrollCsv } from '../domain/export-csv';
 import { cutoffDate, summarizeDays } from '../domain/month-summary';
 import { ratesForMonth, summarizeShiftPay } from '../domain/shift-pay';
@@ -60,7 +63,7 @@ function toPeriod(row: PeriodRow): PayrollPeriod {
   };
 }
 
-function closed(): ProblemException {
+export function closed(): ProblemException {
   return new ProblemException({
     type: ProblemType.PayrollClosed,
     title: 'Conflict',
@@ -227,12 +230,9 @@ export class PayrollService {
     });
     if (!unit) throw new NotFoundException('Posto de trabalho não encontrado.');
 
-    const today = todayIn(await this.company.timezone());
     const first = `${month}-01`;
     const last = lastDayOf(month);
-    // Mês que ainda não começou: não há o que contar no ponto.
-    const cutoff = first > today ? addDays(first, -1) : cutoffDate(month, today);
-    const items = await this.buildItems(month, first, last, cutoff, grant, unitId);
+    const { cutoff, items } = await this.preview(month, grant, unitId);
     const [period, certificates, changes] = await Promise.all([
       this.db.client.payrollPeriod.findUnique({
         where: { companyId_month: { companyId: grant.companyId, month } },
@@ -302,6 +302,23 @@ export class PayrollService {
         startDate: fromCalendarDate(row.startDate),
       })),
     };
+  }
+
+  /**
+   * O consolidado do mês calculado na hora, sem gravar nada (resumo do posto, tela de
+   * VA/VT). Mês que ainda não começou: não há o que contar no ponto.
+   */
+  async preview(
+    month: string,
+    grant: AccessGrant,
+    unitId?: string,
+  ): Promise<{ cutoff: string; items: PayrollItem[] }> {
+    assertCompanyWide(grant);
+    const today = todayIn(await this.company.timezone());
+    const first = `${month}-01`;
+    const cutoff = first > today ? addDays(first, -1) : cutoffDate(month, today);
+    const items = await this.buildItems(month, first, lastDayOf(month), cutoff, grant, unitId);
+    return { cutoff, items };
   }
 
   /** Prévias do próprio funcionário (meses publicados ou fechados). */
@@ -405,10 +422,24 @@ export class PayrollService {
           },
           select: {
             companyValueCents: true,
+            dailyValueCents: true,
             employeeDiscountCents: true,
-            benefit: { select: { name: true, kind: true } },
+            startDate: true,
+            endDate: true,
+            benefit: { select: { name: true, kind: true, calculation: true } },
           },
         },
+      },
+    });
+    const adjustments = await this.db.client.benefitDayAdjustment.findMany({
+      where: { month, employeeId: { in: employees.map((e) => e.id) } },
+      select: {
+        id: true,
+        employeeId: true,
+        kind: true,
+        days: true,
+        dailyValueCents: true,
+        reason: true,
       },
     });
 
@@ -440,12 +471,57 @@ export class PayrollService {
         rates.get(employee.unitId) ?? new Map(),
       );
       const salaryCents = employee.position?.baseSalaryCents ?? null;
-      const benefits = employee.benefits.map((b) => ({
-        name: b.benefit.name,
-        kind: b.benefit.kind,
-        companyValue: fromCents(b.companyValueCents),
-        employeeDiscount: fromCents(b.employeeDiscountCents),
-      }));
+      const monthly = employee.benefits.filter((b) => b.benefit.calculation === 'monthly');
+      const daily = employee.benefits.flatMap(
+        (b): (DailyAssignment & { discountCents: number })[] =>
+          b.benefit.calculation !== 'monthly' &&
+          (b.benefit.kind === 'food' || b.benefit.kind === 'transport')
+            ? [
+                {
+                  kind: b.benefit.kind,
+                  calculation: b.benefit.calculation,
+                  startDate: fromCalendarDate(b.startDate),
+                  endDate: fromCalendarDate(b.endDate),
+                  dailyValueCents: b.dailyValueCents ?? 0,
+                  discountCents: b.employeeDiscountCents,
+                },
+              ]
+            : [],
+      );
+      const dailyBenefits = summarizeDailyBenefits(
+        timesheet.days,
+        from,
+        to,
+        daily,
+        adjustments.flatMap((a) =>
+          a.employeeId === employee.id && (a.kind === 'food' || a.kind === 'transport')
+            ? [{ ...a, kind: a.kind }]
+            : [],
+        ),
+      );
+      // VA e VT entram na lista de benefícios com o valor do mês (dias × valor diário).
+      const benefits = [
+        ...monthly.map((b) => ({
+          name: b.benefit.name,
+          kind: b.benefit.kind,
+          companyValue: fromCents(b.companyValueCents),
+          employeeDiscount: fromCents(b.employeeDiscountCents),
+        })),
+        ...(['food', 'transport'] as const).flatMap((kind) => {
+          const line = dailyBenefits[kind];
+          if (!line) return [];
+          return [
+            {
+              name: `${BENEFIT_KIND_LABELS[kind]} (${line.days} ${line.days === 1 ? 'dia' : 'dias'})`,
+              kind,
+              companyValue: line.total,
+              employeeDiscount: fromCents(
+                daily.filter((a) => a.kind === kind).reduce((sum, a) => sum + a.discountCents, 0),
+              ),
+            },
+          ];
+        }),
+      ];
       items.push({
         employee: {
           id: employee.id,
@@ -462,12 +538,13 @@ export class PayrollService {
         ...totals,
         benefits,
         benefitsCompanyTotal: fromCents(
-          employee.benefits.reduce((sum, b) => sum + b.companyValueCents, 0),
+          benefits.reduce((sum, b) => sum + toCents(b.companyValue), 0),
         ),
         benefitsDiscountTotal: fromCents(
           employee.benefits.reduce((sum, b) => sum + b.employeeDiscountCents, 0),
         ),
         shiftPay,
+        dailyBenefits,
       });
     }
     return items;
