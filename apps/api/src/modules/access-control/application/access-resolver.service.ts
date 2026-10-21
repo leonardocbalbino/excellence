@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { isPermission, type Permission, type RoleScope } from '@excellence/shared';
+import { isPermission, type Permission, PERMISSION_KEYS, type RoleScope } from '@excellence/shared';
 import { PrismaService } from '../../../infrastructure/prisma/prisma.service';
 import { type DataScope, mergeScopes, toRoleScope } from '../domain/data-scope';
 
@@ -33,6 +33,7 @@ export class AccessResolver {
         isActive: true,
         mfaEnabled: true,
         mustChangePassword: true,
+        isSuperAdmin: true,
         userRoles: {
           select: {
             role: {
@@ -66,6 +67,11 @@ export class AccessResolver {
     const permissions = new Map<Permission, DataScope>();
     for (const [permission, scopes] of scopesByPermission)
       permissions.set(permission, mergeScopes(scopes));
+    // Super admin (desenvolvedor): todo o catálogo, com escopo de empresa.
+    if (user.isSuperAdmin) {
+      const companyWide = mergeScopes([{ type: 'company' }]);
+      for (const permission of PERMISSION_KEYS) permissions.set(permission, companyWide);
+    }
 
     return {
       userId,
