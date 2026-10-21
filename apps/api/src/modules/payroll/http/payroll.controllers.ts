@@ -49,7 +49,7 @@ export class BenefitDaysController {
     @ZodQuery(benefitDaysQuerySchema) query: z.output<typeof benefitDaysQuerySchema>,
     @Access() grant: AccessGrant,
   ): Promise<BenefitDaysSummary> {
-    return this.benefitDays.summary(query.month, grant);
+    return this.benefitDays.summary(query.month, grant, query.employeeId);
   }
 
   @Put('adjustments')

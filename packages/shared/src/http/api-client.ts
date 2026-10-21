@@ -514,8 +514,11 @@ export function createApiClient(options: ApiClientOptions) {
           schema: unitMonthlySummarySchema,
         }),
       /** VA e VT do mês por funcionário, com o resumo da empresa e dos postos. */
-      benefitDays: (month: string) =>
-        request('GET', '/benefit-days', { query: { month }, schema: benefitDaysSummarySchema }),
+      benefitDays: (month: string, employeeId?: string) =>
+        request('GET', '/benefit-days', {
+          query: { month, ...(employeeId ? { employeeId } : {}) },
+          schema: benefitDaysSummarySchema,
+        }),
       /** Lança (ou troca) a exceção no VA ou VT de um funcionário no mês. */
       adjustBenefitDays: (input: BenefitDaysAdjustmentInput) =>
         request('PUT', '/benefit-days/adjustments', {
