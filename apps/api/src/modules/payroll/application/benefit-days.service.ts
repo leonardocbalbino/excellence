@@ -49,7 +49,11 @@ export class BenefitDaysService {
     private readonly payroll: PayrollService,
   ) {}
 
-  async summary(month: string, grant: AccessGrant): Promise<BenefitDaysSummary> {
+  async summary(
+    month: string,
+    grant: AccessGrant,
+    employeeId?: string,
+  ): Promise<BenefitDaysSummary> {
     assertCompanyWide(grant);
     const period = await this.db.client.payrollPeriod.findUnique({
       where: { companyId_month: { companyId: grant.companyId, month } },
@@ -57,10 +61,11 @@ export class BenefitDaysService {
     });
     const { cutoff, items } =
       period?.status === 'closed'
-        ? await this.payroll
-            .get(period.id)
-            .then((detail) => ({ cutoff: detail.cutoffDate, items: detail.items }))
-        : await this.payroll.preview(month, grant);
+        ? await this.payroll.get(period.id).then((detail) => ({
+            cutoff: detail.cutoffDate,
+            items: detail.items.filter((i) => !employeeId || i.employee.id === employeeId),
+          }))
+        : await this.payroll.preview(month, grant, employeeId ? { employeeId } : {});
 
     const totals = emptyTotals();
     const units = new Map<string, Totals>();

@@ -72,6 +72,12 @@ export function closed(): ProblemException {
   });
 }
 
+/** Restringe o consolidado a um posto ou a um funcionário. */
+export interface ItemsFilter {
+  unitId?: string;
+  employeeId?: string;
+}
+
 function lastDayOf(month: string): string {
   return addDays(addDays(`${month}-01`, 32).slice(0, 8) + '01', -1);
 }
@@ -232,7 +238,7 @@ export class PayrollService {
 
     const first = `${month}-01`;
     const last = lastDayOf(month);
-    const { cutoff, items } = await this.preview(month, grant, unitId);
+    const { cutoff, items } = await this.preview(month, grant, { unitId });
     const [period, certificates, changes] = await Promise.all([
       this.db.client.payrollPeriod.findUnique({
         where: { companyId_month: { companyId: grant.companyId, month } },
@@ -311,13 +317,13 @@ export class PayrollService {
   async preview(
     month: string,
     grant: AccessGrant,
-    unitId?: string,
+    only: ItemsFilter = {},
   ): Promise<{ cutoff: string; items: PayrollItem[] }> {
     assertCompanyWide(grant);
     const today = todayIn(await this.company.timezone());
     const first = `${month}-01`;
     const cutoff = first > today ? addDays(first, -1) : cutoffDate(month, today);
-    const items = await this.buildItems(month, first, lastDayOf(month), cutoff, grant, unitId);
+    const items = await this.buildItems(month, first, lastDayOf(month), cutoff, grant, only);
     return { cutoff, items };
   }
 
@@ -394,11 +400,12 @@ export class PayrollService {
     last: string,
     cutoff: string,
     grant: AccessGrant,
-    unitId?: string,
+    only: ItemsFilter = {},
   ): Promise<PayrollItem[]> {
     const employees = await this.db.client.employee.findMany({
       where: {
-        ...(unitId ? { unitId } : {}),
+        ...(only.unitId ? { unitId: only.unitId } : {}),
+        ...(only.employeeId ? { id: only.employeeId } : {}),
         hireDate: { lte: toCalendarDate(last) },
         OR: [{ terminationDate: null }, { terminationDate: { gte: toCalendarDate(first) } }],
       },

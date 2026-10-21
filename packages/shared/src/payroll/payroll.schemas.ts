@@ -228,7 +228,11 @@ export type UnitMonthlySummary = z.infer<typeof unitMonthlySummarySchema>;
 
 // ─── Tela de VA/VT (ADR 0021) ───────────────────────────────────────────────────────
 
-export const benefitDaysQuerySchema = z.object({ month: monthSchema });
+export const benefitDaysQuerySchema = z.object({
+  month: monthSchema,
+  /** Só um funcionário (ex.: o valor do mês no cadastro dele). */
+  employeeId: z.uuid().optional(),
+});
 
 const dailyBenefitTotalsSchema = z.object({ days: z.number().int(), total: z.number() });
 
