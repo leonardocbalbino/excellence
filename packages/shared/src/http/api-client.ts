@@ -33,7 +33,10 @@ import {
   problemDetailsSchema,
 } from '../errors/problem-details.js';
 import {
+  type AvatarInput,
+  avatarInputSchema,
   downloadLinkSchema,
+  myAvatarSchema,
   storedFileSchema,
   type UploadRequest,
   uploadRequestSchema,
@@ -453,6 +456,17 @@ export function createApiClient(options: ApiClientOptions) {
           schema: conversationSummarySchema,
         }),
       unread: () => request('GET', '/conversations/unread', { schema: conversationUnreadSchema }),
+    },
+    profile: {
+      /** Link temporário da foto de perfil do usuário logado (null = sem foto). */
+      avatar: () => request('GET', '/me/avatar', { schema: myAvatarSchema }),
+      setAvatar: (input: AvatarInput) =>
+        request('PUT', '/me/avatar', {
+          body: input,
+          bodySchema: avatarInputSchema,
+          schema: myAvatarSchema,
+        }),
+      removeAvatar: () => request('DELETE', '/me/avatar'),
     },
     push: {
       /** Registra o aparelho para receber notificações (app mobile). */

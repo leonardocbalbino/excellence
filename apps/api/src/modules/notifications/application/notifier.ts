@@ -1,3 +1,4 @@
+import { formatTicketNumber } from '@excellence/shared';
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../../infrastructure/prisma/prisma.service';
 import { PushSender } from './push-sender';
@@ -90,6 +91,22 @@ export class Notifier {
           ? 'Seu atestado foi analisado e aceito pelo RH.'
           : 'Seu atestado foi analisado e não foi aceito. Fale com o RH para entender.',
       data: { kind: 'certificate_reviewed', url: '/espelho' },
+    });
+  }
+
+  /** Resposta do RH num chamado: o toque abre a conversa no app. */
+  async conversationReplied(
+    companyId: string,
+    employeeId: string,
+    conversation: { id: string; number: number; subject: string; preview: string },
+  ): Promise<void> {
+    await this.toEmployee(companyId, employeeId, {
+      title: `RH respondeu o chamado ${formatTicketNumber(conversation.number)}`,
+      body:
+        conversation.preview.length > 120
+          ? `${conversation.preview.slice(0, 117)}…`
+          : conversation.preview,
+      data: { kind: 'conversation_reply', url: `/atendimento/${conversation.id}` },
     });
   }
 

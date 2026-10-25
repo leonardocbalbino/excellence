@@ -14,6 +14,7 @@ import {
   type LucideIcon,
   MapPinIcon,
   MegaphoneIcon,
+  MessagesSquareIcon,
   MapIcon,
   QrCodeIcon,
   RouteIcon,
@@ -173,6 +174,12 @@ export const MANAGEMENT_NAV: readonly NavSection[] = [
   {
     title: 'Comunicação',
     items: [
+      {
+        label: 'Atendimento',
+        to: '/gestao/atendimento',
+        icon: MessagesSquareIcon,
+        permission: 'conversations:manage',
+      },
       {
         label: 'Gestão de comunicados',
         to: '/gestao/comunicados',

@@ -63,6 +63,8 @@ export const DEFAULT_ROLE_TEMPLATES: readonly RoleTemplate[] = [
       'medical_certificates:manage',
       'medical_certificates:review',
       'announcements:manage',
+      // Atende os chamados dos funcionários (ADR 0023).
+      'conversations:manage',
       'patrols:read',
       'patrols:manage',
       'useful_links:manage',
