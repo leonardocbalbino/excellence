@@ -10,6 +10,8 @@ const IMAGES = ['image/jpeg', 'image/png', 'image/webp', 'image/heic'] as const;
 export const FILE_PURPOSES = {
   medical_certificate: { contentTypes: ['application/pdf', ...IMAGES], maxBytes: 10 * MB },
   selfie: { contentTypes: ['image/jpeg', 'image/png', 'image/webp'], maxBytes: 5 * MB },
+  /** Foto de perfil do usuário (app do funcionário). */
+  avatar: { contentTypes: ['image/jpeg', 'image/png', 'image/webp'], maxBytes: 5 * MB },
   patrol_occurrence: { contentTypes: IMAGES, maxBytes: 10 * MB },
   document: { contentTypes: ['application/pdf'], maxBytes: 20 * MB },
   conversation_attachment: { contentTypes: ['application/pdf', ...IMAGES], maxBytes: 10 * MB },
@@ -85,3 +87,13 @@ export const downloadLinkSchema = z.object({
   expiresAt: z.iso.datetime({ offset: true }),
 });
 export type DownloadLink = z.infer<typeof downloadLinkSchema>;
+
+// ─── Foto de perfil ─────────────────────────────────────────────────────────────────
+
+/** Troca a foto de perfil por um arquivo já enviado com a finalidade `avatar`. */
+export const avatarInputSchema = z.object({ fileId: z.uuid() });
+export type AvatarInput = z.input<typeof avatarInputSchema>;
+
+/** Link temporário da foto de perfil; null = sem foto. */
+export const myAvatarSchema = downloadLinkSchema.nullable();
+export type MyAvatar = z.infer<typeof myAvatarSchema>;

@@ -164,6 +164,18 @@ export const routes: RouteObject[] = [
             'benefits:manage',
           ),
           management(
+            'gestao/atendimento',
+            async () =>
+              (await import('@/features/conversations/conversations-page')).ConversationsPage,
+            'conversations:manage',
+          ),
+          management(
+            'gestao/atendimento/:id',
+            async () =>
+              (await import('@/features/conversations/conversation-page')).ConversationPage,
+            'conversations:manage',
+          ),
+          management(
             'gestao/links',
             async () => (await import('@/features/benefits/useful-links-page')).UsefulLinksPage,
             'useful_links:manage',

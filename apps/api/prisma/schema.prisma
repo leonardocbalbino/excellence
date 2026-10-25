@@ -33,45 +33,48 @@ model Company {
   // mesma empresa é garantida pelo serviço (busca o perfil pelo client isolado).
   defaultEmployeeRole Role? @relation("CompanyDefaultEmployeeRole", fields: [defaultEmployeeRoleId], references: [id], onDelete: Restrict)
 
-  users               User[]
-  refreshTokens       RefreshToken[]
-  mfaRecoveryCodes    MfaRecoveryCode[]
-  roles               Role[]                       @relation("CompanyRoles")
-  auditLogs           AuditLog[]
-  files               StoredFile[]
-  units               Unit[]
-  departments         Department[]
-  positions           Position[]
-  laborUnions         LaborUnion[]
-  employees           Employee[]
-  shifts              Shift[]
-  workSchedules       WorkSchedule[]
-  holidays            Holiday[]
-  scheduleAssignments EmployeeScheduleAssignment[]
-  scheduleRates       ScheduleRate[]
-  clockSettings       ClockSettings?
-  nsrCounter          NsrCounter?
-  timeEntries         TimeEntry[]
-  adjustmentRequests  TimeAdjustmentRequest[]
-  idempotencyKeys     IdempotencyKey[]
-  medicalCertificates MedicalCertificate[]
-  announcements       Announcement[]
-  announcementUnits   AnnouncementUnit[]
-  announcementDepts   AnnouncementDepartment[]
-  announcementReads   AnnouncementRead[]
-  patrolPoints        PatrolPoint[]
-  patrolRoutes        PatrolRoute[]
-  patrolRoutePoints   PatrolRoutePoint[]
-  patrolAssignees     PatrolRouteAssignee[]
-  patrolRuns          PatrolRun[]
-  patrolCheckins      PatrolCheckin[]
-  benefits            Benefit[]
-  employeeBenefits    EmployeeBenefit[]
-  benefitAdjustments  BenefitDayAdjustment[]
-  usefulLinks         UsefulLink[]
-  payrollPeriods      PayrollPeriod[]
-  payrollItems        PayrollItem[]
-  pushDevices         PushDevice[]
+  users                User[]
+  refreshTokens        RefreshToken[]
+  mfaRecoveryCodes     MfaRecoveryCode[]
+  roles                Role[]                       @relation("CompanyRoles")
+  auditLogs            AuditLog[]
+  files                StoredFile[]
+  units                Unit[]
+  departments          Department[]
+  positions            Position[]
+  laborUnions          LaborUnion[]
+  employees            Employee[]
+  shifts               Shift[]
+  workSchedules        WorkSchedule[]
+  holidays             Holiday[]
+  scheduleAssignments  EmployeeScheduleAssignment[]
+  scheduleRates        ScheduleRate[]
+  clockSettings        ClockSettings?
+  nsrCounter           NsrCounter?
+  timeEntries          TimeEntry[]
+  adjustmentRequests   TimeAdjustmentRequest[]
+  idempotencyKeys      IdempotencyKey[]
+  medicalCertificates  MedicalCertificate[]
+  announcements        Announcement[]
+  announcementUnits    AnnouncementUnit[]
+  announcementDepts    AnnouncementDepartment[]
+  announcementReads    AnnouncementRead[]
+  patrolPoints         PatrolPoint[]
+  patrolRoutes         PatrolRoute[]
+  patrolRoutePoints    PatrolRoutePoint[]
+  patrolAssignees      PatrolRouteAssignee[]
+  patrolRuns           PatrolRun[]
+  patrolCheckins       PatrolCheckin[]
+  benefits             Benefit[]
+  employeeBenefits     EmployeeBenefit[]
+  benefitAdjustments   BenefitDayAdjustment[]
+  usefulLinks          UsefulLink[]
+  payrollPeriods       PayrollPeriod[]
+  payrollItems         PayrollItem[]
+  pushDevices          PushDevice[]
+  conversationCounter  ConversationCounter?
+  conversations        Conversation[]
+  conversationMessages ConversationMessage[]
 
   @@map("companies")
 }
@@ -99,18 +102,22 @@ model User {
   // Conta de desenvolvedor: tem todas as permissões, com escopo de empresa, inclusive as
   // que surgirem em módulos novos. Não depende de perfil; só se liga direto no banco.
   isSuperAdmin       Boolean   @default(false) @map("is_super_admin")
+  // Foto de perfil (arquivo com a finalidade avatar).
+  avatarFileId       String?   @map("avatar_file_id") @db.Uuid
 
   lastLoginAt DateTime? @map("last_login_at") @db.Timestamptz(6)
   createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  company           Company            @relation(fields: [companyId], references: [id])
-  refreshTokens     RefreshToken[]
-  mfaRecoveryCodes  MfaRecoveryCode[]
-  userRoles         UserRole[]
-  employee          Employee?
-  announcementReads AnnouncementRead[]
-  pushDevices       PushDevice[]
+  company              Company               @relation(fields: [companyId], references: [id])
+  refreshTokens        RefreshToken[]
+  mfaRecoveryCodes     MfaRecoveryCode[]
+  userRoles            UserRole[]
+  employee             Employee?
+  announcementReads    AnnouncementRead[]
+  pushDevices          PushDevice[]
+  avatarFile           StoredFile?           @relation("UserAvatar", fields: [avatarFileId, companyId], references: [id, companyId], onDelete: Restrict)
+  conversationMessages ConversationMessage[]
 
   // Alvo das FKs compostas (id, company_id): impede vínculos entre empresas diferentes.
   @@unique([id, companyId])
@@ -311,8 +318,10 @@ model StoredFile {
   createdAt    DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
   confirmedAt  DateTime?  @map("confirmed_at") @db.Timestamptz(6)
 
-  company             Company              @relation(fields: [companyId], references: [id])
-  medicalCertificates MedicalCertificate[]
+  company              Company               @relation(fields: [companyId], references: [id])
+  medicalCertificates  MedicalCertificate[]
+  avatarOf             User[]                @relation("UserAvatar")
+  conversationMessages ConversationMessage[]
 
   @@unique([id, companyId])
   @@index([companyId, status])
@@ -468,6 +477,7 @@ model Employee {
   benefits            EmployeeBenefit[]
   benefitAdjustments  BenefitDayAdjustment[]
   payrollItems        PayrollItem[]
+  conversations       Conversation[]
   pushDevices         PushDevice[]
 
   @@unique([userId, companyId])
@@ -1300,4 +1310,90 @@ model PushDevice {
 
   @@index([companyId, userId])
   @@map("push_devices")
+}
+
+// ─── Atendimento: conversa do funcionário com o RH (ADR 0023) ───────────────────────
+
+enum ConversationCategory {
+  occurrence
+  time_tracking
+  benefits
+  payroll
+  documents
+  other
+
+  @@map("conversation_category")
+}
+
+enum ConversationStatus {
+  open
+  closed
+
+  @@map("conversation_status")
+}
+
+enum ConversationSide {
+  employee
+  hr
+
+  @@map("conversation_side")
+}
+
+/// Próximo número de chamado de cada empresa (incremento atômico, como o NSR do ponto).
+model ConversationCounter {
+  companyId  String @id @map("company_id") @db.Uuid
+  lastNumber Int    @default(0) @map("last_number")
+
+  company Company @relation(fields: [companyId], references: [id])
+
+  @@map("conversation_counters")
+}
+
+/// Chamado aberto pelo funcionário para o RH. O número é único na empresa.
+model Conversation {
+  id             String               @id @default(uuid(7)) @db.Uuid
+  companyId      String               @map("company_id") @db.Uuid
+  number         Int
+  employeeId     String               @map("employee_id") @db.Uuid
+  category       ConversationCategory
+  subject        String
+  status         ConversationStatus   @default(open)
+  lastMessageAt  DateTime             @map("last_message_at") @db.Timestamptz(6)
+  // Até quando cada lado leu (o RH conta como um lado só: qualquer atendente).
+  employeeReadAt DateTime?            @map("employee_read_at") @db.Timestamptz(6)
+  hrReadAt       DateTime?            @map("hr_read_at") @db.Timestamptz(6)
+  closedAt       DateTime?            @map("closed_at") @db.Timestamptz(6)
+  closedBy       String?              @map("closed_by") @db.Uuid
+  createdAt      DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime             @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  company  Company               @relation(fields: [companyId], references: [id])
+  employee Employee              @relation(fields: [employeeId, companyId], references: [id, companyId], onDelete: Restrict)
+  messages ConversationMessage[]
+
+  @@unique([companyId, number])
+  @@unique([id, companyId])
+  @@index([companyId, status, lastMessageAt])
+  @@index([companyId, employeeId])
+  @@map("conversations")
+}
+
+/// Mensagem do atendimento. Não é editada nem excluída (trigger no banco): é o registro.
+model ConversationMessage {
+  id               String           @id @default(uuid(7)) @db.Uuid
+  companyId        String           @map("company_id") @db.Uuid
+  conversationId   String           @map("conversation_id") @db.Uuid
+  side             ConversationSide
+  authorUserId     String           @map("author_user_id") @db.Uuid
+  body             String
+  attachmentFileId String?          @map("attachment_file_id") @db.Uuid
+  createdAt        DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  company      Company      @relation(fields: [companyId], references: [id])
+  conversation Conversation @relation(fields: [conversationId, companyId], references: [id, companyId], onDelete: Restrict)
+  author       User         @relation(fields: [authorUserId, companyId], references: [id, companyId], onDelete: Restrict)
+  attachment   StoredFile?  @relation(fields: [attachmentFileId, companyId], references: [id, companyId], onDelete: Restrict)
+
+  @@index([companyId, conversationId, createdAt])
+  @@map("conversation_messages")
 }

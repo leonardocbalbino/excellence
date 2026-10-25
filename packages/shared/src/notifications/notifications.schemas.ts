@@ -14,6 +14,7 @@ export const pushKindSchema = z.enum([
   'announcement',
   'adjustment_decided',
   'certificate_reviewed',
+  'conversation_reply',
 ]);
 export type PushKind = z.infer<typeof pushKindSchema>;
 

@@ -57,8 +57,15 @@ export const conversationMessageSchema = z.object({
 });
 export type ConversationMessage = z.infer<typeof conversationMessageSchema>;
 
+/** Número do chamado como aparece para o funcionário e o RH: 42 → "#000042". */
+export function formatTicketNumber(number: number): string {
+  return `#${String(number).padStart(6, '0')}`;
+}
+
 export const conversationSummarySchema = z.object({
   id: z.uuid(),
+  /** Número único do chamado na empresa (sequencial, nunca reaproveitado). */
+  number: z.number().int().positive(),
   category: conversationCategorySchema,
   subject: z.string(),
   status: conversationStatusSchema,
