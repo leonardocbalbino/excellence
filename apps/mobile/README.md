@@ -1,26 +1,33 @@
 # apps/mobile
 
-App do funcionário (React Native com Expo e expo-router). Fase 2 (ADR 0019). Usa o mesmo
-`@excellence/shared` do web: schemas, tipos e client HTTP.
-
-> **Estado:** código escrito sem instalação nem execução. Antes de publicar, rode os passos
-> abaixo, alinhe as versões com o Expo e teste em aparelho.
+App **do funcionário** (Expo SDK 55, expo-router, Reanimated). Usa o mesmo `@excellence/shared`
+do web: schemas, tipos e client HTTP. Decisões em ADR 0019 (sessão e offline) e ADR 0022
+(foco, visual e push).
 
 ## O que tem
 
-- **Login** por e-mail e senha, com código do autenticador para quem tem MFA ativo. O cadastro
-  do MFA (RH/Admin) continua pelo site. Senha temporária: o app pede a troca.
-- **Sessão:** refresh token no armazenamento seguro do sistema (Keychain/Keystore). Renova sozinho.
-- **Biometria:** destrava o app ao abrir e depois de 5 min em segundo plano. É oferecida no
-  primeiro login e fica em Mais › Destravar com biometria.
-- **Início:** hora, marcações de hoje, próxima ronda e comunicados pendentes.
-- **Ponto:** registro com localização e foto (quando a empresa exige), comprovante resumido e
-  marcações do dia.
-- **Rondas:** rotas e horários de hoje, iniciar a ronda, ler o QR code dos pontos pela câmera,
-  encerrar (com motivo, se faltar ponto).
-- **Mais:** espelho de ponto do mês, comunicados (com "li e estou ciente"), benefícios e links
-  úteis, meu perfil, biometria e sair.
-- **Tema** claro/escuro pelo aparelho, com as mesmas cores do web.
+- **Só para funcionário:** quem não tem cadastro de funcionário vê um aviso e só pode sair. A
+  gestão continua no site.
+- **Início:** saudação, relógio, como está o dia no ponto ("em jornada há 3h10"), próxima ronda
+  com contagem regressiva, comunicados pendentes e atalhos.
+- **Ponto:**
+  - botão redondo com halo animado, "check" e vibração no sucesso;
+  - localização e foto conforme a empresa exige, selfie com moldura do rosto;
+  - linha do tempo das marcações do dia (entrada/saída) e atalho para o espelho.
+- **Rondas:**
+  - rotas e horários de hoje;
+  - iniciar a ronda e ler os QR codes, com linha de leitura animada e flash verde/vermelho;
+  - barra de progresso, próximo ponto destacado e encerramento com motivo.
+- **Benefícios:** cartões por tipo e links úteis. VA/VT por dia mostram o valor diário e a
+  prévia do mês pelo próprio ponto.
+- **Mais:**
+  - espelho do mês, comunicados (com "li e estou ciente") e meu perfil;
+  - notificações e biometria;
+  - sair.
+- **Push:** lembrete de ronda e de ponto, comunicado novo, ajuste e atestado decididos. Tocar
+  abre a tela certa.
+- **Biometria:** destrava ao abrir e depois de 5 min em segundo plano.
+- **Tema** claro/escuro pelo aparelho, com as cores do web.
 
 ## Sem conexão
 
@@ -28,34 +35,45 @@ App do funcionário (React Native com Expo e expo-router). Fase 2 (ADR 0019). Us
   quando a conexão volta (sinalizada como "sem conexão" no espelho).
 - **Rondas:** a ronda precisa ser **iniciada** com conexão. Depois, os pontos podem ser lidos
   sem sinal e entram na fila.
-- **Abrir o app sem rede:** ele abre em modo offline com o último usuário. As rotas, a ronda em
-  andamento, as permissões e a configuração do ponto ficam gravadas no aparelho por até 24 h;
-  dados pessoais não.
-- A fila é por usuário: num aparelho compartilhado, os registros de uma pessoa só saem com a
-  sessão dela.
-- O servidor aceita registros de até **72 h** atrás e nunca no futuro. O que ele recusar aparece
-  como "não aceito", com opção de descartar. Isso é provisório: pendência P-026.
+- **Abrir sem rede:** permissões, rotas, ronda em andamento e configuração do ponto ficam no
+  aparelho por até 24 h. Dados pessoais não ficam.
+- O servidor aceita registros de até **72 h** atrás e nunca no futuro (P-026).
+
+## API
+
+- O app oficial usa a **API de produção**: `PRODUCTION_API_URL` em `app.config.ts`
+  (`http://169.58.37.26:8200/api/v1`). Os perfis `preview` e `production` do `eas.json` fixam
+  esse endereço.
+- Em desenvolvimento, crie `.env` com `EXPO_PUBLIC_API_URL` apontando para o IP do computador
+  na rede (o celular não enxerga `localhost`).
+- A API ainda é HTTP: o build libera HTTP no Android e no iOS. Quando houver domínio com
+  HTTPS, troque `PRODUCTION_API_URL` (P-029).
 
 ## Como rodar
 
 ```bash
-pnpm install                              # na raiz; a primeira vez baixa o React Native
+pnpm install                 # na raiz
 cd apps/mobile
-npx expo install --fix                    # alinha as versões com o SDK do Expo instalado
-cp .env.example .env                      # e ajuste EXPO_PUBLIC_API_URL
-pnpm start                                # abre no Expo Go ou num development build
+pnpm start                   # Expo Go ou development build
 ```
 
-- O celular não enxerga `localhost`. Use o IP do computador na rede em `EXPO_PUBLIC_API_URL` e,
-  na API, em `S3_PUBLIC_ENDPOINT` (o envio da foto vai direto ao storage).
-- Câmera, biometria e armazenamento seguro funcionam no Expo Go, mas para publicar use um
-  development build (`npx expo run:android` / `run:ios`) ou EAS Build.
-- As versões em `package.json` são uma referência. `npx expo install --fix` coloca as versões
-  certas para o SDK.
+Push, câmera e biometria completos precisam de um **development build**:
+
+```bash
+npx eas-cli@latest build --profile development --platform android
+```
+
+## Publicar
+
+1. O projeto no expo.dev já está no `app.config.ts` (`extra.eas.projectId`). O app lê o
+   `@excellence/shared` direto do código-fonte (`metro.config.js`), porque o `dist/` fica fora do
+   git e não chega ao EAS. Nada precisa ser buildado antes.
+2. Android: envie a credencial do FCM (`npx eas-cli@latest credentials`). iOS: a chave APNs é criada pelo
+   EAS na primeira build.
+3. APK para testar com a equipe: `npx eas-cli@latest build --profile preview --platform android`.
+4. Lojas: `npx eas-cli@latest build --profile production` e `npx eas-cli@latest submit`.
 
 ## Fica para depois
 
-- Consultar os atestados anexados pela administração (o funcionário não envia pelo app).
-- Pedir ajuste de ponto pelo app (hoje: pelo site).
-- Notificações push (lembrete de ronda, comunicado novo).
+- Pedir ajuste de ponto e consultar atestados pelo app (hoje: pelo site).
 - Cadastro do MFA pelo app.

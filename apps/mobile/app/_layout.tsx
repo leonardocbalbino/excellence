@@ -6,13 +6,16 @@ import * as Network from 'expo-network';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useRef, useState } from 'react';
+import Ionicons from '@expo/vector-icons/Ionicons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { AppState, Text, View } from 'react-native';
+import Animated, { ZoomIn } from 'react-native-reanimated';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { biometricEnabled, confirmIdentity } from '@/device';
 import { offlineQueue } from '@/offline-queue';
 import { accessQueryKey, clockSettingsKey, myPatrolsKey } from '@/query-keys';
 import { createServices, ServicesProvider, useServices, useSession } from '@/services';
-import { Button, styles, Title, useColors } from '@/ui';
+import { Button, styles, Title, useColors, usePulse } from '@/ui';
 
 const services = createServices();
 const DAY = 24 * 60 * 60_000;
@@ -144,7 +147,7 @@ function AppGate() {
       />
     );
   }
-  return <Stack screenOptions={{ headerShown: false }} />;
+  return <Stack screenOptions={{ headerShown: false, animation: 'fade' }} />;
 }
 
 function LockScreen({
@@ -157,22 +160,55 @@ function LockScreen({
   onUsePassword: () => void;
 }) {
   const c = useColors();
+  const pulse = usePulse(!checking);
   return (
-    <View
-      style={[
-        styles.flex,
-        styles.padded,
-        styles.gap,
-        { backgroundColor: c.primary, justifyContent: 'center' },
-      ]}
+    <LinearGradient
+      colors={c.gradient}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 1 }}
+      style={[styles.flex, styles.padded, styles.gap, { justifyContent: 'center' }]}
     >
-      <Title style={{ color: '#ffffff' }}>Excellence</Title>
-      <Text style={{ color: '#ffffffcc', fontSize: 16 }}>
-        {checking ? 'Abrindo…' : 'Use a digital ou o rosto para destravar.'}
-      </Text>
+      <View style={{ alignItems: 'center', gap: 18, marginBottom: 24 }}>
+        <View style={{ alignItems: 'center', justifyContent: 'center', width: 140, height: 140 }}>
+          <Animated.View
+            style={[
+              {
+                position: 'absolute',
+                width: 120,
+                height: 120,
+                borderRadius: 60,
+                backgroundColor: '#ffffff',
+              },
+              pulse,
+            ]}
+          />
+          <Animated.View
+            entering={ZoomIn.springify().damping(12)}
+            style={{
+              width: 120,
+              height: 120,
+              borderRadius: 60,
+              backgroundColor: '#ffffff26',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <Ionicons name="finger-print" size={64} color="#ffffff" />
+          </Animated.View>
+        </View>
+        <Title style={{ color: '#ffffff', fontSize: 30 }}>Excellence</Title>
+        <Text style={{ color: '#ffffffcc', fontSize: 16, textAlign: 'center' }}>
+          {checking ? 'Abrindo…' : 'Use a digital ou o rosto para destravar.'}
+        </Text>
+      </View>
       {checking ? null : (
         <>
-          <Button label="Destravar" variant="inverse" onPress={() => void onUnlock()} />
+          <Button
+            label="Destravar"
+            variant="inverse"
+            icon="lock-open"
+            onPress={() => void onUnlock()}
+          />
           <Button
             label="Entrar com e-mail e senha"
             variant="inverseGhost"
@@ -180,6 +216,6 @@ function LockScreen({
           />
         </>
       )}
-    </View>
+    </LinearGradient>
   );
 }

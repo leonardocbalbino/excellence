@@ -1,4 +1,5 @@
 import { type ApiClient, ApiError, ApiUnavailableError, createApiClient } from '@excellence/shared';
+import Constants from 'expo-constants';
 import { createContext, type ReactNode, useContext, useSyncExternalStore } from 'react';
 import { MobileSession, type SessionState } from './session';
 
@@ -7,9 +8,13 @@ export interface Services {
   session: MobileSession;
 }
 
-function apiUrl(): string {
-  const url = process.env.EXPO_PUBLIC_API_URL;
-  if (!url) throw new Error('Defina EXPO_PUBLIC_API_URL (veja apps/mobile/.env.example).');
+/**
+ * Endereço da API gravado no build (app.config.ts): o de produção no app oficial, ou o de
+ * EXPO_PUBLIC_API_URL em desenvolvimento.
+ */
+export function apiUrl(): string {
+  const url = (Constants.expoConfig?.extra as { apiUrl?: string } | undefined)?.apiUrl;
+  if (!url) throw new Error('Endereço da API ausente no app.config.ts.');
   return url.replace(/\/$/, '');
 }
 
