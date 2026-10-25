@@ -82,14 +82,26 @@ async function main(): Promise<void> {
           description: template.description,
           requiresMfa: template.requiresMfa,
           isSystem: true,
-          permissions: {
-            create: template.permissions.map((permissionKey) => ({ companyId, permissionKey })),
-          },
-          scopes: {
-            create: template.scopes.map((scope) => ({ companyId, ...fromRoleScope(scope) })),
-          },
         },
         select: { id: true },
+      });
+      // Em lote e fora de transação: pelo túnel do Actions, cada ida ao banco é lenta.
+      if (template.permissions.length > 0) {
+        await prisma.rolePermission.createMany({
+          data: template.permissions.map((permissionKey) => ({
+            companyId,
+            roleId: role.id,
+            permissionKey,
+          })),
+          skipDuplicates: true,
+        });
+      }
+      await prisma.roleScope.createMany({
+        data: template.scopes.map((scope) => ({
+          companyId,
+          roleId: role.id,
+          ...fromRoleScope(scope),
+        })),
       });
       roleIds.set(template.key, role.id);
     }
