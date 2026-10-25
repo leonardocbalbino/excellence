@@ -18,6 +18,7 @@ import {
 import type { DataScope } from '../../access-control/domain/data-scope';
 import type { AccessGrant } from '../../access-control/http/access.decorators';
 import { AuditService } from '../../audit/application/audit.service';
+import { Notifier } from '../../notifications/application/notifier';
 import { invalidReference } from '../../organization/application/catalog-rules';
 import { EmployeesService } from '../../workforce/application/employees.service';
 import { toCalendarDate } from '../../workforce/domain/calendar';
@@ -90,6 +91,7 @@ export class AnnouncementsService {
     private readonly db: TenantPrismaService,
     private readonly employees: EmployeesService,
     private readonly audit: AuditService,
+    private readonly notifier: Notifier,
   ) {}
 
   // ─── Mural do usuário ─────────────────────────────────────────────────────────────
@@ -249,6 +251,8 @@ export class AnnouncementsService {
         tx,
       );
     });
+    // Push ao público (ADR 0022); não atrasa nem desfaz a publicação.
+    await this.notifier.announcementPublished(grant.companyId, current, audienceOf(current));
     return this.get(id, grant);
   }
 

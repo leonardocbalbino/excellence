@@ -61,6 +61,12 @@ export const envSchema = z.object({
   // Gera sozinho o fechamento do mês que acabou, a partir do dia 1 (ADR 0020). Desligado
   // nos testes.
   PAYROLL_AUTO_GENERATE: z.stringbool().default(true),
+
+  // Notificações push do app (ADR 0022): envio pelo serviço do Expo e lembretes de ponto e
+  // ronda conferidos a cada minuto. Desligado nos testes.
+  PUSH_ENABLED: z.stringbool().default(true),
+  // Token de acesso do Expo, se o projeto exigir push autenticado (Expo › Access tokens).
+  EXPO_ACCESS_TOKEN: z.string().min(1).optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;

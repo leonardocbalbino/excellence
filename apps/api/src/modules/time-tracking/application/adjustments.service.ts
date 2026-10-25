@@ -6,6 +6,7 @@ import type { Prisma } from '../../../generated/prisma/client';
 import { TenantPrismaService } from '../../../infrastructure/prisma/tenant-prisma.service';
 import type { AccessGrant } from '../../access-control/http/access.decorators';
 import { AuditService } from '../../audit/application/audit.service';
+import { Notifier } from '../../notifications/application/notifier';
 import { CompanyService } from '../../organization/application/company.service';
 import { invalidReference } from '../../organization/application/catalog-rules';
 import { EmployeesService } from '../../workforce/application/employees.service';
@@ -64,6 +65,7 @@ export class AdjustmentsService {
     private readonly employees: EmployeesService,
     private readonly company: CompanyService,
     private readonly audit: AuditService,
+    private readonly notifier: Notifier,
   ) {}
 
   /** Solicitação do próprio funcionário. */
@@ -188,6 +190,7 @@ export class AdjustmentsService {
         tx,
       );
     });
+    await this.notifier.adjustmentDecided(grant.companyId, request.employeeId, true, note);
     return this.get(id);
   }
 
@@ -217,6 +220,7 @@ export class AdjustmentsService {
         tx,
       );
     });
+    await this.notifier.adjustmentDecided(grant.companyId, request.employeeId, false, note);
     return this.get(id);
   }
 

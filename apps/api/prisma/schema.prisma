@@ -71,6 +71,7 @@ model Company {
   usefulLinks         UsefulLink[]
   payrollPeriods      PayrollPeriod[]
   payrollItems        PayrollItem[]
+  pushDevices         PushDevice[]
 
   @@map("companies")
 }
@@ -109,6 +110,7 @@ model User {
   userRoles         UserRole[]
   employee          Employee?
   announcementReads AnnouncementRead[]
+  pushDevices       PushDevice[]
 
   // Alvo das FKs compostas (id, company_id): impede vínculos entre empresas diferentes.
   @@unique([id, companyId])
@@ -466,6 +468,7 @@ model Employee {
   benefits            EmployeeBenefit[]
   benefitAdjustments  BenefitDayAdjustment[]
   payrollItems        PayrollItem[]
+  pushDevices         PushDevice[]
 
   @@unique([userId, companyId])
   @@unique([companyId, cpf])
@@ -1274,4 +1277,27 @@ model PayrollItem {
   @@unique([periodId, employeeId])
   @@index([companyId, employeeId])
   @@map("payroll_items")
+}
+
+// ─── Notificações push (ADR 0022) ───────────────────────────────────────────────────
+
+/// Aparelho que recebe push (token do Expo). O token é único: entrar com outra conta no mesmo
+/// aparelho move o token para ela.
+model PushDevice {
+  id         String   @id @default(uuid(7)) @db.Uuid
+  companyId  String   @map("company_id") @db.Uuid
+  userId     String   @map("user_id") @db.Uuid
+  token      String   @unique
+  // ios ou android
+  platform   String
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  lastSeenAt DateTime @default(now()) @map("last_seen_at") @db.Timestamptz(6)
+
+  company    Company   @relation(fields: [companyId], references: [id])
+  user       User      @relation(fields: [userId, companyId], references: [id, companyId], onDelete: Cascade)
+  employee   Employee? @relation(fields: [employeeId], references: [id])
+  employeeId String?   @db.Uuid
+
+  @@index([companyId, userId])
+  @@map("push_devices")
 }

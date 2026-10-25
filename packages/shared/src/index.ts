@@ -16,4 +16,5 @@ export * from './announcements/announcements.schemas.js';
 export * from './patrols/patrols.schemas.js';
 export * from './benefits/benefits.schemas.js';
 export * from './payroll/payroll.schemas.js';
+export * from './notifications/notifications.schemas.js';
 export * from './conversations/conversations.schemas.js';
