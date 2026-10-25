@@ -16,24 +16,43 @@ export function permissionParts(key: Permission): { resource: string; action: st
  * Permissão nova no catálogo vai também para os perfis que já tinham todas as outras (o
  * Administrador com acesso total). Sem isso, ninguém consegue concedê-la: só concede quem
  * tem (`assertCanGrant`). Perfis que o Administrador restringiu não ganham nada.
+ *
+ * Só grava o que falta ou mudou (sem transação: cada permissão é independente). Assim roda
+ * rápido também por um túnel até o banco (bootstrap pelo GitHub Actions).
  */
 export async function syncPermissionCatalog(
-  prisma: Pick<PrismaClient, 'permission' | '$transaction' | '$executeRaw'>,
+  prisma: Pick<PrismaClient, 'permission' | '$executeRaw'>,
 ) {
   const entries = Object.entries(PERMISSIONS) as [Permission, (typeof PERMISSIONS)[Permission]][];
-  const known = (await prisma.permission.findMany({ select: { key: true } }))
-    .map(({ key }) => key)
-    .filter((key) => key in PERMISSIONS);
-  const added = entries.map(([key]) => key).filter((key) => !known.includes(key));
-  await prisma.$transaction(
-    entries.map(([key, definition]) =>
-      prisma.permission.upsert({
-        where: { key },
-        create: { key, ...permissionParts(key), ...definition },
-        update: { ...permissionParts(key), ...definition },
-      }),
-    ),
-  );
+  const rows = await prisma.permission.findMany({
+    select: { key: true, resource: true, action: true, description: true, sensitive: true },
+  });
+  const current = new Map(rows.map((row) => [row.key, row]));
+  const known = rows.map(({ key }) => key).filter((key) => key in PERMISSIONS);
+  const added = entries.map(([key]) => key).filter((key) => !current.has(key));
+
+  if (added.length > 0) {
+    await prisma.permission.createMany({
+      data: entries
+        .filter(([key]) => added.includes(key))
+        .map(([key, definition]) => ({ key, ...permissionParts(key), ...definition })),
+      // Outra instância subindo ao mesmo tempo pode ter inserido antes.
+      skipDuplicates: true,
+    });
+  }
+  for (const [key, definition] of entries) {
+    const row = current.get(key);
+    const next = { ...permissionParts(key), ...definition };
+    if (
+      row &&
+      (row.resource !== next.resource ||
+        row.action !== next.action ||
+        row.description !== next.description ||
+        row.sensitive !== next.sensitive)
+    ) {
+      await prisma.permission.update({ where: { key }, data: next });
+    }
+  }
   // Catálogo vazio (banco novo): os perfis ainda não existem, não há o que completar.
   if (added.length > 0 && known.length > 0) {
     await prisma.$executeRaw`
