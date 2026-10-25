@@ -1,11 +1,10 @@
 import { formatCpf } from '@excellence/shared';
 import { useQuery } from '@tanstack/react-query';
-import { router } from 'expo-router';
 import { View } from 'react-native';
 import { formatDate } from '@/format';
 import { accessQueryKey } from '@/query-keys';
 import { errorMessage, useApi, useSession } from '@/services';
-import { Banner, Button, Card, Label, Screen, styles, Title } from '@/ui';
+import { Banner, Card, Label, Screen, styles } from '@/ui';
 
 function Field({ label, value }: { label: string; value: string | null | undefined }) {
   return (
@@ -29,9 +28,7 @@ export default function ProfileScreen() {
   const data = employee.data;
 
   return (
-    <Screen>
-      <Button label="‹ Voltar" variant="ghost" onPress={() => router.back()} />
-      <Title>Meu perfil</Title>
+    <Screen title="Meu perfil" back>
       {employee.isError ? <Banner tone="warning">{errorMessage(employee.error)}</Banner> : null}
       {data ? (
         <>

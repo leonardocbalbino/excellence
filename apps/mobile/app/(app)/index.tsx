@@ -1,24 +1,53 @@
 import { useQuery } from '@tanstack/react-query';
-import { router } from 'expo-router';
+import { type Href, router } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { RefreshControl, ScrollView, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { todayIso } from '@/format';
+import { Text, View } from 'react-native';
+import Animated, { FadeInDown } from 'react-native-reanimated';
+import { formatMinutes, todayIso } from '@/format';
 import { useOfflineQueue } from '@/offline-queue';
 import { accessQueryKey, feedKey, myPatrolsKey, todayEntriesKey } from '@/query-keys';
 import { useApi, useSession } from '@/services';
-import { Banner, Button, Card, Label, styles, Title, useColors } from '@/ui';
+import {
+  Banner,
+  Button,
+  Card,
+  Chip,
+  Hero,
+  IconCircle,
+  type IconName,
+  Label,
+  Screen,
+  SectionTitle,
+  styles,
+  Title,
+  Touchable,
+  useColors,
+} from '@/ui';
 
-function useNow(): Date {
+function useNow(intervalMs = 15_000): Date {
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
-    const timer = setInterval(() => setNow(new Date()), 15_000);
+    const timer = setInterval(() => setNow(new Date()), intervalMs);
     return () => clearInterval(timer);
-  }, []);
+  }, [intervalMs]);
   return now;
 }
 
-/** Início: a hora, as marcações de hoje, a próxima ronda e o que está pendente. */
+function greeting(now: Date): string {
+  const hour = now.getHours();
+  if (hour < 12) return 'Bom dia';
+  if (hour < 18) return 'Boa tarde';
+  return 'Boa noite';
+}
+
+/** "em 12 min", "em 1h05", "agora". */
+function until(at: string, now: Date): string {
+  const minutes = Math.round((new Date(at).getTime() - now.getTime()) / 60_000);
+  if (minutes <= 0) return 'agora';
+  return minutes < 60 ? `em ${String(minutes)} min` : `em ${formatMinutes(minutes)}`;
+}
+
+/** Início: a hora, como está o dia no ponto, a próxima ronda e atalhos. */
 export default function HomeScreen() {
   const api = useApi();
   const session = useSession();
@@ -27,16 +56,15 @@ export default function HomeScreen() {
   const today = todayIso();
   const queue = useOfflineQueue(session.status === 'authenticated' ? session.user.id : null);
   const access = useQuery({ queryKey: accessQueryKey, queryFn: () => api.access.mine() });
-  const personal = access.data?.hasEmployeeRecord ?? false;
   const entries = useQuery({
     queryKey: [...todayEntriesKey, today],
     queryFn: () => api.time.mine(today, today),
-    enabled: personal,
   });
+  const hasRoutes = access.data?.hasPatrolRoutes ?? false;
   const patrols = useQuery({
     queryKey: myPatrolsKey,
     queryFn: () => api.patrols.mine(),
-    enabled: access.data?.hasPatrolRoutes ?? false,
+    enabled: hasRoutes,
   });
   const feed = useQuery({ queryKey: feedKey, queryFn: () => api.announcements.feed() });
 
@@ -44,129 +72,196 @@ export default function HomeScreen() {
   const effective = (entries.data ?? []).filter((e) => e.kind !== 'disregard' && !e.disregarded);
   const queuedClocks = queue.filter((i) => i.kind === 'clock' && i.status === 'pending').length;
   const count = effective.length + queuedClocks;
+  const working = count % 2 === 1;
+  const lastEntry = effective.at(-1);
   const failed = queue.filter((i) => i.status === 'failed').length;
   const pendingSync = queue.filter((i) => i.status === 'pending').length;
   const next = patrols.data?.routes
     .flatMap((route) => route.slots.map((slot) => ({ route, slot })))
     .filter(({ slot }) => slot.status === 'upcoming')
     .sort((a, b) => a.slot.at.localeCompare(b.slot.at))[0];
-  const refreshing = entries.isFetching || feed.isFetching || patrols.isFetching;
+  const offline = session.status === 'authenticated' && session.offline;
+
+  const status = (() => {
+    if (count === 0) return 'Você ainda não registrou o ponto hoje.';
+    if (!lastEntry) return `${String(count)} marcação(ões) aguardando envio.`;
+    if (working) {
+      const [h = 0, m = 0] = lastEntry.localTime.split(':').map(Number);
+      const since = now.getHours() * 60 + now.getMinutes() - (h * 60 + m);
+      return since > 0
+        ? `Em jornada desde ${lastEntry.localTime} · há ${formatMinutes(since)}`
+        : `Em jornada desde ${lastEntry.localTime}`;
+    }
+    return `Última saída às ${lastEntry.localTime}.`;
+  })();
+
+  const shortcuts: { label: string; icon: IconName; to: Href; badge?: number }[] = [
+    { label: 'Bater ponto', icon: 'finger-print', to: '/ponto' },
+    ...(hasRoutes ? [{ label: 'Rondas', icon: 'qr-code' as const, to: '/rondas' as const }] : []),
+    { label: 'Benefícios', icon: 'gift', to: '/beneficios' },
+    { label: 'Espelho', icon: 'calendar', to: '/espelho' },
+    { label: 'Comunicados', icon: 'megaphone', to: '/comunicados', badge: feed.data?.pending ?? 0 },
+    { label: 'Meu perfil', icon: 'person', to: '/perfil' },
+  ];
 
   return (
-    <SafeAreaView style={[styles.flex, { backgroundColor: c.background }]} edges={['top']}>
-      <ScrollView
-        contentContainerStyle={[styles.padded, styles.gap]}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={() => {
-              void entries.refetch();
-              void feed.refetch();
-              void patrols.refetch();
-            }}
-          />
-        }
-      >
-        <Label tone="muted">
+    <Screen
+      refreshing={entries.isFetching || feed.isFetching || patrols.isFetching}
+      onRefresh={() => {
+        void entries.refetch();
+        void feed.refetch();
+        void patrols.refetch();
+      }}
+    >
+      <Animated.View entering={FadeInDown.springify().damping(18)} style={{ gap: 2 }}>
+        <Label tone="muted" style={{ textTransform: 'capitalize' }}>
           {now.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}
         </Label>
-        <Title>Olá, {firstName}</Title>
+        <Text style={[styles.screenTitle, { color: c.foreground }]}>
+          {greeting(now)}, {firstName} 👋
+        </Text>
+      </Animated.View>
 
-        {session.status === 'authenticated' && session.offline ? (
-          <Banner tone="warning">
-            Sem conexão. Dá para registrar ponto e ler pontos da ronda: tudo é enviado quando a
-            conexão voltar.
-          </Banner>
-        ) : null}
-        {pendingSync > 0 ? (
-          <Banner tone="info">
-            {pendingSync} registro(s) feitos sem conexão aguardando envio. Eles saem sozinhos quando
-            a conexão voltar.
-          </Banner>
-        ) : null}
-        {failed > 0 ? (
-          <Banner tone="warning">
-            {failed} registro(s) não foram aceitos pelo servidor. Veja em Ponto ou Rondas.
-          </Banner>
-        ) : null}
+      {offline ? (
+        <Banner tone="warning">
+          Sem conexão. Dá para registrar ponto e ler pontos da ronda: tudo é enviado quando a
+          conexão voltar.
+        </Banner>
+      ) : null}
+      {pendingSync > 0 ? (
+        <Banner tone="info">
+          {pendingSync} registro(s) feitos sem conexão aguardando envio. Eles saem sozinhos.
+        </Banner>
+      ) : null}
+      {failed > 0 ? (
+        <Banner tone="warning">
+          {failed} registro(s) não foram aceitos pelo servidor. Veja em Ponto ou Rondas.
+        </Banner>
+      ) : null}
 
-        {personal ? (
-          <View style={{ backgroundColor: c.primary, borderRadius: 20, padding: 20, gap: 12 }}>
-            <Text
-              style={{ color: '#ffffff', fontSize: 56, fontWeight: '800', textAlign: 'center' }}
-              accessibilityLabel={`Agora são ${now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`}
-            >
-              {now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
-            </Text>
-            <Button
-              label={count % 2 === 0 ? 'Registrar entrada' : 'Registrar saída'}
-              variant="inverse"
-              onPress={() => router.push('/ponto')}
-            />
-            <View
-              style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}
-            >
-              {effective.map((entry) => (
-                <View
-                  key={entry.id}
-                  style={{
-                    backgroundColor: '#00000033',
-                    borderRadius: 10,
-                    paddingHorizontal: 12,
-                    paddingVertical: 6,
-                  }}
-                >
-                  <Text
-                    style={{ color: '#ffffff', fontVariant: ['tabular-nums'], fontWeight: '600' }}
-                  >
-                    {entry.localTime}
-                  </Text>
-                </View>
-              ))}
-              {effective.length === 0 && queuedClocks === 0 ? (
-                <Text style={{ color: '#ffffffcc' }}>Nenhuma marcação hoje.</Text>
-              ) : null}
-            </View>
-          </View>
-        ) : null}
+      <Hero>
+        <View style={styles.row}>
+          <Chip
+            tone="inverse"
+            icon={working ? 'radio-button-on' : 'moon'}
+            label={working ? 'Em jornada' : 'Fora da jornada'}
+          />
+          <Label tone="inverse" style={{ opacity: 0.8, fontSize: 13 }}>
+            {count} marcação(ões) hoje
+          </Label>
+        </View>
+        <Text
+          style={{
+            color: '#fff',
+            fontSize: 64,
+            fontWeight: '800',
+            letterSpacing: -2,
+            fontVariant: ['tabular-nums'],
+          }}
+          accessibilityLabel={`Agora são ${now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`}
+        >
+          {now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+        </Text>
+        <Label tone="inverse" style={{ opacity: 0.9 }}>
+          {status}
+        </Label>
+        <Button
+          label={working ? 'Registrar saída' : 'Registrar entrada'}
+          variant="inverse"
+          icon="finger-print"
+          onPress={() => router.push('/ponto')}
+        />
+      </Hero>
 
-        {patrols.data?.current ? (
-          <Card>
-            <Title style={{ fontSize: 18 }}>Ronda em andamento</Title>
-            <Label>
-              {patrols.data.current.route.name} · {patrols.data.current.checked} de{' '}
-              {patrols.data.current.total} pontos
-            </Label>
-            <Button label="Continuar e ler QR code" onPress={() => router.push('/rondas')} />
-          </Card>
-        ) : next ? (
-          <Card>
-            <View style={styles.row}>
-              <Title style={{ fontSize: 18 }}>Próxima ronda</Title>
-              <Label tone="primary" style={{ fontWeight: '700' }}>
-                {next.slot.localTime}
+      {patrols.data?.current ? (
+        <Card index={1} style={{ borderColor: c.primary, borderWidth: 2 }}>
+          <View style={[styles.row, { justifyContent: 'flex-start', gap: 12 }]}>
+            <IconCircle name="walk" />
+            <View style={{ flex: 1 }}>
+              <Title style={{ fontSize: 18 }}>Ronda em andamento</Title>
+              <Label tone="muted">
+                {patrols.data.current.route.name} · {patrols.data.current.checked} de{' '}
+                {patrols.data.current.total} pontos
               </Label>
             </View>
-            <Label>
-              {next.route.name} · {next.route.pointsCount} pontos · previsão de{' '}
-              {next.route.expectedMinutes} min
-            </Label>
-            <Button label="Iniciar e ler QR code" onPress={() => router.push('/rondas')} />
-          </Card>
-        ) : null}
+          </View>
+          <Button
+            label="Continuar e ler QR code"
+            icon="qr-code"
+            onPress={() => router.push('/rondas')}
+          />
+        </Card>
+      ) : next ? (
+        <Card index={1}>
+          <View style={[styles.row, { justifyContent: 'flex-start', gap: 12 }]}>
+            <IconCircle name="shield-checkmark" />
+            <View style={{ flex: 1 }}>
+              <Title style={{ fontSize: 18 }}>Próxima ronda · {next.slot.localTime}</Title>
+              <Label tone="muted">
+                {next.route.name} · {next.route.pointsCount} pontos · {next.route.expectedMinutes}{' '}
+                min
+              </Label>
+            </View>
+            <Chip tone="primary" icon="time" label={until(next.slot.at, now)} />
+          </View>
+          <Button
+            label="Iniciar e ler QR code"
+            icon="qr-code"
+            onPress={() => router.push('/rondas')}
+          />
+        </Card>
+      ) : null}
 
-        {feed.data && feed.data.pending > 0 ? (
-          <Card>
-            <Title style={{ fontSize: 18 }}>Comunicados</Title>
-            <Label>{feed.data.pending} aguardando sua leitura.</Label>
-            <Button
-              label="Ler agora"
-              variant="outline"
-              onPress={() => router.push('/comunicados')}
-            />
+      {feed.data && feed.data.pending > 0 ? (
+        <Touchable onPress={() => router.push('/comunicados')}>
+          <Card index={2} style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+            <IconCircle name="megaphone" tone="warning" />
+            <View style={{ flex: 1 }}>
+              <Title style={{ fontSize: 17 }}>
+                {feed.data.pending} comunicado{feed.data.pending > 1 ? 's' : ''} para ler
+              </Title>
+              <Label tone="muted" style={{ fontSize: 13 }}>
+                Toque para abrir
+              </Label>
+            </View>
           </Card>
-        ) : null}
-      </ScrollView>
-    </SafeAreaView>
+        </Touchable>
+      ) : null}
+
+      <SectionTitle>Atalhos</SectionTitle>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
+        {shortcuts.map((item, index) => (
+          <Animated.View
+            key={item.label}
+            entering={FadeInDown.delay(120 + index * 50)
+              .springify()
+              .damping(16)}
+            style={{ width: '47.5%' }}
+          >
+            <Touchable
+              accessibilityRole="button"
+              accessibilityLabel={item.label}
+              onPress={() => router.push(item.to)}
+              style={{
+                backgroundColor: c.card,
+                borderColor: c.border,
+                borderWidth: 1,
+                borderRadius: 20,
+                padding: 16,
+                gap: 10,
+              }}
+            >
+              <View style={styles.row}>
+                <IconCircle name={item.icon} />
+                {item.badge && item.badge > 0 ? (
+                  <Chip tone="warning" label={String(item.badge)} />
+                ) : null}
+              </View>
+              <Label style={{ fontWeight: '700' }}>{item.label}</Label>
+            </Touchable>
+          </Animated.View>
+        ))}
+      </View>
+    </Screen>
   );
 }

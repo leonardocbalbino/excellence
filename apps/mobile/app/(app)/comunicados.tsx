@@ -1,11 +1,24 @@
 import type { MyAnnouncement } from '@excellence/shared';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { router } from 'expo-router';
 import { useState } from 'react';
-import { Pressable } from 'react-native';
+import { View } from 'react-native';
 import { feedKey } from '@/query-keys';
 import { errorMessage, useApi } from '@/services';
-import { Banner, Button, Card, Label, Screen, Title } from '@/ui';
+import {
+  Banner,
+  Button,
+  Card,
+  Chip,
+  EmptyState,
+  haptics,
+  IconCircle,
+  Label,
+  Screen,
+  Skeleton,
+  styles,
+  Title,
+  Touchable,
+} from '@/ui';
 
 /** Comunicados: abrir registra a leitura; alguns pedem "li e estou ciente". */
 export default function AnnouncementsScreen() {
@@ -14,27 +27,52 @@ export default function AnnouncementsScreen() {
   const [open, setOpen] = useState<string | null>(null);
 
   return (
-    <Screen>
-      <Button label="‹ Voltar" variant="ghost" onPress={() => router.back()} />
-      <Title>Comunicados</Title>
+    <Screen
+      title="Comunicados"
+      back
+      refreshing={feed.isFetching}
+      onRefresh={() => void feed.refetch()}
+    >
       {feed.isError ? <Banner tone="warning">{errorMessage(feed.error)}</Banner> : null}
-      {feed.data?.items.length === 0 ? (
-        <Label tone="muted">Nenhum comunicado para você.</Label>
+      {feed.isPending ? (
+        <>
+          <Skeleton height={80} />
+          <Skeleton height={80} />
+        </>
       ) : null}
-      {feed.data?.items.map((item) =>
+      {feed.data?.items.length === 0 ? (
+        <Card>
+          <EmptyState
+            icon="megaphone-outline"
+            title="Nada por aqui"
+            text="Nenhum comunicado para você."
+          />
+        </Card>
+      ) : null}
+      {feed.data?.items.map((item, index) =>
         open === item.id ? (
           <Reader key={item.id} id={item.id} onClose={() => setOpen(null)} />
         ) : (
-          <Pressable key={item.id} accessibilityRole="button" onPress={() => setOpen(item.id)}>
-            <Card>
-              <Label style={{ fontWeight: '700' }}>{item.title}</Label>
-              <Label tone={needsAttention(item) ? 'warning' : 'muted'} style={{ fontSize: 13 }}>
-                {new Date(item.publishedAt).toLocaleDateString('pt-BR')}
-                {!item.viewedAt ? ' · não lido' : ''}
-                {item.requiresAcknowledgment && !item.acknowledgedAt ? ' · ciência pendente' : ''}
-              </Label>
+          <Touchable key={item.id} accessibilityRole="button" onPress={() => setOpen(item.id)}>
+            <Card index={index} style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+              <IconCircle name="megaphone" tone={needsAttention(item) ? 'warning' : 'primary'} />
+              <View style={{ flex: 1, gap: 4 }}>
+                <Label
+                  style={{ fontWeight: needsAttention(item) ? '800' : '600' }}
+                  numberOfLines={2}
+                >
+                  {item.title}
+                </Label>
+                <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+                  <Chip label={new Date(item.publishedAt).toLocaleDateString('pt-BR')} />
+                  {!item.viewedAt ? <Chip tone="primary" label="Não lido" /> : null}
+                  {item.requiresAcknowledgment && !item.acknowledgedAt ? (
+                    <Chip tone="warning" icon="hand-left" label="Ciência pendente" />
+                  ) : null}
+                </View>
+              </View>
             </Card>
-          </Pressable>
+          </Touchable>
         ),
       )}
     </Screen>
@@ -57,8 +95,10 @@ function Reader({ id, onClose }: { id: string; onClose: () => void }) {
     setBusy(true);
     try {
       await api.announcements.acknowledge(id);
+      haptics.success();
       await queryClient.invalidateQueries({ queryKey: feedKey });
     } catch (e) {
+      haptics.error();
       setError(errorMessage(e));
     } finally {
       setBusy(false);
@@ -67,15 +107,22 @@ function Reader({ id, onClose }: { id: string; onClose: () => void }) {
 
   return (
     <Card>
-      <Label style={{ fontWeight: '700', fontSize: 17 }}>{item.data?.title ?? '…'}</Label>
-      <Label>{item.data?.body ?? ''}</Label>
+      <View style={[styles.row, { alignItems: 'flex-start' }]}>
+        <Title style={{ fontSize: 19, flex: 1 }}>{item.data?.title ?? '…'}</Title>
+      </View>
+      {item.isPending ? <Skeleton height={60} /> : <Label>{item.data?.body ?? ''}</Label>}
       {item.data?.requiresAcknowledgment ? (
         item.data.acknowledgedAt ? (
-          <Label tone="primary">
+          <Banner tone="success">
             Ciência registrada em {new Date(item.data.acknowledgedAt).toLocaleString('pt-BR')}.
-          </Label>
+          </Banner>
         ) : (
-          <Button label="Li e estou ciente" onPress={() => void acknowledge()} loading={busy} />
+          <Button
+            label="Li e estou ciente"
+            icon="checkmark-done"
+            onPress={() => void acknowledge()}
+            loading={busy}
+          />
         )
       ) : null}
       {error ? <Banner tone="warning">{error}</Banner> : null}

@@ -1,53 +1,96 @@
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import Constants from 'expo-constants';
 import { type Href, router } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Pressable, Switch, View } from 'react-native';
+import { Linking, Switch, Text, View } from 'react-native';
 import {
   biometricAvailable,
   biometricEnabled,
   confirmIdentity,
   setBiometricEnabled,
 } from '@/device';
+import { type PushStatus, pushStatus, registerForPush, unregisterPush } from '@/push';
 import { feedKey } from '@/query-keys';
 import { useApi, useServices, useSession } from '@/services';
-import { Button, Card, Label, Screen, styles, Title, useColors } from '@/ui';
+import {
+  Button,
+  Card,
+  Chip,
+  Hero,
+  IconCircle,
+  type IconName,
+  Label,
+  Screen,
+  styles,
+  Touchable,
+  useColors,
+} from '@/ui';
 
-function Item({ label, detail, to }: { label: string; detail?: string; to: Href }) {
+function Item({
+  label,
+  icon,
+  to,
+  badge,
+  last = false,
+}: {
+  label: string;
+  icon: IconName;
+  to: Href;
+  badge?: string;
+  last?: boolean;
+}) {
   const c = useColors();
   return (
-    <Pressable
+    <Touchable
       accessibilityRole="button"
+      accessibilityLabel={label}
       onPress={() => router.push(to)}
-      style={({ pressed }) => [
+      style={[
         styles.row,
         {
-          paddingVertical: 14,
-          borderBottomWidth: 1,
+          paddingVertical: 12,
+          borderBottomWidth: last ? 0 : 1,
           borderBottomColor: c.border,
-          opacity: pressed ? 0.7 : 1,
         },
       ]}
     >
-      <Label style={{ fontWeight: '600' }}>{label}</Label>
-      <Label tone={detail ? 'warning' : 'muted'}>{detail ?? '›'}</Label>
-    </Pressable>
+      <View style={[styles.row, { justifyContent: 'flex-start', gap: 12 }]}>
+        <IconCircle name={icon} size={38} />
+        <Label style={{ fontWeight: '600' }}>{label}</Label>
+      </View>
+      <View style={[styles.row, { gap: 6 }]}>
+        {badge ? <Chip tone="warning" label={badge} /> : null}
+        <Ionicons name="chevron-forward" size={18} color={c.mutedForeground} />
+      </View>
+    </Touchable>
   );
 }
 
-/** Mais: espelho, comunicados, benefícios, perfil, biometria e sair. */
+function initials(name: string): string {
+  const parts = name.trim().split(/\s+/);
+  return (
+    (parts[0]?.[0] ?? '') + (parts.length > 1 ? (parts.at(-1)?.[0] ?? '') : '')
+  ).toUpperCase();
+}
+
+/** Mais: espelho, comunicados, perfil, notificações, biometria e sair. */
 export default function MoreScreen() {
   const api = useApi();
+  const c = useColors();
   const { session } = useServices();
   const queryClient = useQueryClient();
   const state = useSession();
   const feed = useQuery({ queryKey: feedKey, queryFn: () => api.announcements.feed() });
   const [bioAvailable, setBioAvailable] = useState(false);
   const [bioOn, setBioOn] = useState(false);
+  const [push, setPush] = useState<PushStatus | null>(null);
 
   useEffect(() => {
     void (async () => {
       setBioAvailable(await biometricAvailable());
       setBioOn(await biometricEnabled());
+      setPush(await pushStatus());
     })();
   }, []);
 
@@ -58,52 +101,121 @@ export default function MoreScreen() {
     setBioOn(value);
   };
 
+  const enablePush = async () => {
+    const status = await registerForPush(api).catch(() => 'unavailable' as const);
+    // Recusado antes: o sistema não pergunta de novo, só nas configurações.
+    if (status === 'denied') void Linking.openSettings();
+    setPush(status);
+  };
+
+  const user = state.status === 'authenticated' ? state.user : null;
+
   return (
-    <Screen>
-      <Title>Mais</Title>
-      {state.status === 'authenticated' ? (
-        <Card>
-          <Label style={{ fontWeight: '700' }}>{state.user.name}</Label>
-          <Label tone="muted">{state.user.email}</Label>
-        </Card>
+    <Screen title="Mais">
+      {user ? (
+        <Hero style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+          <View
+            style={{
+              width: 60,
+              height: 60,
+              borderRadius: 30,
+              backgroundColor: '#ffffff',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <Text style={{ color: '#0f5a52', fontSize: 22, fontWeight: '800' }}>
+              {initials(user.name)}
+            </Text>
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={{ color: '#fff', fontSize: 19, fontWeight: '800' }} numberOfLines={1}>
+              {user.name}
+            </Text>
+            <Text style={{ color: '#ffffffcc' }} numberOfLines={1}>
+              {user.email}
+            </Text>
+          </View>
+        </Hero>
       ) : null}
-      <Card>
-        <Item label="Espelho de ponto" to="/espelho" />
+
+      <Card index={1}>
+        <Item label="Espelho de ponto" icon="calendar-outline" to="/espelho" />
         <Item
           label="Comunicados"
+          icon="megaphone-outline"
           to="/comunicados"
           {...(feed.data && feed.data.pending > 0
-            ? { detail: `${String(feed.data.pending)} novos` }
+            ? { badge: `${String(feed.data.pending)} novos` }
             : {})}
         />
-        <Item label="Benefícios e links" to="/beneficios" />
-        <Item label="Meu perfil" to="/perfil" />
+        <Item label="Meu perfil" icon="person-outline" to="/perfil" last />
       </Card>
-      {bioAvailable ? (
-        <Card>
-          <View style={styles.row}>
+
+      <Card index={2}>
+        <View style={styles.row}>
+          <View style={[styles.row, { flex: 1, justifyContent: 'flex-start', gap: 12 }]}>
+            <IconCircle name="notifications-outline" size={38} />
             <View style={{ flex: 1 }}>
-              <Label style={{ fontWeight: '600' }}>Destravar com biometria</Label>
+              <Label style={{ fontWeight: '600' }}>Notificações</Label>
               <Label tone="muted" style={{ fontSize: 13 }}>
-                Pede a digital ou o rosto ao abrir o app e depois de 5 min fora dele.
+                {push === 'enabled'
+                  ? 'Ativas: ronda, ponto, comunicados e respostas do RH.'
+                  : push === 'unavailable'
+                    ? 'Indisponíveis neste aparelho.'
+                    : 'Desativadas. Ative para receber os lembretes.'}
               </Label>
+            </View>
+          </View>
+          {push === 'enabled' ? (
+            <Chip tone="success" icon="checkmark" label="Ativas" />
+          ) : push === 'denied' ? (
+            <Touchable accessibilityRole="button" onPress={() => void enablePush()}>
+              <Label tone="primary" style={{ fontWeight: '700' }}>
+                Ativar
+              </Label>
+            </Touchable>
+          ) : null}
+        </View>
+        {bioAvailable ? (
+          <View
+            style={[styles.row, { borderTopWidth: 1, borderTopColor: c.border, paddingTop: 12 }]}
+          >
+            <View style={[styles.row, { flex: 1, justifyContent: 'flex-start', gap: 12 }]}>
+              <IconCircle name="finger-print" size={38} />
+              <View style={{ flex: 1 }}>
+                <Label style={{ fontWeight: '600' }}>Destravar com biometria</Label>
+                <Label tone="muted" style={{ fontSize: 13 }}>
+                  Ao abrir o app e depois de 5 min fora dele.
+                </Label>
+              </View>
             </View>
             <Switch
               value={bioOn}
               onValueChange={(value) => void toggleBiometric(value)}
+              trackColor={{ true: c.primary }}
               accessibilityLabel="Destravar com biometria"
             />
           </View>
-        </Card>
-      ) : null}
+        ) : null}
+      </Card>
+
       <Button
         label="Sair"
         variant="outline"
+        icon="log-out-outline"
         onPress={() => {
-          // Os registros sem conexão ficam guardados e saem quando a mesma pessoa entrar de novo.
-          void session.signOut().then(() => queryClient.clear());
+          void (async () => {
+            // Os registros sem conexão ficam guardados e saem quando a mesma pessoa entrar de novo.
+            await unregisterPush(api);
+            await session.signOut();
+            queryClient.clear();
+          })();
         }}
       />
+      <Label tone="muted" style={{ textAlign: 'center', fontSize: 12 }}>
+        Excellence {Constants.expoConfig?.version ?? ''}
+      </Label>
     </Screen>
   );
 }
