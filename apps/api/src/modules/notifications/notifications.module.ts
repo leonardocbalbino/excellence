@@ -1,5 +1,17 @@
 import { Module } from '@nestjs/common';
+import { Notifier } from './application/notifier';
+import { PushDevicesService } from './application/push-devices.service';
+import { PushSender } from './application/push-sender';
+import { PushDevicesController } from './http/push-devices.controller';
 
-/** Notificações: e-mail, push e in-app. */
-@Module({})
+/**
+ * Notificações push do app do funcionário (ADR 0022): aparelhos, envio pelo Expo e as
+ * mensagens dos acontecimentos. Não importa módulos de domínio, para que ponto, atestados e
+ * comunicados possam usá-lo sem ciclo; os lembretes ficam em `PushRemindersModule`.
+ */
+@Module({
+  controllers: [PushDevicesController],
+  providers: [PushSender, Notifier, PushDevicesService],
+  exports: [PushSender, Notifier],
+})
 export class NotificationsModule {}

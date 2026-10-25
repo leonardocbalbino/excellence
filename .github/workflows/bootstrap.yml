@@ -1,0 +1,82 @@
+name: Bootstrap (empresa inicial)
+
+# Cria a primeira empresa de um ambiente sem seed (produção): empresa, perfis padrão, um
+# posto, o administrador e um funcionário de teste para o app. Idempotente: rodar de novo
+# não duplica nada nem troca senha de quem já existe.
+#
+# Manual: Actions → "Bootstrap (empresa inicial)" → Run workflow. As senhas temporárias das
+# contas criadas aparecem no log do passo "Criar empresa e contas" (troca obrigatória no
+# primeiro acesso). Ver deploy/README.md.
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Ambiente
+        type: choice
+        options: [production, staging]
+        default: production
+      company_name:
+        description: Nome da empresa (edite depois pelo site)
+        default: Teste
+      company_cnpj:
+        description: CNPJ (vazio = fictício de teste)
+        required: false
+      admin_email:
+        description: E-mail do administrador
+        default: admin@teste.com.br
+      employee_email:
+        description: E-mail do funcionário de teste (app)
+        default: funcionario@teste.com.br
+
+concurrency:
+  group: bootstrap-${{ inputs.environment }}
+  cancel-in-progress: false
+
+jobs:
+  bootstrap:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: ${{ inputs.environment }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Instalar dependências
+        run: pnpm install --frozen-lockfile
+
+      - name: Preparar (shared e client do Prisma)
+        run: |
+          pnpm turbo run build --filter=@excellence/shared
+          pnpm --filter @excellence/api db:generate
+
+      - name: Configurar SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.VPS_SSH_KEY }}
+
+      - name: Adicionar VPS aos known_hosts
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -p ${{ secrets.VPS_SSH_PORT || 22 }} ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts
+
+      # Mesmo túnel do deploy: o Postgres da VPS só escuta em localhost. As migrations vão
+      # antes, para o banco estar na versão do código.
+      - name: Criar empresa e contas (via túnel SSH)
+        env:
+          SSH_PORT: ${{ secrets.VPS_SSH_PORT || 22 }}
+          DATABASE_URL: ${{ inputs.environment == 'production' && secrets.DATABASE_URL_PROD || secrets.DATABASE_URL_STAGING }}
+          BOOTSTRAP_COMPANY_NAME: ${{ inputs.company_name }}
+          BOOTSTRAP_COMPANY_CNPJ: ${{ inputs.company_cnpj }}
+          BOOTSTRAP_ADMIN_EMAIL: ${{ inputs.admin_email }}
+          BOOTSTRAP_EMPLOYEE_EMAIL: ${{ inputs.employee_email }}
+        run: |
+          ssh -p "$SSH_PORT" -fN -o ExitOnForwardFailure=yes \
+            -L 127.0.0.1:5432:127.0.0.1:5432 ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}
+          pnpm --filter @excellence/api db:deploy
+          pnpm --filter @excellence/api db:bootstrap

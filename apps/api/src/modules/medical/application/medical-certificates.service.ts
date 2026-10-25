@@ -15,6 +15,7 @@ import type { MedicalCertificateStatus, Prisma } from '../../../generated/prisma
 import { TenantPrismaService } from '../../../infrastructure/prisma/tenant-prisma.service';
 import type { AccessGrant } from '../../access-control/http/access.decorators';
 import { AuditService } from '../../audit/application/audit.service';
+import { Notifier } from '../../notifications/application/notifier';
 import { FilesService } from '../../files/application/files.service';
 import { invalidReference } from '../../organization/application/catalog-rules';
 import { EmployeesService } from '../../workforce/application/employees.service';
@@ -91,6 +92,7 @@ export class MedicalCertificatesService {
     private readonly files: FilesService,
     private readonly employees: EmployeesService,
     private readonly audit: AuditService,
+    private readonly notifier: Notifier,
   ) {}
 
   /**
@@ -340,6 +342,7 @@ export class MedicalCertificatesService {
         tx,
       );
     });
+    await this.notifier.certificateReviewed(grant.companyId, current.employeeId, status);
     return this.get(id);
   }
 
