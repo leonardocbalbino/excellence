@@ -73,6 +73,14 @@ const config: ExpoConfig = {
       },
     ],
     [
+      'expo-image-picker',
+      {
+        photosPermission:
+          'A galeria é usada para escolher a foto de perfil e as fotos dos chamados com o RH.',
+        cameraPermission: 'A câmera tira a foto de perfil e as fotos dos chamados com o RH.',
+      },
+    ],
+    [
       'expo-local-authentication',
       { faceIDPermission: 'O Face ID destrava o app sem digitar a senha.' },
     ],

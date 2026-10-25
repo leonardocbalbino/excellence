@@ -18,6 +18,9 @@ do web: schemas, tipos e client HTTP. Decisões em ADR 0019 (sessão e offline) 
   - rotas e horários de hoje;
   - iniciar a ronda e ler os QR codes, com linha de leitura animada e flash verde/vermelho;
   - barra de progresso, próximo ponto destacado e encerramento com motivo.
+- **Falar com o RH:** chamados com número único, conversa em bolhas com foto, aviso por push
+  quando o RH responde (ADR 0023). O RH atende pelo site, em Comunicação › Atendimento.
+- **Foto de perfil:** câmera ou galeria, com recorte quadrado (Mais, Início e Perfil).
 - **Benefícios:** cartões por tipo e links úteis. VA/VT por dia mostram o valor diário e a
   prévia do mês pelo próprio ponto.
 - **Mais:**

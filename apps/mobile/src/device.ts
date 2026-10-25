@@ -1,4 +1,4 @@
-import { type ApiClient, ApiUnavailableError } from '@excellence/shared';
+import { type ApiClient, ApiUnavailableError, type FilePurpose } from '@excellence/shared';
 import * as Crypto from 'expo-crypto';
 import * as LocalAuthentication from 'expo-local-authentication';
 import * as Location from 'expo-location';
@@ -63,36 +63,55 @@ export async function confirmIdentity(reason: string): Promise<boolean> {
   return result.success;
 }
 
-// ─── Foto (selfie do ponto) ───────────────────────────────────────────────────────
+// ─── Envio de arquivos (selfie, foto de perfil, anexo do chamado) ─────────────────────
+
+export interface LocalFile {
+  uri: string;
+  fileName: string;
+  contentType: string;
+}
 
 /**
- * Envia uma foto do aparelho direto ao storage (política pré-assinada) e confirma na API,
- * como o web faz. Devolve o id do arquivo para a marcação.
+ * Envia um arquivo do aparelho direto ao storage (política pré-assinada) e confirma na API,
+ * como o web faz. Devolve o id do arquivo para referenciar (marcação, perfil, chamado).
  */
-export async function uploadPhoto(api: ApiClient, uri: string): Promise<string> {
+export async function uploadLocalFile(
+  api: ApiClient,
+  file: LocalFile,
+  purpose: FilePurpose,
+): Promise<string> {
   let size: number;
   try {
-    size = (await (await fetch(uri)).blob()).size;
+    size = (await (await fetch(file.uri)).blob()).size;
   } catch (error) {
-    throw new ApiUnavailableError('Não foi possível ler a foto.', { cause: error });
+    throw new ApiUnavailableError('Não foi possível ler o arquivo.', { cause: error });
   }
   const ticket = await api.files.createUpload({
-    purpose: 'selfie',
-    fileName: 'selfie.jpg',
-    contentType: 'image/jpeg',
+    purpose,
+    fileName: file.fileName,
+    contentType: file.contentType,
     sizeBytes: size,
   });
   const form = new FormData();
   for (const [key, value] of Object.entries(ticket.fields)) form.append(key, value);
   // No React Native o arquivo vai como { uri, name, type }.
-  form.append('file', { uri, name: 'selfie.jpg', type: 'image/jpeg' } as unknown as Blob);
+  form.append('file', {
+    uri: file.uri,
+    name: file.fileName,
+    type: file.contentType,
+  } as unknown as Blob);
   let response: Response;
   try {
     response = await fetch(ticket.url, { method: 'POST', body: form });
   } catch (error) {
-    throw new ApiUnavailableError('Não foi possível enviar a foto.', { cause: error });
+    throw new ApiUnavailableError('Não foi possível enviar o arquivo.', { cause: error });
   }
-  if (!response.ok) throw new ApiUnavailableError('O armazenamento recusou a foto.');
+  if (!response.ok) throw new ApiUnavailableError('O armazenamento recusou o arquivo.');
   await api.files.confirm(ticket.fileId);
   return ticket.fileId;
+}
+
+/** Selfie do registro de ponto. */
+export function uploadPhoto(api: ApiClient, uri: string): Promise<string> {
+  return uploadLocalFile(api, { uri, fileName: 'selfie.jpg', contentType: 'image/jpeg' }, 'selfie');
 }

@@ -1,6 +1,7 @@
 import { formatCpf } from '@excellence/shared';
 import { useQuery } from '@tanstack/react-query';
 import { View } from 'react-native';
+import { Avatar } from '@/avatar';
 import { formatDate } from '@/format';
 import { accessQueryKey } from '@/query-keys';
 import { errorMessage, useApi, useSession } from '@/services';
@@ -29,6 +30,14 @@ export default function ProfileScreen() {
 
   return (
     <Screen title="Meu perfil" back>
+      {session.status === 'authenticated' ? (
+        <View style={{ alignItems: 'center', gap: 8, paddingVertical: 6 }}>
+          <Avatar name={session.user.name} size={112} editable />
+          <Label tone="muted" style={{ fontSize: 13 }}>
+            Toque na foto para trocar
+          </Label>
+        </View>
+      ) : null}
       {employee.isError ? <Banner tone="warning">{errorMessage(employee.error)}</Banner> : null}
       {data ? (
         <>
