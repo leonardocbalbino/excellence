@@ -26,6 +26,8 @@ export function TabBar({ state, navigation, items }: TabBarProps & { items: read
   const c = useColors();
   const insets = useSafeAreaInsets();
   const current = state.routes[state.index]?.name;
+  // Na conversa com o RH, a barra de mensagem fica no lugar das abas.
+  if (current === 'atendimento') return null;
 
   return (
     <View

@@ -11,7 +11,8 @@ import {
   setBiometricEnabled,
 } from '@/device';
 import { type PushStatus, pushStatus, registerForPush, unregisterPush } from '@/push';
-import { feedKey } from '@/query-keys';
+import { Avatar } from '@/avatar';
+import { conversationsUnreadKey, feedKey } from '@/query-keys';
 import { useApi, useServices, useSession } from '@/services';
 import {
   Button,
@@ -67,13 +68,6 @@ function Item({
   );
 }
 
-function initials(name: string): string {
-  const parts = name.trim().split(/\s+/);
-  return (
-    (parts[0]?.[0] ?? '') + (parts.length > 1 ? (parts.at(-1)?.[0] ?? '') : '')
-  ).toUpperCase();
-}
-
 /** Mais: espelho, comunicados, perfil, notificações, biometria e sair. */
 export default function MoreScreen() {
   const api = useApi();
@@ -82,6 +76,10 @@ export default function MoreScreen() {
   const queryClient = useQueryClient();
   const state = useSession();
   const feed = useQuery({ queryKey: feedKey, queryFn: () => api.announcements.feed() });
+  const unread = useQuery({
+    queryKey: conversationsUnreadKey,
+    queryFn: () => api.conversations.myUnread(),
+  });
   const [bioAvailable, setBioAvailable] = useState(false);
   const [bioOn, setBioOn] = useState(false);
   const [push, setPush] = useState<PushStatus | null>(null);
@@ -114,20 +112,7 @@ export default function MoreScreen() {
     <Screen title="Mais">
       {user ? (
         <Hero style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
-          <View
-            style={{
-              width: 60,
-              height: 60,
-              borderRadius: 30,
-              backgroundColor: '#ffffff',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            <Text style={{ color: '#0f5a52', fontSize: 22, fontWeight: '800' }}>
-              {initials(user.name)}
-            </Text>
-          </View>
+          <Avatar name={user.name} size={64} editable inverse />
           <View style={{ flex: 1 }}>
             <Text style={{ color: '#fff', fontSize: 19, fontWeight: '800' }} numberOfLines={1}>
               {user.name}
@@ -140,6 +125,14 @@ export default function MoreScreen() {
       ) : null}
 
       <Card index={1}>
+        <Item
+          label="Falar com o RH"
+          icon="chatbubbles-outline"
+          to="/atendimento"
+          {...(unread.data && unread.data.conversations > 0
+            ? { badge: `${String(unread.data.conversations)} com resposta` }
+            : {})}
+        />
         <Item label="Espelho de ponto" icon="calendar-outline" to="/espelho" />
         <Item
           label="Comunicados"

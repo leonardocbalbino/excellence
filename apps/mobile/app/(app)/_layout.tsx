@@ -3,7 +3,7 @@ import { Redirect, Tabs } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import { registerForPush, unregisterPush, usePushNavigation } from '@/push';
-import { accessQueryKey, feedKey } from '@/query-keys';
+import { accessQueryKey, conversationsUnreadKey, feedKey } from '@/query-keys';
 import { errorMessage, useApi, useServices, useSession } from '@/services';
 import { TabBar, type TabItem } from '@/tab-bar';
 import {
@@ -40,6 +40,13 @@ export default function AppLayout() {
     queryKey: feedKey,
     queryFn: () => api.announcements.feed(),
     enabled: ready,
+  });
+  // Chamados com resposta do RH ainda não lida (selo em Mais).
+  const unread = useQuery({
+    queryKey: conversationsUnreadKey,
+    queryFn: () => api.conversations.myUnread(),
+    enabled: ready,
+    refetchInterval: 60_000,
   });
 
   // Push: registra o aparelho uma vez por sessão, quando há conexão.
@@ -85,7 +92,7 @@ export default function AppLayout() {
       label: 'Mais',
       icon: 'grid-outline',
       activeIcon: 'grid',
-      badge: feed.data?.pending ?? 0,
+      badge: (feed.data?.pending ?? 0) + (unread.data?.conversations ?? 0),
     },
   ];
 
@@ -106,6 +113,7 @@ export default function AppLayout() {
       <Tabs.Screen name="espelho" options={{ href: null }} />
       <Tabs.Screen name="comunicados" options={{ href: null }} />
       <Tabs.Screen name="perfil" options={{ href: null }} />
+      <Tabs.Screen name="atendimento" options={{ href: null }} />
     </Tabs>
   );
 }

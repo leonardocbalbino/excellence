@@ -5,3 +5,5 @@ export const myPatrolsKey = ['me', 'patrols'] as const;
 export const feedKey = ['me', 'announcements'] as const;
 export const timesheetKey = ['me', 'timesheet'] as const;
 export const clockSettingsKey = ['clock-settings'] as const;
+export const conversationsKey = ['me', 'conversations'] as const;
+export const conversationsUnreadKey = ['me', 'conversations', 'unread'] as const;

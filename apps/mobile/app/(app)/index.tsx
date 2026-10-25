@@ -3,9 +3,16 @@ import { type Href, router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Text, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
+import { Avatar } from '@/avatar';
 import { formatMinutes, todayIso } from '@/format';
 import { useOfflineQueue } from '@/offline-queue';
-import { accessQueryKey, feedKey, myPatrolsKey, todayEntriesKey } from '@/query-keys';
+import {
+  accessQueryKey,
+  conversationsUnreadKey,
+  feedKey,
+  myPatrolsKey,
+  todayEntriesKey,
+} from '@/query-keys';
 import { useApi, useSession } from '@/services';
 import {
   Banner,
@@ -67,6 +74,10 @@ export default function HomeScreen() {
     enabled: hasRoutes,
   });
   const feed = useQuery({ queryKey: feedKey, queryFn: () => api.announcements.feed() });
+  const unread = useQuery({
+    queryKey: conversationsUnreadKey,
+    queryFn: () => api.conversations.myUnread(),
+  });
 
   const firstName = session.status === 'authenticated' ? session.user.name.split(' ')[0] : '';
   const effective = (entries.data ?? []).filter((e) => e.kind !== 'disregard' && !e.disregarded);
@@ -101,7 +112,12 @@ export default function HomeScreen() {
     { label: 'Benefícios', icon: 'gift', to: '/beneficios' },
     { label: 'Espelho', icon: 'calendar', to: '/espelho' },
     { label: 'Comunicados', icon: 'megaphone', to: '/comunicados', badge: feed.data?.pending ?? 0 },
-    { label: 'Meu perfil', icon: 'person', to: '/perfil' },
+    {
+      label: 'Falar com o RH',
+      icon: 'chatbubbles',
+      to: '/atendimento',
+      badge: unread.data?.conversations ?? 0,
+    },
   ];
 
   return (
@@ -113,13 +129,30 @@ export default function HomeScreen() {
         void patrols.refetch();
       }}
     >
-      <Animated.View entering={FadeInDown.springify().damping(18)} style={{ gap: 2 }}>
-        <Label tone="muted" style={{ textTransform: 'capitalize' }}>
-          {now.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}
-        </Label>
-        <Text style={[styles.screenTitle, { color: c.foreground }]}>
-          {greeting(now)}, {firstName} 👋
-        </Text>
+      <Animated.View
+        entering={FadeInDown.springify().damping(18)}
+        style={[styles.row, { justifyContent: 'flex-start', gap: 14 }]}
+      >
+        {session.status === 'authenticated' ? (
+          <Touchable
+            accessibilityRole="button"
+            accessibilityLabel="Meu perfil"
+            onPress={() => router.push('/perfil')}
+          >
+            <Avatar name={session.user.name} size={54} />
+          </Touchable>
+        ) : null}
+        <View style={{ flex: 1, gap: 2 }}>
+          <Label tone="muted" style={{ textTransform: 'capitalize' }}>
+            {now.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}
+          </Label>
+          <Text
+            style={[styles.screenTitle, { color: c.foreground, fontSize: 26 }]}
+            numberOfLines={1}
+          >
+            {greeting(now)}, {firstName} 👋
+          </Text>
+        </View>
       </Animated.View>
 
       {offline ? (
