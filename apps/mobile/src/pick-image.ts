@@ -12,12 +12,10 @@ export async function pickImage(
   source: 'camera' | 'library',
   { square = false, front = false }: { square?: boolean; front?: boolean } = {},
 ): Promise<LocalFile | null> {
-  const permission =
-    source === 'camera'
-      ? await ImagePicker.requestCameraPermissionsAsync()
-      : await ImagePicker.requestMediaLibraryPermissionsAsync();
-  if (!permission.granted) {
-    Alert.alert('Permissão necessária', 'Permita o acesso nas configurações do aparelho.');
+  // A galeria usa o seletor de fotos do sistema, que não pede permissão (o app não lê o
+  // armazenamento: ver blockedPermissions no app.config.ts). Só a câmera pede.
+  if (source === 'camera' && !(await ImagePicker.requestCameraPermissionsAsync()).granted) {
+    Alert.alert('Permissão necessária', 'Permita o acesso à câmera nas configurações do aparelho.');
     return null;
   }
   const options: ImagePicker.ImagePickerOptions = {

@@ -53,6 +53,11 @@ function shared(path: string, load: Load): RouteObject {
 
 export const routes: RouteObject[] = [
   { path: '/login', element: <LoginPage /> },
+  // Pública (sem login): endereço exigido pelas lojas de apps.
+  {
+    path: '/privacidade',
+    lazy: lazyPage(async () => (await import('@/features/legal/privacy-page')).PrivacyPage),
+  },
   {
     element: <RequireAuth />,
     children: [

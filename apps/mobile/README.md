@@ -68,13 +68,16 @@ npx eas-cli@latest build --profile development --platform android
 
 ## Publicar
 
-1. O projeto no expo.dev já está no `app.config.ts` (`extra.eas.projectId`). O app lê o
-   `@excellence/shared` direto do código-fonte (`metro.config.js`), porque o `dist/` fica fora do
-   git e não chega ao EAS. Nada precisa ser buildado antes.
-2. Android: envie a credencial do FCM (`npx eas-cli@latest credentials`). iOS: a chave APNs é criada pelo
-   EAS na primeira build.
-3. APK para testar com a equipe: `npx eas-cli@latest build --profile preview --platform android`.
-4. Lojas: `npx eas-cli@latest build --profile production` e `npx eas-cli@latest submit`.
+Passo a passo da Google Play (pela conta do Cartão Colaborativa), ficha da loja, segurança dos
+dados e política de privacidade em [`docs/loja`](../../docs/loja/README.md).
+
+```powershell
+npx eas-cli@latest build --platform android --profile production   # gera o AAB
+npx eas-cli@latest submit --platform android --profile production --latest   # teste interno, rascunho
+```
+
+O app lê o `@excellence/shared` direto do código-fonte (`metro.config.js`), porque o `dist/`
+fica fora do git e não chega ao EAS. Nada precisa ser buildado antes.
 
 ## Fica para depois
 

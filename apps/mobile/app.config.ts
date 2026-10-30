@@ -38,10 +38,14 @@ const config: ExpoConfig = {
       // A API de produção ainda é HTTP num IP (sem domínio nem certificado). O iOS bloqueia
       // HTTP por padrão; esta liberação sai quando a API tiver HTTPS (ADR 0022).
       NSAppTransportSecurity: { NSAllowsArbitraryLoads: apiUrl.startsWith('http://') },
+      // Só criptografia padrão do sistema (HTTPS/TLS): dispensa a declaração de exportação.
+      ITSAppUsesNonExemptEncryption: false,
     },
   },
   android: {
     package: 'br.com.excellence.app',
+    // Sem backup automático do Android: tokens e fila offline não vão para a nuvem.
+    allowBackup: false,
     adaptiveIcon: {
       foregroundImage: '../web/public/icon-maskable-512.png',
       backgroundColor: '#0f5a52',
@@ -53,6 +57,18 @@ const config: ExpoConfig = {
       'android.permission.VIBRATE',
       'android.permission.POST_NOTIFICATIONS',
     ],
+    // O app não grava áudio e usa o seletor de fotos do sistema (sem acesso ao armazenamento).
+    // Bloquear evita que bibliotecas adicionem essas permissões, que a Google Play exige
+    // justificar (política de fotos e vídeos) e que atrasam a revisão.
+    blockedPermissions: [
+      'android.permission.RECORD_AUDIO',
+      'android.permission.READ_EXTERNAL_STORAGE',
+      'android.permission.WRITE_EXTERNAL_STORAGE',
+      'android.permission.READ_MEDIA_IMAGES',
+      'android.permission.READ_MEDIA_VIDEO',
+      'android.permission.READ_MEDIA_AUDIO',
+      'android.permission.SYSTEM_ALERT_WINDOW',
+    ],
   },
   plugins: [
     'expo-router',
@@ -63,6 +79,7 @@ const config: ExpoConfig = {
       {
         cameraPermission:
           'A câmera lê o QR code dos pontos de ronda e tira a foto do registro de ponto.',
+        recordAudioAndroid: false,
       },
     ],
     [
@@ -78,6 +95,7 @@ const config: ExpoConfig = {
         photosPermission:
           'A galeria é usada para escolher a foto de perfil e as fotos dos chamados com o RH.',
         cameraPermission: 'A câmera tira a foto de perfil e as fotos dos chamados com o RH.',
+        microphonePermission: false,
       },
     ],
     [
