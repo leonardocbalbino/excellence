@@ -12,6 +12,7 @@ import { todayEntriesKey } from '@/query-keys';
 import { errorMessage, useApi, useSession } from '@/services';
 import {
   Banner,
+  BRAND,
   Button,
   Card,
   Chip,
@@ -116,7 +117,7 @@ export default function ClockScreen() {
       <Hero style={{ alignItems: 'center', gap: 6 }}>
         <Text
           style={{
-            color: '#ffffff',
+            color: BRAND.gold,
             fontSize: 60,
             fontWeight: '800',
             fontVariant: ['tabular-nums'],

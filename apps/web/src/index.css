@@ -13,70 +13,83 @@
 
 :root {
   color-scheme: light;
-  --background: #f4f2ed;
-  --foreground: #16201d;
+  /* Identidade Excellence: preto e dourado sobre creme (logo dourada). */
+  --background: #f6f1e8;
+  --foreground: #1a1712;
   --card: #ffffff;
-  --card-foreground: #16201d;
-  --muted: #ebe8e1;
-  --muted-foreground: #5f6663;
-  --primary: #0f5a52;
-  --primary-foreground: #ffffff;
+  --card-foreground: #1a1712;
+  --muted: #efe7d8;
+  --muted-foreground: #6a6152;
+  /* Dourado escuro: texto e links legíveis no branco (contraste AA). */
+  --primary: #8f6d27;
+  --primary-foreground: #fffaf0;
   /* Fundo suave da cor principal (avisos, selos "hoje", item ativo). */
-  --primary-soft: #e3eeeb;
-  --secondary: #ebe8e1;
-  --secondary-foreground: #16201d;
-  --accent: #e9f0ed;
-  --accent-foreground: #0f3f3a;
+  --primary-soft: #f4ead3;
+  --secondary: #efe7d8;
+  --secondary-foreground: #1a1712;
+  --accent: #f6eedd;
+  --accent-foreground: #4a3810;
   --destructive: #b42318;
   --destructive-foreground: #ffffff;
-  /* Atenção (atrasos, pendências antigas): terracota, como no layout. */
+  /* Atenção (atrasos, pendências antigas): terracota. */
   --warning: #b4451a;
   --warning-soft: #fbece4;
   --warning-border: #f1d2c1;
   --success: #1f7a4d;
-  --border: #e3dfd6;
-  --input: #d9d4ca;
-  --ring: #0f5a52;
+  --border: #e8dfcd;
+  --input: #ddd2bd;
+  --ring: #b08a3e;
   --radius: 0.75rem;
 
-  /* Menu lateral da gestão. */
-  --sidebar: #13201d;
-  --sidebar-foreground: #dfe7e4;
-  --sidebar-muted: #93a39e;
-  --sidebar-accent: #0f5a52;
-  --sidebar-border: #24332f;
+  /* Dourado da logo: botão principal e destaques (texto escuro por cima). */
+  --gold: #c9a356;
+  --gold-gradient: linear-gradient(135deg, #ecd593 0%, #c9a356 48%, #a77f2e 100%);
+  --gold-foreground: #16130e;
+
+  /* Menu lateral da gestão: preto com o item ativo em dourado. */
+  --sidebar: #12100c;
+  --sidebar-foreground: #efe6d3;
+  --sidebar-muted: #9d937f;
+  --sidebar-accent: #c9a356;
+  --sidebar-accent-foreground: #16130e;
+  --sidebar-border: #2a251c;
 }
 
 :root[data-theme='dark'] {
   color-scheme: dark;
-  --background: #0f1614;
-  --foreground: #eef2f0;
-  --card: #17201d;
-  --card-foreground: #eef2f0;
-  --muted: #222d2a;
-  --muted-foreground: #a3aeaa;
-  --primary: #4fb3a5;
-  --primary-foreground: #0b1513;
-  --primary-soft: #183330;
-  --secondary: #222d2a;
-  --secondary-foreground: #eef2f0;
-  --accent: #1d2c29;
-  --accent-foreground: #d7ece7;
+  --background: #0e0d0b;
+  --foreground: #f2ebdd;
+  --card: #181612;
+  --card-foreground: #f2ebdd;
+  --muted: #231f18;
+  --muted-foreground: #a99f8b;
+  --primary: #d6b46c;
+  --primary-foreground: #16130e;
+  --primary-soft: #2b2415;
+  --secondary: #231f18;
+  --secondary-foreground: #f2ebdd;
+  --accent: #262016;
+  --accent-foreground: #f0dfb4;
   --destructive: #f07167;
-  --destructive-foreground: #0b1513;
+  --destructive-foreground: #16130e;
   --warning: #f0936a;
   --warning-soft: #3a2219;
   --warning-border: #5a3324;
   --success: #5cc48f;
-  --border: #2a3532;
-  --input: #34413d;
-  --ring: #4fb3a5;
+  --border: #2e2920;
+  --input: #3a342a;
+  --ring: #d6b46c;
 
-  --sidebar: #0b1210;
-  --sidebar-foreground: #dfe7e4;
-  --sidebar-muted: #8a9994;
-  --sidebar-accent: #1c5a52;
-  --sidebar-border: #1f2b28;
+  --gold: #d6b46c;
+  --gold-gradient: linear-gradient(135deg, #f0dca0 0%, #d6b46c 48%, #b08a3e 100%);
+  --gold-foreground: #16130e;
+
+  --sidebar: #090807;
+  --sidebar-foreground: #efe6d3;
+  --sidebar-muted: #8f8673;
+  --sidebar-accent: #c9a356;
+  --sidebar-accent-foreground: #16130e;
+  --sidebar-border: #221e17;
 }
 
 @theme inline {
@@ -110,11 +123,19 @@
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar-muted: var(--sidebar-muted);
   --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-gold: var(--gold);
+  --color-gold-foreground: var(--gold-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
+}
+
+/* Fundo dourado em degradê (botão principal, destaques). */
+@utility bg-gold-gradient {
+  background-image: var(--gold-gradient);
 }
 
 @layer base {

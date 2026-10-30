@@ -23,6 +23,7 @@ import { EmployeesService } from '../../workforce/application/employees.service'
 import { fromCalendarDate, todayIn } from '../../workforce/domain/calendar';
 import { employeeScopeWhere } from '../../workforce/domain/employee-scope';
 import { tokensMatch } from '../domain/code';
+import { checkProximity, requiredPoints } from '../domain/proximity';
 import { lateMinutes, pickSlot, slotsOn, slotStatus } from '../domain/schedule';
 
 type CheckinInput = z.output<typeof patrolCheckinInputSchema>;
@@ -38,6 +39,7 @@ const RUN_SELECT = {
   routeId: true,
   pointIds: true,
   enforceOrder: true,
+  minPoints: true,
   scheduledFor: true,
   startedAt: true,
   expectedEndAt: true,
@@ -145,6 +147,7 @@ export class PatrolRunsService {
         unitId: true,
         expectedMinutes: true,
         enforceOrder: true,
+        minPoints: true,
         startMinutes: true,
         weekdays: true,
         unit: { select: { timezone: true } },
@@ -198,6 +201,7 @@ export class PatrolRunsService {
           unitId: route.unitId,
           pointIds: route.points.map((p) => p.pointId),
           enforceOrder: route.enforceOrder,
+          minPoints: route.minPoints,
           scheduledFor: slot,
           startedAt: now,
           expectedEndAt: new Date(now.getTime() + route.expectedMinutes * 60_000),
@@ -276,6 +280,17 @@ export class PatrolRunsService {
       },
       position,
     );
+    // Só vale perto do QR code, quando o ponto tem localização e raio (ADR 0024).
+    const proximity = checkProximity(fence, point.radiusMeters, input.accuracyMeters);
+    if (!proximity.ok) {
+      throw problem(
+        ProblemType.PatrolPointTooFar,
+        HttpStatus.UNPROCESSABLE_ENTITY,
+        proximity.reason === 'no_location'
+          ? 'Este ponto exige a localização. Ative o GPS e permita o acesso à localização.'
+          : `Você está a ${String(proximity.distanceMeters)} m do ponto. Aproxime-se do QR code (até ${String(proximity.radiusMeters)} m) e leia de novo.`,
+      );
+    }
     const official = resolveOfflineTime({
       offlineRecordedAt: input.offlineRecordedAt,
       source: client.source,
@@ -332,9 +347,10 @@ export class PatrolRunsService {
   async finish(runId: string, note: string | null, grant: AccessGrant): Promise<PatrolRun> {
     const run = await this.ownRun(runId, grant.userId);
     if (run.status !== 'in_progress') throw runFinished();
-    const missing = run.pointIds.length - run.checkins.length;
+    // Feita = leu o mínimo da rota (padrão: todos). Abaixo disso, só encerra com o motivo.
+    const missing = requiredPoints(run.minPoints, run.pointIds.length) - run.checkins.length;
     if (missing > 0 && !note) {
-      throw invalidReference('note', 'Explique por que a ronda termina sem todos os pontos.');
+      throw invalidReference('note', 'Explique por que a ronda termina sem os pontos exigidos.');
     }
     await this.db.client.patrolRun.update({
       where: { id: run.id },
@@ -531,6 +547,7 @@ export class PatrolRunsService {
       points: ordered,
       checked: row.checkins.length,
       total: row.pointIds.length,
+      required: requiredPoints(row.minPoints, row.pointIds.length),
       lateMinutes: lateMinutes(row.expectedEndAt, row.finishedAt, now),
       nextPoint: next ? { id: next.id, name: next.name } : null,
     };

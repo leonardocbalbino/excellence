@@ -6,7 +6,7 @@ import Animated, { ZoomIn } from 'react-native-reanimated';
 import { uploadLocalFile } from './device';
 import { chooseImageSource, pickImage } from './pick-image';
 import { errorMessage, useApi } from './services';
-import { haptics, Touchable, useColors } from './ui';
+import { BRAND, haptics, Touchable, useColors } from './ui';
 
 export const avatarKey = ['me', 'avatar'] as const;
 
@@ -97,7 +97,7 @@ export function Avatar({
         width: size,
         height: size,
         borderRadius: size / 2,
-        backgroundColor: inverse ? '#ffffff' : c.primarySoft,
+        backgroundColor: inverse ? BRAND.gold : c.primarySoft,
         alignItems: 'center',
         justifyContent: 'center',
         overflow: 'hidden',
@@ -114,7 +114,7 @@ export function Avatar({
       ) : (
         <Text
           style={{
-            color: inverse ? '#0f5a52' : c.primary,
+            color: inverse ? BRAND.ink : c.primary,
             fontSize: size * 0.36,
             fontWeight: '800',
           }}

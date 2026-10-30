@@ -9,7 +9,7 @@ import Animated, {
   withTiming,
   ZoomIn,
 } from 'react-native-reanimated';
-import { Touchable, usePulse } from './ui';
+import { BRAND, Touchable, usePulse } from './ui';
 
 export type ClockButtonState = 'idle' | 'busy' | 'success' | 'error';
 
@@ -43,8 +43,8 @@ export function ClockButton({
     );
   }, [shake, state]);
   const shaking = useAnimatedStyle(() => ({ transform: [{ translateX: shake.value }] }));
-  const background = state === 'success' ? '#16a34a' : state === 'error' ? '#c2410c' : '#ffffff';
-  const foreground = state === 'success' || state === 'error' ? '#ffffff' : '#0f5a52';
+  const background = state === 'success' ? '#16a34a' : state === 'error' ? '#c2410c' : BRAND.gold;
+  const foreground = state === 'success' || state === 'error' ? '#ffffff' : BRAND.ink;
 
   return (
     <View style={{ alignItems: 'center', justifyContent: 'center', height: SIZE + 40 }}>
@@ -56,7 +56,7 @@ export function ClockButton({
             width: SIZE,
             height: SIZE,
             borderRadius: SIZE / 2,
-            backgroundColor: '#ffffff',
+            backgroundColor: BRAND.gold,
           },
           halo,
         ]}

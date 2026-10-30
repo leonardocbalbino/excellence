@@ -67,6 +67,15 @@ export const envSchema = z.object({
   PUSH_ENABLED: z.stringbool().default(true),
   // Token de acesso do Expo, se o projeto exigir push autenticado (Expo › Access tokens).
   EXPO_ACCESS_TOKEN: z.string().min(1).optional(),
+
+  // E-mail (ADR 0024). Sem SMTP_HOST, nada é enviado e o motivo fica registrado. Local: Mailpit.
+  SMTP_HOST: z.string().min(1).optional(),
+  SMTP_PORT: z.coerce.number().int().min(1).max(65535).default(587),
+  // true = TLS direto (porta 465); false = STARTTLS quando o servidor oferecer (587, 25).
+  SMTP_SECURE: z.stringbool().default(false),
+  SMTP_USER: z.string().min(1).optional(),
+  SMTP_PASSWORD: z.string().min(1).optional(),
+  MAIL_FROM: z.string().min(3).default('Excellence <nao-responda@excellence.local>'),
 });
 
 export type Env = z.infer<typeof envSchema>;

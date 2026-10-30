@@ -8,11 +8,12 @@ import {
   ProblemType,
 } from '@excellence/shared';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { ClockIcon, ShieldCheckIcon } from 'lucide-react';
+import { ShieldCheckIcon } from 'lucide-react';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { Navigate, useNavigate, useSearchParams } from 'react-router';
 import type { z } from 'zod';
+import { BrandLogo } from '@/components/brand';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -44,18 +45,10 @@ export function LoginPage() {
 
   return (
     <div className="min-h-svh bg-background lg:grid lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
-      <aside className="relative flex flex-col justify-between gap-6 rounded-b-3xl bg-primary px-6 pt-8 pb-8 text-primary-foreground lg:rounded-none lg:px-16 lg:py-12">
-        <p className="flex items-center gap-3 font-display text-lg font-bold">
-          <span
-            className="grid size-10 place-items-center rounded-xl bg-card text-primary"
-            aria-hidden="true"
-          >
-            <ClockIcon className="size-5" />
-          </span>
-          Excellence
-        </p>
+      <aside className="relative flex flex-col justify-between gap-6 rounded-b-3xl bg-sidebar px-6 pt-8 pb-8 text-sidebar-foreground lg:rounded-none lg:px-16 lg:py-12">
+        <BrandLogo className="h-24 w-auto self-start lg:h-40" />
         <div className="max-w-md">
-          <p className="font-display text-3xl leading-tight font-bold lg:text-5xl">
+          <p className="font-display text-3xl leading-tight font-bold text-gold lg:text-5xl">
             <span className="lg:hidden">Seu ponto e o RH na palma da mão.</span>
             <span className="hidden lg:inline">Seu ponto, sua escala e o RH no mesmo lugar.</span>
           </p>

@@ -200,6 +200,26 @@ export class FilesService {
   }
 
   /**
+   * Conteúdo de um arquivo confirmado (ex.: foto anexada a um e-mail). **Não checa
+   * permissão**: o chamador (módulo dono do registro) é responsável por isso.
+   */
+  async read(
+    fileId: string,
+  ): Promise<{ content: Buffer; contentType: string; originalName: string }> {
+    const file = await this.db.client.storedFile.findUnique({ where: { id: fileId } });
+    if (file?.status !== 'uploaded') throw new NotFoundException('Arquivo não encontrado.');
+    const object = await this.s3.send(
+      new GetObjectCommand({ Bucket: this.bucket, Key: file.storageKey }),
+    );
+    const bytes = (await object.Body?.transformToByteArray()) ?? new Uint8Array();
+    return {
+      content: Buffer.from(bytes),
+      contentType: file.contentType,
+      originalName: file.originalName,
+    };
+  }
+
+  /**
    * Conteúdo de um arquivo enviado pelo próprio usuário para a finalidade informada (ex.:
    * planilha de importação). Só arquivos confirmados.
    */

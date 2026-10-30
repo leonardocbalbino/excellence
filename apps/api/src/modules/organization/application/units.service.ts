@@ -25,6 +25,7 @@ const UNIT_SELECT = {
   longitude: true,
   geofenceRadiusMeters: true,
   timezone: true,
+  occurrenceEmails: true,
   isActive: true,
 } as const;
 

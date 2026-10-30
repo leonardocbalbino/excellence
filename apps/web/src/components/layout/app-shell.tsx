@@ -5,7 +5,6 @@ import {
   BellIcon,
   CheckIcon,
   ChevronsUpDownIcon,
-  ClockIcon,
   // KeyRoundIcon, // TODO(mfa)
   LogOutIcon,
   MenuIcon,
@@ -21,6 +20,7 @@ import {
   visiblePersonalNav,
   visibleManagementNav,
 } from '@/app/navigation';
+import { BrandMark } from '@/components/brand';
 import { THEME_OPTIONS } from '@/components/theme-options';
 import { Button } from '@/components/ui/button';
 import { useMyAccess } from '@/features/access/access';
@@ -73,20 +73,6 @@ function SkipLink() {
     >
       Pular para o conteúdo
     </a>
-  );
-}
-
-function BrandMark({ className }: { className?: string }) {
-  return (
-    <span
-      className={cn(
-        'grid size-9 shrink-0 place-items-center rounded-lg bg-primary text-primary-foreground',
-        className,
-      )}
-      aria-hidden="true"
-    >
-      <ClockIcon className="size-5" />
-    </span>
   );
 }
 
@@ -365,7 +351,7 @@ function ManagementShell({ access }: { access: MyAccess | undefined }) {
       <SkipLink />
       <header className="sticky top-0 z-30 flex h-14 items-center justify-between bg-sidebar px-4 text-sidebar-foreground lg:hidden print:hidden">
         <Link to={MANAGEMENT_HOME} className="flex items-center gap-2.5 font-display font-bold">
-          <BrandMark className="size-8 bg-sidebar-accent" />
+          <BrandMark className="size-8" />
           Excellence
         </Link>
         <Button
@@ -392,7 +378,7 @@ function ManagementShell({ access }: { access: MyAccess | undefined }) {
           to={MANAGEMENT_HOME}
           className="hidden items-center gap-3 px-6 pt-6 pb-4 font-display text-lg font-bold lg:flex"
         >
-          <BrandMark className="bg-sidebar-accent" />
+          <BrandMark />
           Excellence
         </Link>
         <nav aria-label="Menu principal" className="flex-1 space-y-5 overflow-y-auto px-3 py-3">
@@ -414,7 +400,7 @@ function ManagementShell({ access }: { access: MyAccess | undefined }) {
                         cn(
                           'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-white/5',
                           isActive &&
-                            'bg-sidebar-accent font-semibold text-white hover:bg-sidebar-accent',
+                            'bg-sidebar-accent font-semibold text-sidebar-accent-foreground hover:bg-sidebar-accent',
                         )
                       }
                     >

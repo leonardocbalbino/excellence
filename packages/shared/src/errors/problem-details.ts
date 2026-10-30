@@ -63,6 +63,7 @@ export const ProblemType = {
   PatrolInvalidCode: 'urn:excellence:problem:patrol-invalid-code',
   PatrolPointNotInRun: 'urn:excellence:problem:patrol-point-not-in-run',
   PatrolPointAlreadyChecked: 'urn:excellence:problem:patrol-point-already-checked',
+  PatrolPointTooFar: 'urn:excellence:problem:patrol-point-too-far',
   PatrolOutOfOrder: 'urn:excellence:problem:patrol-out-of-order',
 } as const;
 

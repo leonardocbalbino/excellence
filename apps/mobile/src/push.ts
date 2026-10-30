@@ -39,7 +39,7 @@ export async function registerForPush(api: ApiClient, ask = true): Promise<PushS
       description: 'Ronda, ponto, comunicados e respostas do RH.',
       importance: Notifications.AndroidImportance.HIGH,
       vibrationPattern: [0, 200, 120, 200],
-      lightColor: '#0f5a52',
+      lightColor: '#c9a356',
     });
   }
   let { status } = await Notifications.getPermissionsAsync();

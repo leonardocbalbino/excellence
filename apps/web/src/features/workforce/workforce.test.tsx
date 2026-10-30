@@ -128,6 +128,7 @@ describe('Cadastro de funcionário', () => {
             longitude: null,
             geofenceRadiusMeters: null,
             timezone: null,
+            occurrenceEmails: [],
             isActive: true,
           },
         ]),

@@ -42,6 +42,8 @@ interface Draft {
   description: string;
   expectedMinutes: string;
   enforceOrder: boolean;
+  /** Vazio = todos os pontos. */
+  minPoints: string;
   isActive: boolean;
   points: Named[];
   startTimes: string[];
@@ -56,6 +58,7 @@ function toDraft(route: PatrolRoute | undefined, defaultUnit: string): Draft {
     description: route?.description ?? '',
     expectedMinutes: String(route?.expectedMinutes ?? 30),
     enforceOrder: route?.enforceOrder ?? false,
+    minPoints: route?.minPoints ? String(route.minPoints) : '',
     isActive: route?.isActive ?? true,
     points: route?.points ?? [],
     startTimes: route?.startTimes ?? [],
@@ -71,6 +74,7 @@ function toInput(draft: Draft): PatrolRouteInput {
     description: draft.description.trim() || null,
     expectedMinutes: Number(draft.expectedMinutes),
     enforceOrder: draft.enforceOrder,
+    minPoints: draft.minPoints.trim() ? Number(draft.minPoints) : null,
     isActive: draft.isActive,
     pointIds: draft.points.map((p) => p.id),
     startTimes: [...draft.startTimes].sort(),
@@ -238,6 +242,22 @@ function RouteForm({ route, units }: { route: PatrolRoute | undefined; units: Na
           />
           {fieldError('expectedMinutes')}
           <p className="text-xs text-muted-foreground">Passou disso, a ronda aparece atrasada.</p>
+        </div>
+        <div className="grid gap-1.5">
+          <Label htmlFor="route-min-points">Pontos obrigatórios por ronda</Label>
+          <Input
+            id="route-min-points"
+            inputMode="numeric"
+            placeholder={`Todos (${String(draft.points.length)})`}
+            value={draft.minPoints}
+            onChange={(e) => set({ minPoints: e.target.value.replace(/\D/g, '') })}
+            aria-invalid={Boolean(errors.minPoints)}
+          />
+          {fieldError('minPoints')}
+          <p className="text-xs text-muted-foreground">
+            Quantos QR codes a ronda precisa ler em cada horário. Vazio = todos. Com menos, o
+            funcionário só encerra explicando o motivo.
+          </p>
         </div>
         <div className="grid content-start gap-3 pt-6">
           <div className="flex items-center gap-2">

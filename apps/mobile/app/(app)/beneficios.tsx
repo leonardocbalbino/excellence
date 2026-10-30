@@ -31,7 +31,7 @@ const KIND: Record<BenefitKind, { icon: IconName; colors: readonly [string, stri
   health: { icon: 'medkit', colors: ['#dc2626', '#f43f5e'] },
   dental: { icon: 'happy', colors: ['#0891b2', '#06b6d4'] },
   life_insurance: { icon: 'shield-checkmark', colors: ['#7c3aed', '#8b5cf6'] },
-  other: { icon: 'gift', colors: ['#0f5a52', '#16806f'] },
+  other: { icon: 'gift', colors: ['#c9a356', '#8f6d27'] },
 };
 
 function yesterday(): string {

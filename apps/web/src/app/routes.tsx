@@ -196,6 +196,11 @@ export const routes: RouteObject[] = [
             'patrols:read',
           ),
           management(
+            'gestao/rondas/ocorrencias',
+            async () => (await import('@/features/patrols/occurrences-page')).OccurrencesPage,
+            'patrols:read',
+          ),
+          management(
             'gestao/rondas/pontos',
             async () => (await import('@/features/patrols/patrol-points-page')).PatrolPointsPage,
             'patrols:manage',

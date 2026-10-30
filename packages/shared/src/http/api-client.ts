@@ -109,6 +109,12 @@ import {
   type PatrolCheckinInput,
   patrolCheckinInputSchema,
   patrolBoardSchema,
+  type PatrolOccurrenceInput,
+  patrolOccurrenceInputSchema,
+  type PatrolOccurrenceListQuery,
+  type PatrolOccurrenceResolution,
+  patrolOccurrenceResolutionSchema,
+  patrolOccurrenceSchema,
   patrolPointInputSchema,
   patrolPointSchema,
   patrolRouteInputSchema,
@@ -117,6 +123,7 @@ import {
   patrolRunFinishSchema,
   patrolRunSchema,
   patrolRunStartSchema,
+  unitPatrolSummarySchema,
 } from '../patrols/patrols.schemas.js';
 import {
   benefitInputSchema,
@@ -570,6 +577,43 @@ export function createApiClient(options: ApiClientOptions) {
         request('GET', '/patrol-runs/board', { query: { date }, schema: patrolBoardSchema }),
       get: (runId: string) =>
         request('GET', `/patrol-runs/${encodeURIComponent(runId)}`, { schema: patrolRunSchema }),
+      // ─── Ocorrências (ADR 0024) ───
+      /** Registra uma ocorrência na ronda em andamento (vai por e-mail aos destinatários do posto). */
+      reportOccurrence: (runId: string, input: PatrolOccurrenceInput) =>
+        request('POST', `/me/patrol-runs/${encodeURIComponent(runId)}/occurrences`, {
+          body: input,
+          bodySchema: patrolOccurrenceInputSchema,
+          schema: patrolOccurrenceSchema,
+        }),
+      occurrences: (query: PatrolOccurrenceListQuery = {}) =>
+        request('GET', '/patrol-occurrences', {
+          query,
+          schema: z.array(patrolOccurrenceSchema),
+        }),
+      occurrence: (id: string) =>
+        request('GET', `/patrol-occurrences/${encodeURIComponent(id)}`, {
+          schema: patrolOccurrenceSchema,
+        }),
+      occurrencePhoto: (id: string) =>
+        request('GET', `/patrol-occurrences/${encodeURIComponent(id)}/photo`, {
+          schema: downloadLinkSchema,
+        }),
+      resolveOccurrence: (id: string, input: PatrolOccurrenceResolution) =>
+        request('PUT', `/patrol-occurrences/${encodeURIComponent(id)}/resolution`, {
+          body: input,
+          bodySchema: patrolOccurrenceResolutionSchema,
+          schema: patrolOccurrenceSchema,
+        }),
+      /** Reenvia o e-mail da ocorrência aos destinatários atuais do posto. */
+      resendOccurrence: (id: string) =>
+        request('POST', `/patrol-occurrences/${encodeURIComponent(id)}/email`, {
+          schema: patrolOccurrenceSchema,
+        }),
+      unitSummary: (unitId: string, month: string) =>
+        request('GET', `/units/${encodeURIComponent(unitId)}/patrol-summary`, {
+          query: { month },
+          schema: unitPatrolSummarySchema,
+        }),
     },
     shifts: unitCatalog('/shifts', shiftSchema, shiftInputSchema),
     workSchedules: unitCatalog('/work-schedules', workScheduleSchema, workScheduleInputSchema),

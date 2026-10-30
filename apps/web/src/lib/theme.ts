@@ -11,7 +11,7 @@ export type Theme = 'light' | 'dark';
 export const THEME_STORAGE_KEY = 'excellence-theme';
 
 /** Cor da barra do navegador/PWA em cada tema (fundo do cabeçalho). */
-const THEME_COLORS: Record<Theme, string> = { light: '#0f5a52', dark: '#0f1614' };
+const THEME_COLORS: Record<Theme, string> = { light: '#12100c', dark: '#0e0d0b' };
 
 const DARK_QUERY = '(prefers-color-scheme: dark)';
 

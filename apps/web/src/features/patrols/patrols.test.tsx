@@ -43,6 +43,7 @@ function run(checked: number, overrides: Partial<PatrolRun> = {}): PatrolRun {
     })),
     checked,
     total: POINTS.length,
+    required: POINTS.length,
     lateMinutes: 0,
     nextPoint: POINTS[checked] ?? null,
     ...overrides,

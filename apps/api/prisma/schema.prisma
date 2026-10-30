@@ -75,6 +75,8 @@ model Company {
   conversationCounter  ConversationCounter?
   conversations        Conversation[]
   conversationMessages ConversationMessage[]
+  occurrenceCounter    OccurrenceCounter?
+  patrolOccurrences    PatrolOccurrence[]
 
   @@map("companies")
 }
@@ -118,6 +120,7 @@ model User {
   pushDevices          PushDevice[]
   avatarFile           StoredFile?           @relation("UserAvatar", fields: [avatarFileId, companyId], references: [id, companyId], onDelete: Restrict)
   conversationMessages ConversationMessage[]
+  resolvedOccurrences  PatrolOccurrence[]    @relation("OccurrenceResolver")
 
   // Alvo das FKs compostas (id, company_id): impede vínculos entre empresas diferentes.
   @@unique([id, companyId])
@@ -322,6 +325,7 @@ model StoredFile {
   medicalCertificates  MedicalCertificate[]
   avatarOf             User[]                @relation("UserAvatar")
   conversationMessages ConversationMessage[]
+  patrolOccurrences    PatrolOccurrence[]
 
   @@unique([id, companyId])
   @@index([companyId, status])
@@ -349,23 +353,26 @@ model Unit {
   geofenceRadiusMeters Int?     @map("geofence_radius_meters")
   // Fuso da unidade; null = fuso da empresa.
   timezone             String?
+  // Quem recebe por e-mail as ocorrências das rondas do posto (ADR 0024).
+  occurrenceEmails     String[] @default([]) @map("occurrence_emails")
   isActive             Boolean  @default(true) @map("is_active")
   createdAt            DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt            DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  company       Company            @relation(fields: [companyId], references: [id])
-  departments   Department[]
-  employees     Employee[]
-  roleScopes    RoleScope[]
-  holidays      Holiday[]
-  timeEntries   TimeEntry[]
-  announcements AnnouncementUnit[]
-  patrolPoints  PatrolPoint[]
-  patrolRoutes  PatrolRoute[]
-  patrolRuns    PatrolRun[]
-  shifts        Shift[]
-  workSchedules WorkSchedule[]
-  scheduleRates ScheduleRate[]
+  company           Company            @relation(fields: [companyId], references: [id])
+  departments       Department[]
+  employees         Employee[]
+  roleScopes        RoleScope[]
+  holidays          Holiday[]
+  timeEntries       TimeEntry[]
+  announcements     AnnouncementUnit[]
+  patrolPoints      PatrolPoint[]
+  patrolRoutes      PatrolRoute[]
+  patrolRuns        PatrolRun[]
+  shifts            Shift[]
+  workSchedules     WorkSchedule[]
+  scheduleRates     ScheduleRate[]
+  patrolOccurrences PatrolOccurrence[]
 
   @@unique([companyId, code])
   @@unique([id, companyId])
@@ -474,6 +481,7 @@ model Employee {
   medicalCertificates MedicalCertificate[]
   patrolRoutes        PatrolRouteAssignee[]
   patrolRuns          PatrolRun[]
+  patrolOccurrences   PatrolOccurrence[]
   benefits            EmployeeBenefit[]
   benefitAdjustments  BenefitDayAdjustment[]
   payrollItems        PayrollItem[]
@@ -983,6 +991,7 @@ model PatrolPoint {
   unit        Unit               @relation(fields: [unitId, companyId], references: [id, companyId], onDelete: Restrict)
   routePoints PatrolRoutePoint[]
   checkins    PatrolCheckin[]
+  occurrences PatrolOccurrence[]
 
   @@unique([companyId, unitId, name])
   @@unique([id, companyId])
@@ -998,6 +1007,8 @@ model PatrolRoute {
   description     String?
   expectedMinutes Int      @map("expected_minutes") @db.SmallInt
   enforceOrder    Boolean  @default(false) @map("enforce_order")
+  // Pontos que a ronda precisa ler para contar como feita; null = todos (ADR 0024).
+  minPoints       Int?     @map("min_points") @db.SmallInt
   // Horários de início em minutos do dia (fuso da unidade) e dias da semana (0 = domingo).
   startMinutes    Int[]    @map("start_minutes") @db.SmallInt
   weekdays        Int[]    @db.SmallInt
@@ -1063,6 +1074,8 @@ model PatrolRun {
   // Pontos da rota no início, em ordem: mudar a rota depois não altera a ronda.
   pointIds      String[]        @map("point_ids") @db.Uuid
   enforceOrder  Boolean         @map("enforce_order")
+  // Cópia da rota no início (null = todos os pontos).
+  minPoints     Int?            @map("min_points") @db.SmallInt
   scheduledFor  DateTime?       @map("scheduled_for") @db.Timestamptz(6)
   startedAt     DateTime        @map("started_at") @db.Timestamptz(6)
   expectedEndAt DateTime        @map("expected_end_at") @db.Timestamptz(6)
@@ -1071,11 +1084,12 @@ model PatrolRun {
   finishNote    String?         @map("finish_note")
   createdAt     DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
 
-  company  Company         @relation(fields: [companyId], references: [id])
-  route    PatrolRoute     @relation(fields: [routeId, companyId], references: [id, companyId], onDelete: Restrict)
-  employee Employee        @relation(fields: [employeeId, companyId], references: [id, companyId], onDelete: Restrict)
-  unit     Unit            @relation(fields: [unitId, companyId], references: [id, companyId], onDelete: Restrict)
-  checkins PatrolCheckin[]
+  company     Company            @relation(fields: [companyId], references: [id])
+  route       PatrolRoute        @relation(fields: [routeId, companyId], references: [id, companyId], onDelete: Restrict)
+  employee    Employee           @relation(fields: [employeeId, companyId], references: [id, companyId], onDelete: Restrict)
+  unit        Unit               @relation(fields: [unitId, companyId], references: [id, companyId], onDelete: Restrict)
+  checkins    PatrolCheckin[]
+  occurrences PatrolOccurrence[]
 
   @@unique([id, companyId])
   @@index([companyId, startedAt])
@@ -1396,4 +1410,60 @@ model ConversationMessage {
 
   @@index([companyId, conversationId, createdAt])
   @@map("conversation_messages")
+}
+
+// ─── Ocorrências das rondas (ADR 0024) ──────────────────────────────────────────────
+
+enum PatrolOccurrenceStatus {
+  open
+  resolved
+
+  @@map("patrol_occurrence_status")
+}
+
+/// Próximo número de ocorrência de cada empresa (incremento atômico, como o NSR do ponto).
+model OccurrenceCounter {
+  companyId  String @id @map("company_id") @db.Uuid
+  lastNumber Int    @default(0) @map("last_number")
+
+  company Company @relation(fields: [companyId], references: [id])
+
+  @@map("occurrence_counters")
+}
+
+/// Ocorrência registrada pelo funcionário durante a ronda. O registro (descrição, ponto,
+/// horário, foto) não muda; a administração completa o que foi feito e a resolução.
+model PatrolOccurrence {
+  id          String                 @id @default(uuid(7)) @db.Uuid
+  companyId   String                 @map("company_id") @db.Uuid
+  number      Int
+  unitId      String                 @map("unit_id") @db.Uuid
+  runId       String?                @map("run_id") @db.Uuid
+  pointId     String?                @map("point_id") @db.Uuid
+  employeeId  String                 @map("employee_id") @db.Uuid
+  occurredAt  DateTime               @map("occurred_at") @db.Timestamptz(6)
+  description String
+  photoFileId String?                @map("photo_file_id") @db.Uuid
+  status      PatrolOccurrenceStatus @default(open)
+  actionTaken String?                @map("action_taken")
+  resolution  String?
+  resolvedAt  DateTime?              @map("resolved_at") @db.Timestamptz(6)
+  resolvedBy  String?                @map("resolved_by") @db.Uuid
+  emailedAt   DateTime?              @map("emailed_at") @db.Timestamptz(6)
+  emailError  String?                @map("email_error")
+  createdAt   DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime               @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  company  Company      @relation(fields: [companyId], references: [id])
+  unit     Unit         @relation(fields: [unitId, companyId], references: [id, companyId], onDelete: Restrict)
+  run      PatrolRun?   @relation(fields: [runId, companyId], references: [id, companyId], onDelete: Restrict)
+  point    PatrolPoint? @relation(fields: [pointId, companyId], references: [id, companyId], onDelete: Restrict)
+  employee Employee     @relation(fields: [employeeId, companyId], references: [id, companyId], onDelete: Restrict)
+  photo    StoredFile?  @relation(fields: [photoFileId, companyId], references: [id, companyId], onDelete: Restrict)
+  resolver User?        @relation("OccurrenceResolver", fields: [resolvedBy, companyId], references: [id, companyId], onDelete: Restrict)
+
+  @@unique([companyId, number])
+  @@index([companyId, unitId, occurredAt])
+  @@index([companyId, status])
+  @@map("patrol_occurrences")
 }

@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { BrandMark } from '@/components/brand';
 import { ThemeToggle } from '@/components/theme-toggle';
 
 /**
@@ -33,7 +34,10 @@ export function PrivacyPage() {
     <div className="min-h-dvh bg-background text-foreground">
       <header className="border-b bg-card">
         <div className="mx-auto flex max-w-3xl items-center justify-between gap-4 px-4 py-4">
-          <span className="font-display text-lg font-bold text-primary">Excellence</span>
+          <span className="flex items-center gap-3 font-display text-lg font-bold text-primary">
+            <BrandMark />
+            Excellence
+          </span>
           <ThemeToggle />
         </div>
       </header>
