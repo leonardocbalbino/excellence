@@ -21,7 +21,7 @@ export function PatrolCodesPage() {
   const api = useApi();
   const [params] = useSearchParams();
   const only = params.get('ponto');
-  const [unitId, setUnitId] = useState('all');
+  const [unitId, setUnitId] = useState(params.get('posto') ?? 'all');
   const points = useQuery({
     queryKey: [...patrolPointsQueryKey, { includeInactive: false }],
     queryFn: () => api.patrolPoints.list(false),

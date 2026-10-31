@@ -120,8 +120,10 @@ Workflow **Transferir posto (staging → produção)** (Actions → Run workflow
 - `limpar staging`: deixa a empresa do staging só com esse posto (ver
   `apps/api/scripts/prune-to-unit.ts`). Se as contagens do posto mantido mudarem, desfaz tudo.
 
-Em `aplicar`, o banco que vai mudar ganha antes um `pg_dump` em `~/backups/excellence` na VPS.
-Para voltar: `pg_restore --clean --if-exists -d "$DATABASE_URL" arquivo.dump`.
+Em `aplicar`, o banco que vai mudar ganha antes um `pg_dump` (feito no runner, na versão do
+servidor) guardado em `~/backups/excellence` na VPS. A VPS não tem as ferramentas do Postgres:
+para voltar, copie o arquivo e rode `pg_restore --clean --if-exists -d "$DATABASE_URL" arquivo.dump`
+de uma máquina com o cliente do Postgres, pelo túnel SSH.
 
 ## GitHub (Settings → Secrets and variables → Actions)
 

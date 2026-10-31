@@ -7,6 +7,7 @@ import Animated, { FadeInDown, ZoomIn } from 'react-native-reanimated';
 import { QrScanner, type ScanFeedback } from '@/camera';
 import { currentPosition, newKey } from '@/device';
 import { localTime } from '@/format';
+import { OccurrenceForm } from '@/occurrence-form';
 import { offlineQueue, type QueueItem, useOfflineQueue } from '@/offline-queue';
 import { myPatrolsKey } from '@/query-keys';
 import { errorMessage, isRetryable, useApi, useSession } from '@/services';
@@ -259,7 +260,9 @@ function RunInProgress({ run }: { run: PatrolRun }) {
 
   const pendingCodes = queued.filter((q) => q.status === 'pending').map((q) => q.input.code);
   const done = run.checked + pendingCodes.length;
-  const missing = Math.max(0, run.total - done);
+  // A rota pode exigir só parte dos pontos (mínimo); abaixo dele, encerrar pede o motivo.
+  const missing = Math.max(0, run.required - done);
+  const allRead = done >= run.total;
 
   return (
     <>
@@ -288,6 +291,9 @@ function RunInProgress({ run }: { run: PatrolRun }) {
         <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
           {run.nextPoint ? (
             <Chip tone="inverse" icon="navigate" label={`Próximo: ${run.nextPoint.name}`} />
+          ) : null}
+          {run.required < run.total ? (
+            <Chip tone="inverse" icon="flag" label={`Mínimo ${String(run.required)} pontos`} />
           ) : null}
           {run.lateMinutes > 0 ? (
             <Chip tone="inverse" icon="alarm" label={`Atrasada ${String(run.lateMinutes)} min`} />
@@ -370,6 +376,8 @@ function RunInProgress({ run }: { run: PatrolRun }) {
           ))}
       </Card>
 
+      <OccurrenceForm run={run} />
+
       <Animated.View entering={FadeInDown.delay(150)}>
         <Card>
           <Title style={{ fontSize: 18 }}>Encerrar ronda</Title>
@@ -383,7 +391,9 @@ function RunInProgress({ run }: { run: PatrolRun }) {
             />
           ) : (
             <Label tone="success" style={{ fontWeight: '700' }}>
-              Todos os pontos foram lidos.
+              {allRead
+                ? 'Todos os pontos foram lidos.'
+                : `Mínimo atingido (${String(done)} de ${String(run.total)}). Pode encerrar.`}
             </Label>
           )}
           <Button

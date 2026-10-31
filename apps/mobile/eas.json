@@ -14,7 +14,7 @@
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "http://169.58.37.26:8200/api/v1"
+        "EXPO_PUBLIC_API_URL": "https://gestaoexcellence.com.br/api/v1"
       }
     },
     "staging": {
@@ -32,7 +32,7 @@
         "buildType": "app-bundle"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "http://169.58.37.26:8200/api/v1"
+        "EXPO_PUBLIC_API_URL": "https://gestaoexcellence.com.br/api/v1"
       }
     }
   },

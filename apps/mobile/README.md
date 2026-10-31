@@ -45,7 +45,7 @@ do web: schemas, tipos e client HTTP. Decisões em ADR 0019 (sessão e offline) 
 ## API
 
 - O app oficial usa a **API de produção**: `PRODUCTION_API_URL` em `app.config.ts`
-  (`http://169.58.37.26:8200/api/v1`). Os perfis `preview` e `production` do `eas.json` fixam
+  (`https://gestaoexcellence.com.br/api/v1`). Os perfis `preview` e `production` do `eas.json` fixam
   esse endereço.
 - Em desenvolvimento, crie `.env` com `EXPO_PUBLIC_API_URL` apontando para o IP do computador
   na rede (o celular não enxerga `localhost`).

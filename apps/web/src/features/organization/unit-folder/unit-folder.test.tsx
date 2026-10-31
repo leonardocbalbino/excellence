@@ -42,6 +42,7 @@ const schedule: WorkSchedule = {
   code: null,
   kind: 'cycle',
   cycleAnchor: 'assignment',
+  parityMonth: null,
   days: ['01900000-0000-7000-8000-000000000901', null],
   weeklyMinutes: null,
   notes: null,

@@ -358,6 +358,7 @@ export class PatrolOccurrencesService {
       when: `${d ?? ''}/${m ?? ''}/${y ?? ''} ${occurrence.localTime}`,
       description: occurrence.description,
       hasPhoto: occurrence.hasPhoto,
+      actionUrl: this.mail.link('/gestao/rondas/ocorrencias'),
     });
     const attachments = row.photoFileId
       ? await this.files

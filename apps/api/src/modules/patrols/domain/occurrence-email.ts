@@ -1,4 +1,5 @@
 import { formatOccurrenceNumber } from '@excellence/shared';
+import { systemEmailHtml } from '../../notifications/domain/system-email';
 
 export interface OccurrenceEmailData {
   number: number;
@@ -10,20 +11,13 @@ export interface OccurrenceEmailData {
   when: string;
   description: string;
   hasPhoto: boolean;
-}
-
-function escapeHtml(text: string): string {
-  return text
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#39;');
+  /** Tela de ocorrências no site; sem ela, o e-mail sai sem botão. */
+  actionUrl?: string | null;
 }
 
 /**
- * E-mail da ocorrência aos destinatários do posto (administração, síndico…). Texto puro e
- * HTML simples; a foto vai como anexo. Todo texto do usuário é escapado no HTML.
+ * E-mail da ocorrência aos destinatários do posto (administração, síndico…), no modelo do
+ * sistema. Texto puro e HTML; a foto vai como anexo. Todo texto do usuário é escapado.
  */
 export function occurrenceEmail(data: OccurrenceEmailData): {
   subject: string;
@@ -40,25 +34,25 @@ export function occurrenceEmail(data: OccurrenceEmailData): {
     ['Data e hora', data.when],
   ];
   const subject = `Ocorrência ${number} · ${data.unit}`;
+  const photo = data.hasPhoto ? 'Foto em anexo.' : 'Sem foto.';
   const text = [
     ...rows.map(([label, value]) => `${label}: ${value}`),
     '',
     'Registro:',
     data.description,
     '',
-    data.hasPhoto ? 'Foto em anexo.' : 'Sem foto.',
+    photo,
+    ...(data.actionUrl ? ['', `Ver no sistema: ${data.actionUrl}`] : []),
   ].join('\n');
-  const html = [
-    `<h2 style="font-family:Arial,sans-serif;color:#0f5a52;margin:0 0 12px">Ocorrência ${escapeHtml(number)}</h2>`,
-    '<table style="font-family:Arial,sans-serif;font-size:14px;border-collapse:collapse">',
-    ...rows.map(
-      ([label, value]) =>
-        `<tr><td style="padding:4px 12px 4px 0;color:#5f6663">${escapeHtml(label)}</td><td style="padding:4px 0"><strong>${escapeHtml(value)}</strong></td></tr>`,
-    ),
-    '</table>',
-    '<h3 style="font-family:Arial,sans-serif;margin:16px 0 6px">Registro</h3>',
-    `<p style="font-family:Arial,sans-serif;font-size:14px;white-space:pre-wrap;margin:0">${escapeHtml(data.description)}</p>`,
-    `<p style="font-family:Arial,sans-serif;font-size:13px;color:#5f6663;margin-top:16px">${data.hasPhoto ? 'Foto em anexo.' : 'Sem foto.'} Enviado pelo sistema Excellence.</p>`,
-  ].join('\n');
+  const html = systemEmailHtml({
+    category: 'Ocorrência de ronda',
+    title: `Ocorrência ${number} · ${data.unit}`,
+    message: rows
+      .slice(2)
+      .map(([label, value]) => `${label}: ${value}`)
+      .join('\n'),
+    info: { label: 'Registro', content: `${data.description}\n\n${photo}` },
+    action: data.actionUrl ? { url: data.actionUrl, text: 'Ver ocorrência' } : null,
+  });
   return { subject, text, html };
 }

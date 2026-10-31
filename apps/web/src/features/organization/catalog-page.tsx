@@ -1,9 +1,10 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import type { Permission } from '@excellence/shared';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { PencilIcon, PlusIcon, Trash2Icon } from 'lucide-react';
+import { FolderOpenIcon, PencilIcon, PlusIcon, Trash2Icon } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
 import { type FieldValues, useForm } from 'react-hook-form';
+import { Link } from 'react-router';
 import { toast } from 'sonner';
 import type { z } from 'zod';
 import { Alert } from '@/components/ui/alert';
@@ -65,6 +66,13 @@ export interface CatalogConfig<T extends CatalogItem> {
   actions?: ReactNode;
   /** Dentro de outra página (ex.: aba da pasta do posto): título de seção, não de página. */
   embedded?: boolean;
+  /**
+   * Visão consolidada (fora da pasta do posto): troca o botão "Novo" (ex.: por um que escolhe
+   * o posto). Recebe a função que abre o cadastro aqui mesmo, para o cadastro geral.
+   */
+  createAction?: (openNew: () => void) => ReactNode;
+  /** Itens que se editam em outro lugar (na pasta do posto): o link no lugar do lápis. */
+  editLink?: (item: T) => string | null;
 }
 
 /** Página de cadastro simples: lista com edição no próprio lugar. */
@@ -90,7 +98,10 @@ export function CatalogPage<T extends CatalogItem>({ config }: { config: Catalog
         </div>
         <div className="flex flex-wrap gap-2">
           {config.actions}
-          {canManage && editing === null ? (
+          {canManage && editing === null && config.createAction
+            ? config.createAction(() => setEditing('new'))
+            : null}
+          {canManage && editing === null && !config.createAction ? (
             <Button onClick={() => setEditing('new')} disabled={config.ready === false}>
               <PlusIcon />
               Novo {config.singular}
@@ -164,15 +175,27 @@ export function CatalogPage<T extends CatalogItem>({ config }: { config: Catalog
                   ))}
                   {canManage ? (
                     <TableCell className="text-right">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        aria-label={`Editar ${item.name}`}
-                        disabled={config.ready === false}
-                        onClick={() => setEditing(item)}
-                      >
-                        <PencilIcon />
-                      </Button>
+                      {config.editLink?.(item) ? (
+                        <Button asChild variant="ghost" size="sm">
+                          <Link
+                            to={config.editLink(item) ?? ''}
+                            aria-label={`Abrir pasta de ${item.name}`}
+                          >
+                            <FolderOpenIcon />
+                            Abrir pasta
+                          </Link>
+                        </Button>
+                      ) : (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          aria-label={`Editar ${item.name}`}
+                          disabled={config.ready === false}
+                          onClick={() => setEditing(item)}
+                        >
+                          <PencilIcon />
+                        </Button>
+                      )}
                     </TableCell>
                   ) : null}
                 </TableRow>

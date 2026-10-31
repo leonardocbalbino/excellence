@@ -23,6 +23,12 @@ export class MailSender {
 
   constructor(private readonly config: AppConfig) {}
 
+  /** Link absoluto para uma tela do site; null sem WEB_APP_URL (e-mail sai sem botão). */
+  link(path: string): string | null {
+    const base = this.config.get('WEB_APP_URL');
+    return base ? `${base.replace(/\/+$/, '')}${path}` : null;
+  }
+
   get configured(): boolean {
     return Boolean(this.config.get('SMTP_HOST')) && this.config.get('NODE_ENV') !== 'test';
   }

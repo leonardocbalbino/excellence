@@ -1,11 +1,11 @@
 import { type Shift, shiftInputSchema } from '@excellence/shared';
-import { useQuery } from '@tanstack/react-query';
 import type { z } from 'zod';
 import { Badge } from '@/components/ui/badge';
 import { formatMinutes } from '@/lib/format';
 import { useApi } from '@/lib/services';
 import { CatalogPage } from '../organization/catalog-page';
-import { unitsQueryKey } from '../organization/query-keys';
+import { NewInUnitButton } from '../organization/new-in-unit';
+import { unitFolderPath } from '../organization/unit-folder-path';
 import { shiftsQueryKey } from './query-keys';
 
 type ShiftInput = z.input<typeof shiftInputSchema>;
@@ -21,44 +21,34 @@ export function ShiftsPage() {
 
 /**
  * Turnos. Com `unitId` (pasta do posto), lista os do posto e os gerais, e o novo turno já
- * nasce no posto.
+ * nasce no posto. Sem posto (menu Jornada), é a visão consolidada: os turnos de posto se
+ * cadastram e editam na pasta; aqui, só os gerais.
  */
 export function ShiftsCatalog({ unitId }: { unitId?: string }) {
   const api = useApi();
-  const units = useQuery({
-    queryKey: [...unitsQueryKey, { includeInactive: false }],
-    queryFn: () => api.units.list(false),
-    enabled: unitId === undefined,
-  });
-  const unitOptions = (units.data ?? []).map((unit) => ({ value: unit.id, label: unit.name }));
   return (
     <CatalogPage<Shift>
       config={{
         title: 'Turnos',
         description: unitId
           ? 'Horários de trabalho do posto (e os gerais da empresa), usados nas escalas.'
-          : 'Horários de trabalho usados para montar as escalas.',
+          : 'Horários de trabalho de todos os postos. Os de posto se cadastram na pasta dele; aqui, os gerais da empresa.',
         singular: 'turno',
         managePermission: 'schedules:manage',
         queryKey: unitId ? [...shiftsQueryKey, 'unit', unitId] : shiftsQueryKey,
         schema: shiftInputSchema,
         embedded: unitId !== undefined,
-        ready: unitId !== undefined || !units.isPending,
+        ...(unitId
+          ? {}
+          : {
+              createAction: (openNew: () => void) => (
+                <NewInUnitButton label="Novo turno" tab="escalas" onGeneral={openNew} />
+              ),
+              editLink: (s: Shift) => (s.unit ? unitFolderPath(s.unit.id, 'escalas') : null),
+            }),
         fields: [
           { name: 'name', label: 'Nome', kind: 'text' },
           { name: 'code', label: 'Código', kind: 'text', optional: true },
-          ...(unitId
-            ? []
-            : [
-                {
-                  name: 'unitId',
-                  label: 'Posto de trabalho',
-                  kind: 'select' as const,
-                  optional: true,
-                  options: unitOptions,
-                  hint: 'Vazio = turno geral, usado em qualquer posto.',
-                },
-              ]),
           { name: 'start', label: 'Início', kind: 'time' },
           {
             name: 'end',

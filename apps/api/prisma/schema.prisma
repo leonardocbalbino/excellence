@@ -537,6 +537,9 @@ enum ScheduleKind {
 enum CycleAnchor {
   monday
   assignment
+  // 12x36 nos dias ímpares / pares do mês de referência (parity_month).
+  odd
+  even
 
   @@map("cycle_anchor")
 }
@@ -550,6 +553,8 @@ model WorkSchedule {
   code          String?
   kind          ScheduleKind
   cycleAnchor   CycleAnchor? @map("cycle_anchor")
+  // Mês (AAAA-MM) em que a escala par/ímpar cai na paridade escolhida; daí em diante o ciclo segue.
+  parityMonth   String?      @map("parity_month") @db.Char(7)
   // Carga de referência da escala flexível (minutos por semana).
   weeklyMinutes Int?         @map("weekly_minutes")
   notes         String?

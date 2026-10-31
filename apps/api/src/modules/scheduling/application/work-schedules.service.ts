@@ -17,6 +17,7 @@ const SCHEDULE_SELECT = {
   code: true,
   kind: true,
   cycleAnchor: true,
+  parityMonth: true,
   weeklyMinutes: true,
   notes: true,
   isActive: true,
@@ -30,7 +31,8 @@ interface ScheduleRow {
   name: string;
   code: string | null;
   kind: 'cycle' | 'flexible';
-  cycleAnchor: 'monday' | 'assignment' | null;
+  cycleAnchor: 'monday' | 'assignment' | 'odd' | 'even' | null;
+  parityMonth: string | null;
   weeklyMinutes: number | null;
   notes: string | null;
   isActive: boolean;
@@ -46,6 +48,7 @@ function toSchedule(row: ScheduleRow): WorkSchedule {
     code: row.code,
     kind: row.kind,
     cycleAnchor: row.cycleAnchor,
+    parityMonth: row.parityMonth,
     days: row.days.map((day) => day.shiftId),
     weeklyMinutes: row.weeklyMinutes,
     notes: row.notes,
@@ -130,6 +133,10 @@ export class WorkSchedulesService {
       code: input.code,
       kind: input.kind,
       cycleAnchor: input.kind === 'cycle' ? input.cycleAnchor : null,
+      parityMonth:
+        input.kind === 'cycle' && (input.cycleAnchor === 'odd' || input.cycleAnchor === 'even')
+          ? input.parityMonth
+          : null,
       weeklyMinutes: input.kind === 'flexible' ? input.weeklyMinutes : null,
       notes: input.notes,
       isActive: input.isActive,
