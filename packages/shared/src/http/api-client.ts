@@ -15,8 +15,12 @@ import {
   auditLogQuerySchema,
 } from '../audit/audit.schemas.js';
 import {
+  type AccountInput,
+  accountInputSchema,
   authenticatedResponseSchema,
   authUserSchema,
+  type ForgotPasswordInput,
+  forgotPasswordInputSchema,
   type LoginRequest,
   loginRequestSchema,
   loginResponseSchema,
@@ -26,6 +30,8 @@ import {
   mfaSetupResponseSchema,
   type RefreshRequest,
   refreshRequestSchema,
+  type ResetPasswordInput,
+  resetPasswordInputSchema,
 } from '../auth/auth.schemas.js';
 import {
   type ProblemDetails,
@@ -922,6 +928,26 @@ export function createApiClient(options: ApiClientOptions) {
       me: () => request('GET', '/auth/me', { schema: authUserSchema }),
       changePassword: (input: ChangePasswordInput) =>
         request('POST', '/auth/password', { body: input, bodySchema: changePasswordInputSchema }),
+      /** Envia o link de redefinição (se o e-mail existir; a resposta é sempre a mesma). */
+      forgotPassword: (input: ForgotPasswordInput) =>
+        request('POST', '/auth/password/forgot', {
+          body: input,
+          bodySchema: forgotPasswordInputSchema,
+          ...noRetry,
+        }),
+      resetPassword: (input: ResetPasswordInput) =>
+        request('POST', '/auth/password/reset', {
+          body: input,
+          bodySchema: resetPasswordInputSchema,
+          ...noRetry,
+        }),
+      /** Troca o próprio nome e e-mail de login. */
+      updateAccount: (input: AccountInput) =>
+        request('PUT', '/auth/account', {
+          body: input,
+          bodySchema: accountInputSchema,
+          schema: authUserSchema,
+        }),
     },
     access: {
       mine: () => request('GET', '/me/access', { schema: myAccessSchema }),

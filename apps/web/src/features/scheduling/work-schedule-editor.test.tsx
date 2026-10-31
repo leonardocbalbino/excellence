@@ -50,12 +50,19 @@ describe('Escala 12x36 par/ímpar', () => {
     renderApp('/jornada/escalas/nova');
 
     await user.type(await screen.findByLabelText('Nome'), '12x36 Ímpar');
-    await user.selectOptions(screen.getByLabelText('O ciclo começa'), 'odd');
+    // Escolhidos o modelo e o turno, os dias do ciclo saem prontos (sem montar um a um).
+    await user.selectOptions(screen.getByLabelText('Modelo da escala'), 'odd');
+    expect(screen.getByLabelText('Turno')).toHaveValue(SHIFT_ID);
+    expect(screen.getByText(/Gerado pelo modelo/)).toHaveTextContent(
+      'Dias ímpares: Diurno 12h · Dia seguinte: folga',
+    );
+    expect(screen.queryByLabelText('O ciclo começa')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Dia' })).not.toBeInTheDocument();
 
-    // Dois dias: o turno nos dias ímpares e a folga no dia seguinte.
+    // O remanejo continua possível: os dias gerados ficam editáveis em "Ajustar dias".
+    await user.click(screen.getByText('Ajustar dias (remanejo)'));
     expect(screen.getByLabelText('Dias ímpares')).toHaveValue(SHIFT_ID);
     expect(screen.getByLabelText('Dia seguinte')).toHaveValue('');
-    expect(screen.queryByRole('button', { name: 'Dia' })).not.toBeInTheDocument();
 
     const month = screen.getByLabelText('Mês em que trabalha nos dias ímpares');
     await user.clear(month);

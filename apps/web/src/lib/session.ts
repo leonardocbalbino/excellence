@@ -57,6 +57,11 @@ export class SessionStore {
     this.timer = setTimeout(() => void this.refresh(), delay);
   }
 
+  /** Dados da conta mudaram (Meu perfil): o menu mostra o nome e o e-mail novos na hora. */
+  updateUser(user: AuthenticatedResponse['user']): void {
+    if (this.state.status === 'authenticated') this.set({ ...this.state, user });
+  }
+
   /** Na abertura do app: tenta retomar a sessão pelo cookie. */
   async restore(): Promise<void> {
     if (!(await this.refresh())) this.clear();

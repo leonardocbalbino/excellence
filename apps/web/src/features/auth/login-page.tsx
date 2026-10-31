@@ -11,7 +11,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { ShieldCheckIcon } from 'lucide-react';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
-import { Navigate, useNavigate, useSearchParams } from 'react-router';
+import { Link, Navigate, useNavigate, useSearchParams } from 'react-router';
 import type { z } from 'zod';
 import { BrandLogo } from '@/components/brand';
 import { ThemeToggle } from '@/components/theme-toggle';
@@ -103,7 +103,7 @@ export function LoginPage() {
               </p>
               <p className="mt-6 text-sm text-muted-foreground">
                 Primeiro acesso? Use a senha temporária enviada pelo RH; o sistema pede a troca logo
-                em seguida. Esqueceu a senha? Fale com o RH.
+                em seguida.
               </p>
             </>
           ) : null}
@@ -164,6 +164,12 @@ function CredentialsForm({
           />
         )}
       </FormField>
+      <Link
+        to="/esqueci-senha"
+        className="-mt-2 justify-self-end text-sm font-semibold text-primary hover:underline"
+      >
+        Esqueci minha senha
+      </Link>
       {login.isError ? (
         <Alert variant="destructive">
           {login.error instanceof ApiError && login.error.type === ProblemType.TooManyAttempts

@@ -1,13 +1,14 @@
 import type { AuthenticatedResponse, MfaPendingResponse } from '@excellence/shared';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { LinearGradient } from 'expo-linear-gradient';
+import * as Linking from 'expo-linking';
 import { Redirect } from 'expo-router';
 import { useState } from 'react';
 import { Alert, Image, KeyboardAvoidingView, Platform, ScrollView, Text, View } from 'react-native';
 import Animated, { FadeInDown, FadeInUp, ZoomIn } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { biometricAvailable, biometricEnabled, setBiometricEnabled } from '@/device';
-import { errorMessage, useServices, useSession } from '@/services';
+import { errorMessage, siteUrl, useServices, useSession } from '@/services';
 import {
   Banner,
   BRAND,
@@ -187,6 +188,12 @@ export default function LoginScreen() {
                   onPress={() => void signIn()}
                   loading={busy}
                   disabled={!email || !password}
+                />
+                <Button
+                  label="Esqueci minha senha"
+                  variant="ghost"
+                  // Mesma página do site: o link de redefinição chega por e-mail e abre nela.
+                  onPress={() => void Linking.openURL(`${siteUrl()}/esqueci-senha`)}
                 />
               </>
             ) : (

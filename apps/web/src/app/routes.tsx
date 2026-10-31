@@ -58,6 +58,19 @@ export const routes: RouteObject[] = [
     path: '/privacidade',
     lazy: lazyPage(async () => (await import('@/features/legal/privacy-page')).PrivacyPage),
   },
+  // Públicas: "esqueci minha senha" e o link que chega por e-mail.
+  {
+    path: '/esqueci-senha',
+    lazy: lazyPage(
+      async () => (await import('@/features/auth/password-recovery-pages')).ForgotPasswordPage,
+    ),
+  },
+  {
+    path: '/redefinir-senha',
+    lazy: lazyPage(
+      async () => (await import('@/features/auth/password-recovery-pages')).ResetPasswordPage,
+    ),
+  },
   {
     element: <RequireAuth />,
     children: [

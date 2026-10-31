@@ -82,3 +82,45 @@ describe('Meu perfil', () => {
     expect(screen.getByRole('menuitem', { name: 'Sair' })).toBeInTheDocument();
   });
 });
+
+describe('Meu perfil: foto, nome e e-mail', () => {
+  it('troca nome e e-mail; o e-mail novo pede a senha atual e o menu atualiza na hora', async () => {
+    let sent: Record<string, unknown> | undefined;
+    server.use(
+      ...sessionHandlers(['roles:read']),
+      http.get(`${API}/auth/me`, () => HttpResponse.json(TEST_USER)),
+      http.put(`${API}/auth/account`, async ({ request }) => {
+        sent = (await request.json()) as Record<string, unknown>;
+        return HttpResponse.json({ ...TEST_USER, name: 'Ana Nova', email: 'ana@nova.com.br' });
+      }),
+    );
+    const user = userEvent.setup();
+    renderApp('/perfil');
+
+    expect(await screen.findByRole('button', { name: /Adicionar foto/ })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Editar nome e e-mail' }));
+    const name = screen.getByLabelText('Nome');
+    await user.clear(name);
+    await user.type(name, 'Ana Nova');
+    expect(screen.queryByLabelText('Senha atual')).not.toBeInTheDocument();
+
+    const email = screen.getByLabelText('E-mail de login');
+    await user.clear(email);
+    await user.type(email, 'ana@nova.com.br');
+    await user.click(screen.getByRole('button', { name: 'Salvar' }));
+    expect(
+      await screen.findByText('Confirme a sua senha para trocar o e-mail'),
+    ).toBeInTheDocument();
+
+    await user.type(screen.getByLabelText('Senha atual'), 'senha-atual-123');
+    await user.click(screen.getByRole('button', { name: 'Salvar' }));
+    const account = await screen.findByRole('region', { name: 'Conta de acesso' });
+    expect(await within(account).findByText('ana@nova.com.br')).toBeInTheDocument();
+    expect(sent).toEqual({
+      name: 'Ana Nova',
+      email: 'ana@nova.com.br',
+      currentPassword: 'senha-atual-123',
+    });
+    expect(screen.getByRole('button', { name: 'Conta de Ana Nova' })).toBeInTheDocument();
+  });
+});
