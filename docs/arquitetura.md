@@ -73,7 +73,7 @@ flowchart LR
 
 | Item          | Local (docker-compose)                     | Staging                            | Produção                                |
 | ------------- | ------------------------------------------ | ---------------------------------- | --------------------------------------- |
-| Endereço      | web `:5173`, API `:3000`                   | `http://169.58.37.26:8201`         | `http://169.58.37.26:8200`              |
+| Endereço      | web `:5173`, API `:3000`                   | `http://169.58.37.26:8201`         | `https://gestaoexcellence.com.br`       |
 | API           | `pnpm dev`                                 | PM2 `excellence-api-staging` :3201 | PM2 `excellence-api-prod` :3200         |
 | PostgreSQL    | 16 :5432 · `excellence`, `excellence_test` | `excellence_staging`               | `excellence_prod`                       |
 | Redis         | 7 :6379                                    | :6390 DB 2                         | :6390 DB 1                              |

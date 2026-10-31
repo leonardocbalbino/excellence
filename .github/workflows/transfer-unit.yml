@@ -3,8 +3,8 @@ name: Transferir posto (staging → produção)
 # Leva um posto do staging para produção com os funcionários informados
 # (apps/api/scripts/transfer-unit.ts) e/ou deixa o staging só com esse posto
 # (apps/api/scripts/prune-to-unit.ts). Rode primeiro em "simular": o log mostra o que seria
-# feito e nada é gravado. Em "aplicar", o banco que vai mudar ganha antes um backup na VPS
-# (~/backups/excellence). Ver deploy/README.md.
+# feito e nada é gravado. Em "aplicar", o banco que vai mudar ganha antes um backup, guardado
+# na VPS (~/backups/excellence). Ver deploy/README.md.
 on:
   workflow_dispatch:
     inputs:
@@ -67,18 +67,6 @@ jobs:
           mkdir -p ~/.ssh
           ssh-keyscan -p ${{ secrets.VPS_SSH_PORT || 22 }} ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts
 
-      # pg_dump roda na própria VPS (mesma versão do servidor) e o arquivo fica lá. A URL vai
-      # pela entrada padrão, não pela linha de comando do ssh.
-      - name: Backup do banco que vai mudar
-        if: inputs.mode == 'aplicar'
-        env:
-          SSH_PORT: ${{ secrets.VPS_SSH_PORT || 22 }}
-          TARGET_URL: ${{ inputs.operation == 'limpar staging' && secrets.DATABASE_URL_STAGING || secrets.DATABASE_URL_PROD }}
-          LABEL: ${{ inputs.operation == 'limpar staging' && 'staging' || 'prod' }}
-        run: |
-          printf '%s\n' "$TARGET_URL" | ssh -p "$SSH_PORT" ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} \
-            "read -r url; mkdir -p ~/backups/excellence; f=~/backups/excellence/\$(date +%Y%m%d-%H%M%S)-$LABEL.dump; pg_dump --format=custom --file=\"\$f\" \"\$url\" && ls -lh \"\$f\""
-
       - name: Executar (via túnel SSH)
         env:
           SSH_PORT: ${{ secrets.VPS_SSH_PORT || 22 }}
@@ -90,8 +78,34 @@ jobs:
           EMPLOYEES: ${{ inputs.employees }}
           HIRE_DATE: ${{ inputs.hire_date }}
         run: |
-          ssh -p "$SSH_PORT" -fN -o ExitOnForwardFailure=yes \
-            -L 127.0.0.1:5432:127.0.0.1:5432 ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}
+          set -o pipefail
+          VPS="${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}"
+          ssh -p "$SSH_PORT" -fN -o ExitOnForwardFailure=yes -L 127.0.0.1:5432:127.0.0.1:5432 "$VPS"
+
+          # Backup antes de gravar ou apagar. A VPS não tem pg_dump: ele roda aqui, na mesma
+          # versão do servidor (pg_dump mais antigo que o servidor recusa), e o arquivo vai
+          # direto por SSH para ~/backups/excellence na VPS, sem ficar no GitHub.
+          if [ "$APPLY" = "true" ]; then
+            if [ "$OPERATION" = "limpar staging" ]; then
+              TARGET="$DATABASE_URL_STAGING"; LABEL=staging
+            else
+              TARGET="$DATABASE_URL_PROD"; LABEL=prod
+            fi
+            # libpq não aceita parâmetros do Prisma (?schema=...).
+            TARGET="${TARGET%%\?*}"
+            MAJOR=$(psql "$TARGET" -tAc 'show server_version_num' | cut -c1-2)
+            sudo install -d /usr/share/postgresql-common/pgdg
+            sudo curl -fsSL -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
+              https://www.postgresql.org/media/keys/ACCC4CF8.asc
+            echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
+              | sudo tee /etc/apt/sources.list.d/pgdg.list >/dev/null
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq "postgresql-client-$MAJOR" >/dev/null
+            FILE="excellence/$(date +%Y%m%d-%H%M%S)-$LABEL.dump"
+            "/usr/lib/postgresql/$MAJOR/bin/pg_dump" --format=custom "$TARGET" \
+              | ssh -p "$SSH_PORT" "$VPS" "mkdir -p ~/backups/excellence && cat > ~/backups/$FILE && ls -lh ~/backups/$FILE"
+          fi
+
           # Os scripts usam o schema atual: os dois bancos sobem para a versão do código antes.
           DATABASE_URL="$DATABASE_URL_STAGING" pnpm --filter @excellence/api db:deploy
           if [ "$OPERATION" = "limpar staging" ]; then

@@ -15,7 +15,7 @@ import {
   XIcon,
 } from 'lucide-react';
 import { useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import { toast } from 'sonner';
 import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -106,7 +106,11 @@ function RouteForm({ route, units }: { route: PatrolRoute | undefined; units: Na
   const api = useApi();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
-  const [draft, setDraft] = useState<Draft>(() => toDraft(route, units[0]?.id ?? ''));
+  // Vindo da pasta do posto (`?posto=`): a rota nasce nele e a volta é a pasta.
+  const [params] = useSearchParams();
+  const posto = params.get('posto');
+  const back = posto ? `/cadastros/postos/${posto}?aba=rondas` : '/gestao/rondas/rotas';
+  const [draft, setDraft] = useState<Draft>(() => toDraft(route, posto ?? units[0]?.id ?? ''));
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [time, setTime] = useState('');
   const [search, setSearch] = useState('');
@@ -132,7 +136,11 @@ function RouteForm({ route, units }: { route: PatrolRoute | undefined; units: Na
     onSuccess: async (saved) => {
       toast.success('Rota salva.');
       await queryClient.invalidateQueries({ queryKey: patrolRoutesQueryKey });
-      if (!route) void navigate(`/gestao/rondas/rotas/${saved.id}`, { replace: true });
+      if (!route) {
+        void navigate(`/gestao/rondas/rotas/${saved.id}${posto ? `?posto=${posto}` : ''}`, {
+          replace: true,
+        });
+      }
     },
     onError: (error) => {
       if (error instanceof ApiError) setErrors(error.fieldErrors);
@@ -143,7 +151,7 @@ function RouteForm({ route, units }: { route: PatrolRoute | undefined; units: Na
     onSuccess: async () => {
       toast.success('Rota excluída.');
       await queryClient.invalidateQueries({ queryKey: patrolRoutesQueryKey });
-      void navigate('/gestao/rondas/rotas');
+      void navigate(back);
     },
   });
 
@@ -188,11 +196,11 @@ function RouteForm({ route, units }: { route: PatrolRoute | undefined; units: Na
     >
       <div>
         <Link
-          to="/gestao/rondas/rotas"
+          to={back}
           className="inline-flex items-center gap-1 text-sm font-semibold text-primary"
         >
           <ChevronLeftIcon className="size-4" aria-hidden="true" />
-          Rotas de ronda
+          {posto ? 'Pasta do posto' : 'Rotas de ronda'}
         </Link>
         <h1 className="text-3xl font-bold">{route ? route.name : 'Nova rota'}</h1>
       </div>

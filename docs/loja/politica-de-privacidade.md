@@ -2,8 +2,7 @@
 
 O texto fica publicado no site, sem login:
 
-- **Produção:** `http://169.58.37.26:8200/privacidade` (com o domínio, passa a ser
-  `https://excellence.cartaocolaborativa.com.br/privacidade`)
+- **Produção:** `https://gestaoexcellence.com.br/privacidade`
 - **Staging:** `http://169.58.37.26:8201/privacidade`
 
 A fonte única do texto é

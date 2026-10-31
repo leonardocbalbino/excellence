@@ -34,12 +34,13 @@ import { useCan } from '../access/access';
 import { ShiftsCatalog } from '../scheduling/shifts-page';
 import { WorkSchedulesList } from '../scheduling/work-schedules-page';
 import { unitsQueryKey } from './query-keys';
+import type { FolderTab } from './unit-folder-path';
 import { UnitEmployeesTab } from './unit-folder/employees-tab';
+import { PatrolPointsCatalog } from '../patrols/patrol-points-page';
+import { PatrolRoutesList } from '../patrols/patrol-routes-page';
 import { UnitPatrolsTab } from './unit-folder/patrols-tab';
 import { UnitRatesTab } from './unit-folder/rates-tab';
 import { UnitSummaryTab } from './unit-folder/summary-tab';
-
-type FolderTab = 'funcionarios' | 'escalas' | 'valores' | 'resumo' | 'rondas' | 'dados';
 
 const TAB_CLASS =
   'shrink-0 border-b-2 border-transparent px-3 py-2.5 text-sm font-medium text-muted-foreground transition-colors outline-none hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 data-[state=active]:border-primary data-[state=active]:font-semibold data-[state=active]:text-primary';
@@ -57,6 +58,7 @@ export function UnitEditorPage() {
   const canReadSchedules = useCan('schedules:read');
   const canManagePayroll = useCan('payroll:manage');
   const canReadPatrols = useCan('patrols:read');
+  const canManagePatrols = useCan('patrols:manage');
   const unit = useQuery({
     queryKey: [...unitsQueryKey, id],
     queryFn: () => api.units.get(id ?? ''),
@@ -69,7 +71,7 @@ export function UnitEditorPage() {
     { value: 'escalas', label: 'Escalas e turnos', show: canReadSchedules },
     { value: 'valores', label: 'Valores por plantão', show: canManagePayroll },
     { value: 'resumo', label: 'Resumo mensal', show: canManagePayroll },
-    { value: 'rondas', label: 'Rondas', show: canReadPatrols },
+    { value: 'rondas', label: 'Rondas, rotas e QR codes', show: canReadPatrols },
     { value: 'dados', label: 'Dados do posto', show: true },
   ];
   const visible = tabs.filter((t) => t.show);
@@ -151,8 +153,14 @@ export function UnitEditorPage() {
             </>
           ) : null}
           {canReadPatrols ? (
-            <Tabs.Content value="rondas" className="pt-6 outline-none">
+            <Tabs.Content value="rondas" className="space-y-10 pt-6 outline-none">
               <UnitPatrolsTab unitId={id} />
+              {canManagePatrols ? (
+                <>
+                  <PatrolRoutesList unitId={id} />
+                  <PatrolPointsCatalog unitId={id} />
+                </>
+              ) : null}
             </Tabs.Content>
           ) : null}
           <Tabs.Content value="dados" className="pt-6 outline-none">

@@ -242,6 +242,7 @@ export class AssignmentsService {
         id: true,
         kind: true,
         cycleAnchor: true,
+        parityMonth: true,
         weeklyMinutes: true,
         days: {
           orderBy: { dayIndex: 'asc' },

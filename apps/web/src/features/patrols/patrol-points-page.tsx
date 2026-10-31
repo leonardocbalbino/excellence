@@ -9,11 +9,20 @@ import { Link } from 'react-router';
 import { Button } from '@/components/ui/button';
 import { useApi } from '@/lib/services';
 import { CatalogPage } from '../organization/catalog-page';
+import { NewInUnitButton } from '../organization/new-in-unit';
+import { unitFolderPath } from '../organization/unit-folder-path';
 import { unitsQueryKey } from '../organization/query-keys';
 import { patrolPointsQueryKey } from './labels';
 
-/** Pontos de ronda: cada um vira um QR code afixado no local. */
 export function PatrolPointsPage() {
+  return <PatrolPointsCatalog />;
+}
+
+/**
+ * Pontos de ronda: cada um vira um QR code afixado no local. Com `unitId` (pasta do posto),
+ * cadastra os pontos do posto; sem, é a visão consolidada e o cadastro abre a pasta.
+ */
+export function PatrolPointsCatalog({ unitId }: { unitId?: string }) {
   const api = useApi();
   const units = useQuery({
     queryKey: [...unitsQueryKey, 'options'],
@@ -23,16 +32,23 @@ export function PatrolPointsPage() {
     <CatalogPage<PatrolPoint>
       config={{
         title: 'Pontos de ronda',
-        description:
-          'Locais que o vigilante precisa visitar. Imprima o QR code de cada um e afixe no local.',
+        description: unitId
+          ? 'Locais do posto que o vigilante precisa visitar. Imprima o QR code e afixe no local.'
+          : 'Pontos de todos os postos. Para cadastrar ou editar, abra a pasta do posto.',
         singular: 'ponto',
+        embedded: unitId !== undefined,
         ready: units.isSuccess,
+        ...(unitId
+          ? {}
+          : {
+              createAction: () => <NewInUnitButton label="Novo ponto" tab="rondas" />,
+              editLink: (p: PatrolPoint) => unitFolderPath(p.unit.id, 'rondas'),
+            }),
         managePermission: 'patrols:manage',
-        queryKey: patrolPointsQueryKey,
         schema: patrolPointInputSchema,
         actions: (
           <Button asChild variant="outline">
-            <Link to="/gestao/rondas/pontos/imprimir">
+            <Link to={`/gestao/rondas/pontos/imprimir${unitId ? `?posto=${unitId}` : ''}`}>
               <PrinterIcon />
               Imprimir QR codes
             </Link>
@@ -40,12 +56,6 @@ export function PatrolPointsPage() {
         ),
         fields: [
           { name: 'name', label: 'Nome', kind: 'text' },
-          {
-            name: 'unitId',
-            label: 'Posto de trabalho',
-            kind: 'select',
-            options: units.data?.map((u) => ({ value: u.id, label: u.name })) ?? [],
-          },
           { name: 'description', label: 'Onde fica', kind: 'text', optional: true },
           {
             name: 'latitude',
@@ -64,7 +74,7 @@ export function PatrolPointsPage() {
           },
         ],
         columns: [
-          { header: 'Posto', cell: (p) => p.unit.name },
+          ...(unitId ? [] : [{ header: 'Posto', cell: (p: PatrolPoint) => p.unit.name }]),
           { header: 'Onde fica', cell: (p) => p.description ?? '—' },
           {
             header: 'QR code',
@@ -80,14 +90,18 @@ export function PatrolPointsPage() {
         ],
         defaults: (p) => ({
           name: p?.name ?? '',
-          unitId: p?.unit.id ?? units.data?.[0]?.id ?? '',
+          unitId: p?.unit.id ?? unitId ?? '',
           description: p?.description ?? null,
           latitude: p?.latitude ?? null,
           longitude: p?.longitude ?? null,
           radiusMeters: p?.radiusMeters ?? null,
           isActive: p?.isActive ?? true,
         }),
-        list: (includeInactive) => api.patrolPoints.list(includeInactive),
+        queryKey: unitId ? [...patrolPointsQueryKey, 'unit', unitId] : patrolPointsQueryKey,
+        list: async (includeInactive) => {
+          const points = await api.patrolPoints.list(includeInactive);
+          return unitId ? points.filter((p) => p.unit.id === unitId) : points;
+        },
         create: (values) => api.patrolPoints.create(values as PatrolPointInput),
         update: (id, values) => api.patrolPoints.update(id, values as PatrolPointInput),
         remove: (id) => api.patrolPoints.remove(id),

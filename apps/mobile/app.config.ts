@@ -7,7 +7,7 @@ import type { ExpoConfig } from 'expo/config';
  * endereço (ex.: http://192.168.0.10:3000/api/v1 na rede local). Os perfis do EAS
  * (eas.json) fixam o endereço de cada build.
  */
-export const PRODUCTION_API_URL = 'http://169.58.37.26:8200/api/v1';
+export const PRODUCTION_API_URL = 'https://gestaoexcellence.com.br/api/v1';
 
 const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? PRODUCTION_API_URL;
 /** Projeto no EAS (expo.dev): identifica o app nos builds e no token de push. Não é segredo. */

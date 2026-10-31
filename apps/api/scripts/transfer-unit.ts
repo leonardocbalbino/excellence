@@ -242,6 +242,7 @@ async function main(): Promise<void> {
               code: s.code,
               kind: s.kind,
               cycleAnchor: s.cycleAnchor,
+              parityMonth: s.parityMonth,
               weeklyMinutes: s.weeklyMinutes,
               notes: s.notes,
               isActive: s.isActive,

@@ -18,40 +18,58 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { errorMessage, useApi } from '@/lib/services';
+import { ConsolidatedNote, NewInUnitButton } from '../organization/new-in-unit';
 import { patrolRoutesQueryKey, weekdaysText } from './labels';
 
-/** Rotas de ronda: pontos em ordem, horários e quem faz. */
 export function PatrolRoutesPage() {
+  return <PatrolRoutesList />;
+}
+
+/**
+ * Rotas de ronda: pontos em ordem, horários e quem faz. Com `unitId` (pasta do posto), as
+ * rotas do posto; sem, a visão consolidada, e a nova rota começa escolhendo o posto.
+ */
+export function PatrolRoutesList({ unitId }: { unitId?: string }) {
   const api = useApi();
   const [includeInactive, setIncludeInactive] = useState(false);
   const routes = useQuery({
     queryKey: [...patrolRoutesQueryKey, { includeInactive }],
     queryFn: () => api.patrolRoutes.list(includeInactive),
+    select: (list) => (unitId ? list.filter((r) => r.unit.id === unitId) : list),
   });
+  const description =
+    'A sequência de pontos, o tempo previsto, os horários e os vigilantes de cada rota.';
 
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold">Rotas de ronda</h1>
-          <p className="text-muted-foreground">
-            A sequência de pontos, o tempo previsto, os horários e os vigilantes de cada rota.
-          </p>
+          {unitId ? (
+            <h2 className="text-lg font-semibold">Rotas de ronda</h2>
+          ) : (
+            <h1 className="text-2xl font-semibold">Rotas de ronda</h1>
+          )}
+          <p className="text-muted-foreground">{description}</p>
         </div>
-        <Button asChild>
-          <Link to="/gestao/rondas/rotas/nova">
-            <PlusIcon />
-            Nova rota
-          </Link>
-        </Button>
+        {unitId ? (
+          <Button asChild>
+            <Link to={`/gestao/rondas/rotas/nova?posto=${unitId}`}>
+              <PlusIcon />
+              Nova rota
+            </Link>
+          </Button>
+        ) : (
+          <NewInUnitButton label="Nova rota" tab="rondas" />
+        )}
       </div>
+      {unitId ? null : <ConsolidatedNote what="rotas" />}
       <div className="flex items-center gap-2">
         <Checkbox
-          id="routes-inactive"
+          id={`routes-inactive${unitId ? '-unit' : ''}`}
           checked={includeInactive}
           onCheckedChange={(checked) => setIncludeInactive(checked === true)}
         />
-        <Label htmlFor="routes-inactive">Mostrar inativas</Label>
+        <Label htmlFor={`routes-inactive${unitId ? '-unit' : ''}`}>Mostrar inativas</Label>
       </div>
       {routes.isError ? <Alert variant="destructive">{errorMessage(routes.error)}</Alert> : null}
       <Card>
@@ -84,7 +102,7 @@ export function PatrolRoutesPage() {
                 <TableRow key={route.id}>
                   <TableCell>
                     <Link
-                      to={`/gestao/rondas/rotas/${route.id}`}
+                      to={`/gestao/rondas/rotas/${route.id}?posto=${route.unit.id}`}
                       className="font-semibold text-primary hover:underline"
                     >
                       {route.name}

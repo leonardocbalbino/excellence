@@ -1,6 +1,7 @@
+import { PARITY_LABELS, parityInMonth, type WorkSchedule } from '@excellence/shared';
 import { useQuery } from '@tanstack/react-query';
 import { PlusIcon } from 'lucide-react';
-import { Link } from 'react-router';
+import { Link, useNavigate } from 'react-router';
 import { Alert } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -14,9 +15,10 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { formatMinutes } from '@/lib/format';
+import { formatMinutes, todayIso } from '@/lib/format';
 import { errorMessage, useApi } from '@/lib/services';
 import { useCan } from '../access/access';
+import { ConsolidatedNote, NewInUnitButton } from '../organization/new-in-unit';
 import { workSchedulesQueryKey } from './query-keys';
 import { OwnerBadge } from './shifts-page';
 
@@ -28,8 +30,23 @@ export function WorkSchedulesPage() {
  * Escalas. Com `unitId` (pasta do posto), lista as do posto e as gerais, e a nova escala já
  * nasce no posto.
  */
+/** Tipo da escala; par/ímpar diz em quais dias cai neste mês. */
+function scheduleKindText(schedule: WorkSchedule): string {
+  if (schedule.kind === 'flexible') {
+    return `Flexível · ${formatMinutes(schedule.weeklyMinutes ?? 0)} por semana`;
+  }
+  const anchor = schedule.cycleAnchor;
+  if ((anchor === 'odd' || anchor === 'even') && schedule.parityMonth) {
+    const parity = parityInMonth(anchor, schedule.parityMonth, todayIso().slice(0, 7));
+    return `12x36 · este mês nos dias ${PARITY_LABELS[parity]}`;
+  }
+  const workDays = schedule.days.filter((d) => d !== null).length;
+  return `Ciclo de ${schedule.days.length} dias · ${workDays} de trabalho`;
+}
+
 export function WorkSchedulesList({ unitId }: { unitId?: string }) {
   const api = useApi();
+  const navigate = useNavigate();
   const canManage = useCan('schedules:manage');
   const schedules = useQuery({
     queryKey: [...workSchedulesQueryKey, 'all', unitId ?? 'company'],
@@ -52,7 +69,14 @@ export function WorkSchedulesList({ unitId }: { unitId?: string }) {
             {unitId ? `Escalas do posto e as gerais da empresa. ${description}` : description}
           </p>
         </div>
-        {canManage ? (
+        {canManage && !unitId ? (
+          <NewInUnitButton
+            label="Nova escala"
+            tab="escalas"
+            onGeneral={() => void navigate('/jornada/escalas/nova')}
+          />
+        ) : null}
+        {canManage && unitId ? (
           <Button asChild>
             <Link to={`/jornada/escalas/nova${query}`}>
               <PlusIcon />
@@ -61,6 +85,7 @@ export function WorkSchedulesList({ unitId }: { unitId?: string }) {
           </Button>
         ) : null}
       </div>
+      {unitId ? null : <ConsolidatedNote what="escalas" />}
       {schedules.isError ? (
         <Alert variant="destructive">{errorMessage(schedules.error)}</Alert>
       ) : null}
@@ -89,12 +114,13 @@ export function WorkSchedulesList({ unitId }: { unitId?: string }) {
               </TableRow>
             ) : (
               schedules.data?.map((schedule) => {
-                const workDays = schedule.days.filter((d) => d !== null).length;
+                // Escala de posto abre com a pasta dele como volta.
+                const owner = unitId ?? schedule.unit?.id;
                 return (
                   <TableRow key={schedule.id}>
                     <TableCell>
                       <Link
-                        to={`/jornada/escalas/${schedule.id}${query}`}
+                        to={`/jornada/escalas/${schedule.id}${owner ? `?posto=${owner}` : ''}`}
                         className="font-medium text-primary hover:underline"
                       >
                         {schedule.name}
@@ -108,11 +134,7 @@ export function WorkSchedulesList({ unitId }: { unitId?: string }) {
                     <TableCell>
                       <OwnerBadge unit={schedule.unit} />
                     </TableCell>
-                    <TableCell>
-                      {schedule.kind === 'flexible'
-                        ? `Flexível · ${formatMinutes(schedule.weeklyMinutes ?? 0)} por semana`
-                        : `Ciclo de ${schedule.days.length} dias · ${workDays} de trabalho`}
-                    </TableCell>
+                    <TableCell>{scheduleKindText(schedule)}</TableCell>
                     <TableCell className="text-right">{schedule.employeeCount}</TableCell>
                   </TableRow>
                 );

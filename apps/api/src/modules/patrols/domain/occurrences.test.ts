@@ -56,5 +56,26 @@ describe('occurrenceEmail', () => {
     expect(mail.text).toContain('Ponto: Garagem');
     expect(mail.html).toContain('&lt;script&gt;aberto&lt;/script&gt; &amp; sem trava');
     expect(mail.html).not.toContain('<script>');
+    // Modelo do sistema (preto e dourado), sem botão quando não há endereço do site.
+    expect(mail.html).toContain('Ocorrência de ronda');
+    expect(mail.html).toContain('background-color:#171717');
+    expect(mail.html).not.toContain('Ver ocorrência');
+  });
+
+  it('com o endereço do site, leva o botão para a tela de ocorrências', () => {
+    const mail = occurrenceEmail({
+      number: 7,
+      unit: 'Reserva Lagoa',
+      route: null,
+      point: null,
+      employee: 'Carlos',
+      when: '01/11/2026 20:10',
+      description: 'Lâmpada queimada',
+      hasPhoto: false,
+      actionUrl: 'https://gestaoexcellence.com.br/gestao/rondas/ocorrencias',
+    });
+    expect(mail.html).toContain('href="https://gestaoexcellence.com.br/gestao/rondas/ocorrencias"');
+    expect(mail.html).toContain('Ver ocorrência');
+    expect(mail.text).toContain('Ver no sistema: https://gestaoexcellence.com.br');
   });
 });

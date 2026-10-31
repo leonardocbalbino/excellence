@@ -76,6 +76,8 @@ export const envSchema = z.object({
   SMTP_USER: z.string().min(1).optional(),
   SMTP_PASSWORD: z.string().min(1).optional(),
   MAIL_FROM: z.string().min(3).default('Excellence <nao-responda@excellence.local>'),
+  // Endereço público do site (ex.: https://gestaoexcellence.com.br): links dos e-mails.
+  WEB_APP_URL: z.url().optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;

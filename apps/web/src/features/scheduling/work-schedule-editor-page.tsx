@@ -1,5 +1,8 @@
 import {
+  type CycleAnchor,
   MAX_CYCLE_DAYS,
+  PARITY_LABELS,
+  parityInMonth,
   type Shift,
   type Unit,
   type WorkSchedule,
@@ -26,6 +29,24 @@ import { unitsQueryKey } from '../organization/query-keys';
 import { shiftsQueryKey, workSchedulesQueryKey } from './query-keys';
 
 const WEEKDAYS = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo'];
+
+function isParity(anchor: CycleAnchor | null | undefined): anchor is 'odd' | 'even' {
+  return anchor === 'odd' || anchor === 'even';
+}
+
+/** AAAA-MM do mês atual somado a `offset` meses. */
+function monthFromNow(offset = 0): string {
+  const now = new Date();
+  const date = new Date(now.getFullYear(), now.getMonth() + offset, 1);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function monthLabel(month: string): string {
+  return new Date(`${month}-01T12:00:00`).toLocaleDateString('pt-BR', {
+    month: 'short',
+    year: 'numeric',
+  });
+}
 
 /** Pasta do posto de onde a pessoa veio (`?posto=`): a nova escala nasce nele. */
 function folderOf(unitId: string | null): string {
@@ -111,6 +132,7 @@ function ScheduleForm({
     code: schedule?.code ?? null,
     kind: schedule?.kind ?? 'cycle',
     cycleAnchor: schedule?.cycleAnchor ?? 'monday',
+    parityMonth: schedule?.parityMonth ?? null,
     days: schedule?.days ?? [null, null, null, null, null, null, null],
     weeklyMinutes: schedule?.weeklyMinutes ?? null,
     notes: schedule?.notes ?? null,
@@ -135,21 +157,45 @@ function ScheduleForm({
   const applyPreset = (preset: '5x2' | '6x1' | '12x36') => {
     const shift = presetShift || null;
     if (preset === '12x36') {
-      setValues((v) => ({ ...v, cycleAnchor: 'assignment', days: [shift, null] }));
+      setValues((v) => ({
+        ...v,
+        cycleAnchor: isParity(v.cycleAnchor) ? v.cycleAnchor : 'assignment',
+        days: [shift, null],
+      }));
     } else {
       const work = preset === '5x2' ? 5 : 6;
       setValues((v) => ({
         ...v,
         cycleAnchor: 'monday',
+        parityMonth: null,
         days: Array.from({ length: 7 }, (_, i) => (i < work ? shift : null)),
       }));
     }
   };
 
+  /** Par/ímpar é sempre 12x36: o turno do dia 1 e a folga no dia seguinte. */
+  const setAnchor = (anchor: CycleAnchor) => {
+    if (!isParity(anchor)) {
+      setValues((v) => ({ ...v, cycleAnchor: anchor, parityMonth: null }));
+      return;
+    }
+    setValues((v) => ({
+      ...v,
+      cycleAnchor: anchor,
+      parityMonth: v.parityMonth ?? monthFromNow(),
+      days: [v.days.find((d) => d !== null) ?? (presetShift || null), null],
+    }));
+  };
+  const parity = isParity(values.cycleAnchor) ? values.cycleAnchor : null;
+
   const dayLabel = (index: number) =>
-    values.cycleAnchor === 'monday'
-      ? `${WEEKDAYS[index % 7] ?? ''}${values.days.length > 7 ? ` (semana ${Math.floor(index / 7) + 1})` : ''}`
-      : `Dia ${index + 1}`;
+    parity
+      ? index === 0
+        ? `Dias ${PARITY_LABELS[parity]}`
+        : 'Dia seguinte'
+      : values.cycleAnchor === 'monday'
+        ? `${WEEKDAYS[index % 7] ?? ''}${values.days.length > 7 ? ` (semana ${Math.floor(index / 7) + 1})` : ''}`
+        : `Dia ${index + 1}`;
   const shiftOf = (id: string | null) => shifts.find((s) => s.id === id);
   const cycleWork = values.days.reduce((sum, d) => sum + (shiftOf(d)?.workMinutes ?? 0), 0);
 
@@ -250,12 +296,12 @@ function ScheduleForm({
             <Select
               id="schedule-anchor"
               value={values.cycleAnchor ?? 'monday'}
-              onChange={(e) => set('cycleAnchor', e.target.value as 'monday' | 'assignment')}
+              onChange={(e) => setAnchor(e.target.value as CycleAnchor)}
             >
               <option value="monday">Na segunda-feira (folga em dia fixo)</option>
-              <option value="assignment">
-                No dia definido para cada funcionário (12x36, rodízio)
-              </option>
+              <option value="odd">12x36 nos dias ímpares</option>
+              <option value="even">12x36 nos dias pares</option>
+              <option value="assignment">No dia definido para cada funcionário (rodízio)</option>
             </Select>
             {fieldError('cycleAnchor')}
           </div>
@@ -278,6 +324,40 @@ function ScheduleForm({
           </div>
         )}
       </fieldset>
+
+      {values.kind === 'cycle' && parity ? (
+        <fieldset disabled={!canManage} className="grid gap-3 rounded-lg border p-4">
+          <legend className="px-1 text-sm font-medium">Par ou ímpar</legend>
+          <div className="grid gap-2 sm:max-w-xs">
+            <Label htmlFor="schedule-parity-month">
+              Mês em que trabalha nos dias {PARITY_LABELS[parity]}
+            </Label>
+            <Input
+              id="schedule-parity-month"
+              type="month"
+              value={values.parityMonth ?? ''}
+              onChange={(e) => set('parityMonth', e.target.value || null)}
+            />
+            {fieldError('parityMonth')}
+          </div>
+          <p className="text-sm text-muted-foreground">
+            Trabalha um dia e folga o outro até o fim do mês. Depois de um mês com 31 dias (ou de
+            fevereiro com 29), quem estava nos ímpares passa para os pares e vice-versa.
+          </p>
+          {values.parityMonth ? (
+            <ul className="flex flex-wrap gap-2" aria-label="Paridade nos próximos meses">
+              {Array.from({ length: 6 }, (_, i) => monthFromNow(i)).map((month) => (
+                <li key={month} className="rounded-md border bg-muted px-2.5 py-1 text-sm">
+                  <span className="capitalize">{monthLabel(month)}</span>:{' '}
+                  <strong>
+                    {PARITY_LABELS[parityInMonth(parity, values.parityMonth ?? month, month)]}
+                  </strong>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </fieldset>
+      ) : null}
 
       {values.kind === 'cycle' ? (
         <fieldset disabled={!canManage} className="grid gap-4 rounded-lg border p-4">
@@ -331,26 +411,30 @@ function ScheduleForm({
             ))}
           </ol>
           <div className="flex flex-wrap items-center gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={values.days.length >= MAX_CYCLE_DAYS}
-              onClick={() => set('days', [...values.days, null])}
-            >
-              <PlusIcon />
-              Dia
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={values.days.length <= 1}
-              onClick={() => set('days', values.days.slice(0, -1))}
-            >
-              <MinusIcon />
-              Dia
-            </Button>
+            {parity ? null : (
+              <>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={values.days.length >= MAX_CYCLE_DAYS}
+                  onClick={() => set('days', [...values.days, null])}
+                >
+                  <PlusIcon />
+                  Dia
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={values.days.length <= 1}
+                  onClick={() => set('days', values.days.slice(0, -1))}
+                >
+                  <MinusIcon />
+                  Dia
+                </Button>
+              </>
+            )}
             <span className="text-sm text-muted-foreground">
               {values.days.length} dias · {formatMinutes(cycleWork)} de trabalho previstos no ciclo
             </span>
