@@ -39,6 +39,8 @@ export function sessionHandlers(permissions: Permission[], access: Partial<MyAcc
     ),
     // Mural de comunicados: consultado pelo menu em qualquer área.
     http.get(`${API}/me/announcements`, () => HttpResponse.json({ items: [], pending: 0 })),
+    // Foto de perfil (Meu perfil): sem foto, por padrão.
+    http.get(`${API}/me/avatar`, () => HttpResponse.json(null)),
   ];
 }
 

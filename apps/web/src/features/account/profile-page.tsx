@@ -2,7 +2,7 @@ import { type Employee, formatCpf } from '@excellence/shared';
 import { useQuery } from '@tanstack/react-query';
 // TODO(mfa): reativar KeyRoundIcon, ShieldCheckIcon e ShieldOffIcon junto com o MFA.
 import { LockIcon } from 'lucide-react';
-import type { ReactNode } from 'react';
+import { type ReactNode, useState } from 'react';
 import { Link } from 'react-router';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { Alert } from '@/components/ui/alert';
@@ -12,14 +12,8 @@ import { Skeleton } from '@/components/ui/feedback';
 import { formatDate } from '@/lib/format';
 import { errorMessage, useApi } from '@/lib/services';
 import { useMyAccess } from '../access/access';
+import { AccountForm, EditAccountButton, ProfileAvatar } from './account-editor';
 import { /* MFA_SETUP_PATH, */ PASSWORD_PATH } from '../auth/require-auth';
-
-function initials(name: string): string {
-  const parts = name.trim().split(/\s+/);
-  return (
-    (parts[0]?.[0] ?? '') + (parts.length > 1 ? (parts.at(-1)?.[0] ?? '') : '')
-  ).toUpperCase();
-}
 
 /** 12345678901 → "123.45678.90-1" (NIS/PIS). */
 function formatPis(value: string): string {
@@ -58,14 +52,16 @@ function Section({ id, title, children }: { id: string; title: string; children:
 }
 
 /**
- * Meu perfil: os dados do próprio cadastro de funcionário e da conta de acesso. Só leitura:
- * correções passam pelo RH, que mantém o cadastro (e a auditoria das mudanças).
+ * Meu perfil: os dados do próprio cadastro de funcionário e da conta de acesso. A foto, o nome
+ * e o e-mail da conta a própria pessoa troca; o cadastro de funcionário é só leitura (correções
+ * passam pelo RH, que o mantém, com a auditoria das mudanças).
  */
 export function ProfilePage() {
   const api = useApi();
   const access = useMyAccess();
   const hasEmployee = access.data?.hasEmployeeRecord ?? false;
   const me = useQuery({ queryKey: ['auth', 'me'], queryFn: () => api.auth.me() });
+  const [editing, setEditing] = useState(false);
   const employee = useQuery({
     queryKey: ['me', 'employee'],
     queryFn: () => api.employees.mine(),
@@ -83,12 +79,7 @@ export function ProfilePage() {
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       <div className="flex flex-wrap items-center gap-4">
-        <span
-          className="grid size-16 shrink-0 place-items-center rounded-full bg-primary-soft font-display text-xl font-bold text-primary"
-          aria-hidden="true"
-        >
-          {initials(displayName)}
-        </span>
+        <ProfileAvatar name={displayName} />
         <div className="min-w-0">
           <h1 className="text-3xl font-bold">Meu perfil</h1>
           <p className="text-muted-foreground">
@@ -120,8 +111,17 @@ export function ProfilePage() {
       )}
 
       <Section id="perfil-conta" title="Conta de acesso">
-        <Field label="Nome na conta" value={user.name} />
-        <Field label="E-mail de login" value={user.email} />
+        {editing ? (
+          <AccountForm user={user} onDone={() => setEditing(false)} />
+        ) : (
+          <>
+            <Field label="Nome na conta" value={user.name} />
+            <Field label="E-mail de login" value={user.email} />
+            <div className="pt-3">
+              <EditAccountButton onClick={() => setEditing(true)} />
+            </div>
+          </>
+        )}
         {/* TODO(mfa): MFA desligado temporariamente até validar com o cliente.
         <Field
           label="Verificação em duas etapas"

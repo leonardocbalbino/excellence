@@ -41,6 +41,73 @@ function monthFromNow(offset = 0): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
 }
 
+/**
+ * Modelos de escala: escolhido o modelo e o turno, os dias do ciclo saem prontos (e podem
+ * ser ajustados depois). "Personalizado" monta o ciclo dia a dia.
+ */
+type ScheduleModel = 'odd' | 'even' | '12x36' | '5x2' | '6x1' | 'custom' | 'flexible';
+
+const MODELS: { value: ScheduleModel; label: string }[] = [
+  { value: 'odd', label: '12x36 nos dias ímpares' },
+  { value: 'even', label: '12x36 nos dias pares' },
+  { value: '12x36', label: '12x36 com início definido em cada funcionário' },
+  { value: '5x2', label: '5x2: segunda a sexta, folga sábado e domingo' },
+  { value: '6x1', label: '6x1: segunda a sábado, folga domingo' },
+  { value: 'custom', label: 'Personalizado (montar os dias do ciclo)' },
+  { value: 'flexible', label: 'Flexível (só carga horária semanal)' },
+];
+
+const DEFAULT_MODEL: ScheduleModel = 'odd';
+
+type GeneratedFields = Pick<WorkScheduleInput, 'kind' | 'cycleAnchor' | 'parityMonth' | 'days'>;
+
+function generate(
+  model: ScheduleModel,
+  shift: string | null,
+  parityMonth: string | null,
+): GeneratedFields {
+  switch (model) {
+    case 'odd':
+    case 'even':
+      return {
+        kind: 'cycle',
+        cycleAnchor: model,
+        parityMonth: parityMonth ?? monthFromNow(),
+        days: [shift, null],
+      };
+    case '12x36':
+      return { kind: 'cycle', cycleAnchor: 'assignment', parityMonth: null, days: [shift, null] };
+    case '5x2':
+    case '6x1': {
+      const work = model === '5x2' ? 5 : 6;
+      return {
+        kind: 'cycle',
+        cycleAnchor: 'monday',
+        parityMonth: null,
+        days: Array.from({ length: 7 }, (_, i) => (i < work ? shift : null)),
+      };
+    }
+    case 'flexible':
+      return { kind: 'flexible', cycleAnchor: null, parityMonth: null, days: [] };
+    case 'custom':
+      return { kind: 'cycle', cycleAnchor: 'assignment', parityMonth: null, days: [shift, null] };
+  }
+}
+
+/** Reconhece o modelo de uma escala salva (o que não bate com nenhum vira personalizado). */
+function detectModel(schedule: WorkSchedule | undefined): ScheduleModel {
+  if (!schedule) return DEFAULT_MODEL;
+  if (schedule.kind === 'flexible') return 'flexible';
+  if (isParity(schedule.cycleAnchor)) return schedule.cycleAnchor;
+  const shift = schedule.days.find((d) => d !== null) ?? null;
+  const same = (model: ScheduleModel) =>
+    JSON.stringify(generate(model, shift, null).days) === JSON.stringify(schedule.days);
+  if (schedule.cycleAnchor === 'assignment' && same('12x36')) return '12x36';
+  if (schedule.cycleAnchor === 'monday' && same('5x2')) return '5x2';
+  if (schedule.cycleAnchor === 'monday' && same('6x1')) return '6x1';
+  return 'custom';
+}
+
 function monthLabel(month: string): string {
   return new Date(`${month}-01T12:00:00`).toLocaleDateString('pt-BR', {
     month: 'short',
@@ -126,67 +193,74 @@ function ScheduleForm({
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const canManage = useCan('schedules:manage');
-  const [values, setValues] = useState<WorkScheduleInput>({
-    unitId: schedule ? (schedule.unit?.id ?? null) : initialUnitId,
-    name: schedule?.name ?? '',
-    code: schedule?.code ?? null,
-    kind: schedule?.kind ?? 'cycle',
-    cycleAnchor: schedule?.cycleAnchor ?? 'monday',
-    parityMonth: schedule?.parityMonth ?? null,
-    days: schedule?.days ?? [null, null, null, null, null, null, null],
-    weeklyMinutes: schedule?.weeklyMinutes ?? null,
-    notes: schedule?.notes ?? null,
-    isActive: schedule?.isActive ?? true,
-  });
   // Escala de posto usa turnos gerais ou do mesmo posto; escala geral, só turnos gerais.
+  const unitIdAtStart = schedule ? (schedule.unit?.id ?? null) : initialUnitId;
+  const firstShift =
+    allShifts.find((s) => s.isActive && (s.unit === null || s.unit.id === unitIdAtStart))?.id ??
+    null;
+  const [model, setModel] = useState<ScheduleModel>(() => detectModel(schedule));
+  const [shiftId, setShiftId] = useState<string | null>(
+    () => schedule?.days.find((d) => d !== null) ?? firstShift,
+  );
+  const [values, setValues] = useState<WorkScheduleInput>(() =>
+    schedule
+      ? {
+          unitId: unitIdAtStart,
+          name: schedule.name,
+          code: schedule.code,
+          kind: schedule.kind,
+          cycleAnchor: schedule.cycleAnchor,
+          parityMonth: schedule.parityMonth,
+          days: schedule.days,
+          weeklyMinutes: schedule.weeklyMinutes,
+          notes: schedule.notes,
+          isActive: schedule.isActive,
+        }
+      : {
+          unitId: unitIdAtStart,
+          name: '',
+          code: null,
+          ...generate(DEFAULT_MODEL, firstShift, null),
+          weeklyMinutes: null,
+          notes: null,
+          isActive: true,
+        },
+  );
   const shifts = allShifts.filter((s) => s.unit === null || s.unit.id === values.unitId);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitError, setSubmitError] = useState<unknown>(null);
   const [saving, setSaving] = useState(false);
-  const [presetShift, setPresetShift] = useState(shifts.find((s) => s.isActive)?.id ?? '');
 
   const set = <K extends keyof WorkScheduleInput>(key: K, value: WorkScheduleInput[K]) =>
     setValues((v) => ({ ...v, [key]: value }));
-  const setDay = (index: number, shiftId: string | null) =>
+  const setDay = (index: number, id: string | null) =>
     set(
       'days',
-      values.days.map((d, i) => (i === index ? shiftId : d)),
+      values.days.map((d, i) => (i === index ? id : d)),
     );
 
-  /** Atalhos para os ciclos mais comuns, usando o turno escolhido. */
-  const applyPreset = (preset: '5x2' | '6x1' | '12x36') => {
-    const shift = presetShift || null;
-    if (preset === '12x36') {
+  /** Trocar o modelo ou o turno gera os dias de novo (o ajuste manual recomeça). */
+  const choose = (next: ScheduleModel, nextShift: string | null) => {
+    setModel(next);
+    setShiftId(nextShift);
+    if (next === 'custom') {
+      // Personalizado parte do que já está montado.
       setValues((v) => ({
         ...v,
-        cycleAnchor: isParity(v.cycleAnchor) ? v.cycleAnchor : 'assignment',
-        days: [shift, null],
-      }));
-    } else {
-      const work = preset === '5x2' ? 5 : 6;
-      setValues((v) => ({
-        ...v,
-        cycleAnchor: 'monday',
+        kind: 'cycle',
+        cycleAnchor: v.cycleAnchor === 'monday' ? 'monday' : 'assignment',
         parityMonth: null,
-        days: Array.from({ length: 7 }, (_, i) => (i < work ? shift : null)),
+        days: v.days.length > 0 ? v.days : [nextShift, null],
       }));
-    }
-  };
-
-  /** Par/ímpar é sempre 12x36: o turno do dia 1 e a folga no dia seguinte. */
-  const setAnchor = (anchor: CycleAnchor) => {
-    if (!isParity(anchor)) {
-      setValues((v) => ({ ...v, cycleAnchor: anchor, parityMonth: null }));
       return;
     }
-    setValues((v) => ({
-      ...v,
-      cycleAnchor: anchor,
-      parityMonth: v.parityMonth ?? monthFromNow(),
-      days: [v.days.find((d) => d !== null) ?? (presetShift || null), null],
-    }));
+    setValues((v) => ({ ...v, ...generate(next, nextShift, v.parityMonth ?? null) }));
   };
   const parity = isParity(values.cycleAnchor) ? values.cycleAnchor : null;
+  const adjusted =
+    model !== 'custom' &&
+    model !== 'flexible' &&
+    JSON.stringify(values.days) !== JSON.stringify(generate(model, shiftId, null).days);
 
   const dayLabel = (index: number) =>
     parity
@@ -279,33 +353,54 @@ function ScheduleForm({
             onChange={(e) => set('code', e.target.value || null)}
           />
         </div>
-        <div className="grid gap-2">
-          <Label htmlFor="schedule-kind">Tipo</Label>
+        <div className="grid gap-2 sm:col-span-2">
+          <Label htmlFor="schedule-model">Modelo da escala</Label>
           <Select
-            id="schedule-kind"
-            value={values.kind}
-            onChange={(e) => set('kind', e.target.value as WorkScheduleInput['kind'])}
+            id="schedule-model"
+            value={model}
+            onChange={(e) => choose(e.target.value as ScheduleModel, shiftId)}
           >
-            <option value="cycle">Ciclo de dias com turnos</option>
-            <option value="flexible">Flexível (só carga horária)</option>
+            {MODELS.map((m) => (
+              <option key={m.value} value={m.value}>
+                {m.label}
+              </option>
+            ))}
           </Select>
+          {fieldError('cycleAnchor')}
         </div>
-        {values.kind === 'cycle' ? (
+        {model === 'custom' ? (
           <div className="grid gap-2">
             <Label htmlFor="schedule-anchor">O ciclo começa</Label>
             <Select
               id="schedule-anchor"
-              value={values.cycleAnchor ?? 'monday'}
-              onChange={(e) => setAnchor(e.target.value as CycleAnchor)}
+              value={values.cycleAnchor === 'monday' ? 'monday' : 'assignment'}
+              onChange={(e) => set('cycleAnchor', e.target.value as CycleAnchor)}
             >
               <option value="monday">Na segunda-feira (folga em dia fixo)</option>
-              <option value="odd">12x36 nos dias ímpares</option>
-              <option value="even">12x36 nos dias pares</option>
               <option value="assignment">No dia definido para cada funcionário (rodízio)</option>
             </Select>
-            {fieldError('cycleAnchor')}
           </div>
-        ) : (
+        ) : null}
+        {model !== 'custom' && model !== 'flexible' ? (
+          <div className="grid gap-2">
+            <Label htmlFor="schedule-shift">Turno</Label>
+            <Select
+              id="schedule-shift"
+              value={shiftId ?? ''}
+              onChange={(e) => choose(model, e.target.value || null)}
+            >
+              <option value="">Escolha o turno…</option>
+              {shifts
+                .filter((s) => s.isActive || s.id === shiftId)
+                .map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name} ({s.start}–{s.end})
+                  </option>
+                ))}
+            </Select>
+          </div>
+        ) : null}
+        {model === 'flexible' ? (
           <div className="grid gap-2">
             <Label htmlFor="schedule-weekly">Carga semanal (horas)</Label>
             <Input
@@ -322,7 +417,7 @@ function ScheduleForm({
             />
             {fieldError('weeklyMinutes')}
           </div>
-        )}
+        ) : null}
       </fieldset>
 
       {values.kind === 'cycle' && parity ? (
@@ -362,56 +457,47 @@ function ScheduleForm({
       {values.kind === 'cycle' ? (
         <fieldset disabled={!canManage} className="grid gap-4 rounded-lg border p-4">
           <legend className="px-1 text-sm font-medium">Dias do ciclo</legend>
-          <div className="flex flex-wrap items-end gap-2">
-            <div className="grid gap-2">
-              <Label htmlFor="preset-shift">Preencher com o turno</Label>
-              <Select
-                id="preset-shift"
-                value={presetShift}
-                onChange={(e) => setPresetShift(e.target.value)}
-              >
-                {shifts
-                  .filter((s) => s.isActive)
-                  .map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name} ({s.start}–{s.end})
-                    </option>
-                  ))}
-              </Select>
-            </div>
-            <Button type="button" variant="outline" size="sm" onClick={() => applyPreset('5x2')}>
-              5x2
-            </Button>
-            <Button type="button" variant="outline" size="sm" onClick={() => applyPreset('6x1')}>
-              6x1
-            </Button>
-            <Button type="button" variant="outline" size="sm" onClick={() => applyPreset('12x36')}>
-              12x36
-            </Button>
-          </div>
-          <ol className="grid gap-2">
-            {values.days.map((shiftId, index) => (
-              <li key={index} className="grid grid-cols-[9rem_1fr] items-center gap-3">
-                <Label htmlFor={`day-${index}`}>{dayLabel(index)}</Label>
-                <Select
-                  id={`day-${index}`}
-                  value={shiftId ?? ''}
-                  onChange={(e) => setDay(index, e.target.value || null)}
-                >
-                  <option value="">Folga</option>
-                  {shifts
-                    .filter((s) => s.isActive || s.id === shiftId)
-                    .map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.name} ({s.start}–{s.end})
-                      </option>
-                    ))}
-                </Select>
-              </li>
-            ))}
-          </ol>
+          {model === 'custom' ? null : (
+            <p className="text-sm text-muted-foreground">
+              Gerado pelo modelo:{' '}
+              <strong className="text-foreground">
+                {values.days
+                  .map((d, i) => `${dayLabel(i)}: ${d ? (shiftOf(d)?.name ?? 'turno') : 'folga'}`)
+                  .join(' · ')}
+              </strong>
+              {adjusted ? ' (ajustado)' : ''}
+            </p>
+          )}
+          <details className="group grid gap-3" open={model === 'custom' || adjusted}>
+            {model === 'custom' ? null : (
+              <summary className="cursor-pointer text-sm font-semibold text-primary">
+                Ajustar dias (remanejo)
+              </summary>
+            )}
+            <ol className="mt-3 grid gap-2">
+              {values.days.map((shiftId, index) => (
+                <li key={index} className="grid grid-cols-[9rem_1fr] items-center gap-3">
+                  <Label htmlFor={`day-${index}`}>{dayLabel(index)}</Label>
+                  <Select
+                    id={`day-${index}`}
+                    value={shiftId ?? ''}
+                    onChange={(e) => setDay(index, e.target.value || null)}
+                  >
+                    <option value="">Folga</option>
+                    {shifts
+                      .filter((s) => s.isActive || s.id === shiftId)
+                      .map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.name} ({s.start}–{s.end})
+                        </option>
+                      ))}
+                  </Select>
+                </li>
+              ))}
+            </ol>
+          </details>
           <div className="flex flex-wrap items-center gap-2">
-            {parity ? null : (
+            {model !== 'custom' ? null : (
               <>
                 <Button
                   type="button"

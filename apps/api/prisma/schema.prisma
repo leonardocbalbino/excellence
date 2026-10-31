@@ -36,6 +36,7 @@ model Company {
   users                User[]
   refreshTokens        RefreshToken[]
   mfaRecoveryCodes     MfaRecoveryCode[]
+  passwordResetTokens  PasswordResetToken[]
   roles                Role[]                       @relation("CompanyRoles")
   auditLogs            AuditLog[]
   files                StoredFile[]
@@ -114,6 +115,7 @@ model User {
   company              Company               @relation(fields: [companyId], references: [id])
   refreshTokens        RefreshToken[]
   mfaRecoveryCodes     MfaRecoveryCode[]
+  passwordResetTokens  PasswordResetToken[]
   userRoles            UserRole[]
   employee             Employee?
   announcementReads    AnnouncementRead[]
@@ -155,6 +157,24 @@ model RefreshToken {
 }
 
 /// Códigos de recuperação do MFA (uso único), armazenados como hash.
+// Link de "esqueci minha senha": vale 30 min e uma vez só. Guarda só o SHA-256 do token.
+model PasswordResetToken {
+  id          String    @id @default(uuid(7)) @db.Uuid
+  companyId   String    @map("company_id") @db.Uuid
+  userId      String    @map("user_id") @db.Uuid
+  tokenHash   String    @unique @map("token_hash")
+  expiresAt   DateTime  @map("expires_at") @db.Timestamptz(6)
+  usedAt      DateTime? @map("used_at") @db.Timestamptz(6)
+  requestedIp String?   @map("requested_ip")
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  company Company @relation(fields: [companyId], references: [id])
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@map("password_reset_tokens")
+}
+
 model MfaRecoveryCode {
   id        String    @id @default(uuid(7)) @db.Uuid
   companyId String    @map("company_id") @db.Uuid

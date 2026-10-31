@@ -1,5 +1,10 @@
-import { Controller, Get, HttpCode, HttpStatus, Post, Req, Res } from '@nestjs/common';
-import { changePasswordInputSchema } from '@excellence/shared';
+import { Controller, Get, HttpCode, HttpStatus, Post, Put, Req, Res } from '@nestjs/common';
+import {
+  accountInputSchema,
+  changePasswordInputSchema,
+  forgotPasswordInputSchema,
+  resetPasswordInputSchema,
+} from '@excellence/shared';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import {
   type AuthenticatedResponse,
@@ -21,8 +26,10 @@ import type { z } from 'zod';
 import { ZodBody, ZodResponse } from '../../../common/openapi/zod-openapi';
 import { AnyAuthenticated } from '../../access-control/http/access.decorators';
 import { AppConfig } from '../../../config/app-config';
+import { AccountService } from '../application/account.service';
 import { AuthService, type SessionResult } from '../application/auth.service';
 import { MfaService } from '../application/mfa.service';
+import { PasswordResetService } from '../application/password-reset.service';
 import { PasswordService } from '../application/password.service';
 import type { AuthPrincipal } from '../domain/auth-principal';
 import type { ClientMetadata } from '../infrastructure/refresh-token.service';
@@ -46,6 +53,8 @@ export class AuthController {
     private readonly auth: AuthService,
     private readonly mfa: MfaService,
     private readonly passwords: PasswordService,
+    private readonly resets: PasswordResetService,
+    private readonly account: AccountService,
     config: AppConfig,
   ) {
     this.secureCookie = config.get('AUTH_COOKIE_SECURE');
@@ -161,6 +170,41 @@ export class AuthController {
     @ZodBody(changePasswordInputSchema) body: z.output<typeof changePasswordInputSchema>,
   ): Promise<void> {
     await this.passwords.change(principal, body.currentPassword, body.newPassword);
+  }
+
+  @Post('password/forgot')
+  @Public()
+  @HttpCode(HttpStatus.ACCEPTED)
+  @ApiOperation({
+    summary: 'Envia o link de redefinição de senha (a resposta é a mesma exista ou não o e-mail)',
+  })
+  async forgotPassword(
+    @ZodBody(forgotPasswordInputSchema) body: z.output<typeof forgotPasswordInputSchema>,
+    @Req() req: Request,
+  ): Promise<void> {
+    await this.resets.request(body.email, metadataOf(req).ip);
+  }
+
+  @Post('password/reset')
+  @Public()
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Cria a senha nova pelo link do e-mail (encerra todas as sessões)' })
+  async resetPassword(
+    @ZodBody(resetPasswordInputSchema) body: z.output<typeof resetPasswordInputSchema>,
+  ): Promise<void> {
+    await this.resets.reset(body.token, body.newPassword);
+  }
+
+  @Put('account')
+  @AnyAuthenticated()
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Troca o próprio nome e e-mail de login (e-mail pede a senha atual)' })
+  @ZodResponse(HttpStatus.OK, authUserSchema)
+  updateAccount(
+    @CurrentPrincipal() principal: AuthPrincipal,
+    @ZodBody(accountInputSchema) body: z.output<typeof accountInputSchema>,
+  ): Promise<AuthUser> {
+    return this.account.update(principal, body);
   }
 
   @Get('me')

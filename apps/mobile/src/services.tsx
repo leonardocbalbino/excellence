@@ -18,6 +18,11 @@ export function apiUrl(): string {
   return url.replace(/\/$/, '');
 }
 
+/** Endereço do site (o da API sem o /api/v1), para abrir páginas como "esqueci minha senha". */
+export function siteUrl(): string {
+  return apiUrl().replace(/\/api\/v\d+$/, '');
+}
+
 /** Client HTTP e sessão ligados entre si: o client renova a sessão ao receber 401. */
 export function createServices(): Services {
   const holder: { session?: MobileSession } = {};
