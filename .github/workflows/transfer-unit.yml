@@ -1,0 +1,105 @@
+name: Transferir posto (staging → produção)
+
+# Leva um posto do staging para produção com os funcionários informados
+# (apps/api/scripts/transfer-unit.ts) e/ou deixa o staging só com esse posto
+# (apps/api/scripts/prune-to-unit.ts). Rode primeiro em "simular": o log mostra o que seria
+# feito e nada é gravado. Em "aplicar", o banco que vai mudar ganha antes um backup na VPS
+# (~/backups/excellence). Ver deploy/README.md.
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: O que fazer
+        type: choice
+        options: [transferir para produção, limpar staging]
+        default: transferir para produção
+      mode:
+        description: Modo
+        type: choice
+        options: [simular, aplicar]
+        default: simular
+      unit:
+        description: Nome do posto no staging
+        default: RESERVA LAGOA
+      employees:
+        description: 'Funcionários: NOME:CPF; NOME:CPF; ... (só na transferência)'
+        required: false
+      hire_date:
+        description: Data do vínculo (AAAA-MM-DD)
+        default: '2026-11-01'
+
+concurrency:
+  group: transfer-unit
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # Mexe em produção: valem as regras do environment production. Os dois bancos ficam na
+    # mesma VPS, então um túnel atende os dois.
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Instalar dependências
+        run: pnpm install --frozen-lockfile
+
+      - name: Preparar (shared e client do Prisma)
+        run: |
+          pnpm turbo run build --filter=@excellence/shared
+          pnpm --filter @excellence/api db:generate
+
+      - name: Configurar SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.VPS_SSH_KEY }}
+
+      - name: Adicionar VPS aos known_hosts
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -p ${{ secrets.VPS_SSH_PORT || 22 }} ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts
+
+      # pg_dump roda na própria VPS (mesma versão do servidor) e o arquivo fica lá. A URL vai
+      # pela entrada padrão, não pela linha de comando do ssh.
+      - name: Backup do banco que vai mudar
+        if: inputs.mode == 'aplicar'
+        env:
+          SSH_PORT: ${{ secrets.VPS_SSH_PORT || 22 }}
+          TARGET_URL: ${{ inputs.operation == 'limpar staging' && secrets.DATABASE_URL_STAGING || secrets.DATABASE_URL_PROD }}
+          LABEL: ${{ inputs.operation == 'limpar staging' && 'staging' || 'prod' }}
+        run: |
+          printf '%s\n' "$TARGET_URL" | ssh -p "$SSH_PORT" ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} \
+            "read -r url; mkdir -p ~/backups/excellence; f=~/backups/excellence/\$(date +%Y%m%d-%H%M%S)-$LABEL.dump; pg_dump --format=custom --file=\"\$f\" \"\$url\" && ls -lh \"\$f\""
+
+      - name: Executar (via túnel SSH)
+        env:
+          SSH_PORT: ${{ secrets.VPS_SSH_PORT || 22 }}
+          DATABASE_URL_PROD: ${{ secrets.DATABASE_URL_PROD }}
+          DATABASE_URL_STAGING: ${{ secrets.DATABASE_URL_STAGING }}
+          OPERATION: ${{ inputs.operation }}
+          APPLY: ${{ inputs.mode == 'aplicar' }}
+          UNIT: ${{ inputs.unit }}
+          EMPLOYEES: ${{ inputs.employees }}
+          HIRE_DATE: ${{ inputs.hire_date }}
+        run: |
+          ssh -p "$SSH_PORT" -fN -o ExitOnForwardFailure=yes \
+            -L 127.0.0.1:5432:127.0.0.1:5432 ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}
+          # Os scripts usam o schema atual: os dois bancos sobem para a versão do código antes.
+          DATABASE_URL="$DATABASE_URL_STAGING" pnpm --filter @excellence/api db:deploy
+          if [ "$OPERATION" = "limpar staging" ]; then
+            DATABASE_URL="$DATABASE_URL_STAGING" PRUNE_KEEP_UNIT="$UNIT" PRUNE_APPLY="$APPLY" \
+              pnpm --filter @excellence/api exec tsx scripts/prune-to-unit.ts
+          else
+            DATABASE_URL="$DATABASE_URL_PROD" pnpm --filter @excellence/api db:deploy
+            SOURCE_DATABASE_URL="$DATABASE_URL_STAGING" DATABASE_URL="$DATABASE_URL_PROD" \
+              TRANSFER_UNIT="$UNIT" TRANSFER_EMPLOYEES="$EMPLOYEES" TRANSFER_HIRE_DATE="$HIRE_DATE" \
+              TRANSFER_APPLY="$APPLY" pnpm --filter @excellence/api exec tsx scripts/transfer-unit.ts
+          fi
