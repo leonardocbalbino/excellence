@@ -181,7 +181,7 @@ export class EmployeeImportService {
       const departmentId = resolve('departamento', false);
       const department = departmentId ? departments.find((d) => d.id === departmentId) : undefined;
       if (department?.unitId && unitId && department.unitId !== unitId) {
-        fail('departamento', 'O departamento pertence a outra unidade');
+        fail('departamento', 'O departamento pertence a outro posto');
       }
 
       const date = (column: string) => {

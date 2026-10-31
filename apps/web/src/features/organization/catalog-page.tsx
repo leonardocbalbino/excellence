@@ -1,9 +1,10 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import type { Permission } from '@excellence/shared';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { PencilIcon, PlusIcon, Trash2Icon } from 'lucide-react';
+import { FolderOpenIcon, PencilIcon, PlusIcon, Trash2Icon } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
 import { type FieldValues, useForm } from 'react-hook-form';
+import { Link } from 'react-router';
 import { toast } from 'sonner';
 import type { z } from 'zod';
 import { Alert } from '@/components/ui/alert';
@@ -61,6 +62,17 @@ export interface CatalogConfig<T extends CatalogItem> {
   remove: (id: string) => Promise<unknown>;
   /** false enquanto as opções dos selects carregam (evita perder o valor ao editar). */
   ready?: boolean;
+  /** Ações extras no cabeçalho (ex.: imprimir QR codes). */
+  actions?: ReactNode;
+  /** Dentro de outra página (ex.: aba da pasta do posto): título de seção, não de página. */
+  embedded?: boolean;
+  /**
+   * Visão consolidada (fora da pasta do posto): troca o botão "Novo" (ex.: por um que escolhe
+   * o posto). Recebe a função que abre o cadastro aqui mesmo, para o cadastro geral.
+   */
+  createAction?: (openNew: () => void) => ReactNode;
+  /** Itens que se editam em outro lugar (na pasta do posto): o link no lugar do lápis. */
+  editLink?: (item: T) => string | null;
 }
 
 /** Página de cadastro simples: lista com edição no próprio lugar. */
@@ -77,15 +89,25 @@ export function CatalogPage<T extends CatalogItem>({ config }: { config: Catalog
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold">{config.title}</h1>
+          {config.embedded ? (
+            <h2 className="text-lg font-semibold">{config.title}</h2>
+          ) : (
+            <h1 className="text-2xl font-semibold">{config.title}</h1>
+          )}
           <p className="text-muted-foreground">{config.description}</p>
         </div>
-        {canManage && editing === null ? (
-          <Button onClick={() => setEditing('new')} disabled={config.ready === false}>
-            <PlusIcon />
-            Novo {config.singular}
-          </Button>
-        ) : null}
+        <div className="flex flex-wrap gap-2">
+          {config.actions}
+          {canManage && editing === null && config.createAction
+            ? config.createAction(() => setEditing('new'))
+            : null}
+          {canManage && editing === null && !config.createAction ? (
+            <Button onClick={() => setEditing('new')} disabled={config.ready === false}>
+              <PlusIcon />
+              Novo {config.singular}
+            </Button>
+          ) : null}
+        </div>
       </div>
 
       {editing !== null ? (
@@ -103,11 +125,11 @@ export function CatalogPage<T extends CatalogItem>({ config }: { config: Catalog
 
       <div className="flex items-center gap-2">
         <Checkbox
-          id="catalog-inactive"
+          id={`catalog-inactive-${config.singular}`}
           checked={includeInactive}
           onCheckedChange={(checked) => setIncludeInactive(checked === true)}
         />
-        <Label htmlFor="catalog-inactive">Mostrar inativos</Label>
+        <Label htmlFor={`catalog-inactive-${config.singular}`}>Mostrar inativos</Label>
       </div>
       {items.isError ? <Alert variant="destructive">{errorMessage(items.error)}</Alert> : null}
       <Card>
@@ -153,15 +175,27 @@ export function CatalogPage<T extends CatalogItem>({ config }: { config: Catalog
                   ))}
                   {canManage ? (
                     <TableCell className="text-right">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        aria-label={`Editar ${item.name}`}
-                        disabled={config.ready === false}
-                        onClick={() => setEditing(item)}
-                      >
-                        <PencilIcon />
-                      </Button>
+                      {config.editLink?.(item) ? (
+                        <Button asChild variant="ghost" size="sm">
+                          <Link
+                            to={config.editLink(item) ?? ''}
+                            aria-label={`Abrir pasta de ${item.name}`}
+                          >
+                            <FolderOpenIcon />
+                            Abrir pasta
+                          </Link>
+                        </Button>
+                      ) : (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          aria-label={`Editar ${item.name}`}
+                          disabled={config.ready === false}
+                          onClick={() => setEditing(item)}
+                        >
+                          <PencilIcon />
+                        </Button>
+                      )}
                     </TableCell>
                   ) : null}
                 </TableRow>

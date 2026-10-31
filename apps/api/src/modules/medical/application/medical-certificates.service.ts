@@ -5,15 +5,17 @@ import {
   type MedicalCertificateSensitive,
   type medicalCertificateInputSchema,
   type medicalCertificateListQuerySchema,
+  PREVIEWABLE_CONTENT_TYPES,
   ProblemType,
   timeToMinutes,
 } from '@excellence/shared';
 import type { z } from 'zod';
 import { ProblemException } from '../../../common/errors/problem.exception';
-import type { Prisma } from '../../../generated/prisma/client';
+import type { MedicalCertificateStatus, Prisma } from '../../../generated/prisma/client';
 import { TenantPrismaService } from '../../../infrastructure/prisma/tenant-prisma.service';
 import type { AccessGrant } from '../../access-control/http/access.decorators';
 import { AuditService } from '../../audit/application/audit.service';
+import { Notifier } from '../../notifications/application/notifier';
 import { FilesService } from '../../files/application/files.service';
 import { invalidReference } from '../../organization/application/catalog-rules';
 import { EmployeesService } from '../../workforce/application/employees.service';
@@ -78,7 +80,8 @@ export interface AcceptedJustification {
 }
 
 /**
- * Atestados: o funcionário envia (ou o RH registra em nome dele) e o RH aceita ou recusa.
+ * Atestados: o funcionário entrega o documento à administração, que o anexa ao sistema; o
+ * funcionário só consulta.
  * O CID e o documento digitalizado são dados sensíveis e só saem por `sensitive()`, cuja
  * leitura é auditada pelo interceptor de leitura sensível.
  */
@@ -89,21 +92,22 @@ export class MedicalCertificatesService {
     private readonly files: FilesService,
     private readonly employees: EmployeesService,
     private readonly audit: AuditService,
+    private readonly notifier: Notifier,
   ) {}
 
-  async submitMine(input: CertificateInput, grant: AccessGrant): Promise<MedicalCertificate> {
-    const own = await this.ownEmployee(grant.userId);
-    return this.create(own.id, input, grant);
-  }
-
-  /** Registro em nome de um funcionário do escopo (`medical_certificates:manage`). */
+  /**
+   * Anexo do atestado pela administração (`medical_certificates:manage`). O funcionário
+   * entrega o documento e quem anexa já o confere, então ele entra como válido. Se for o
+   * próprio atestado de quem anexa, fica pendente para outra pessoa analisar (segregação).
+   */
   async registerFor(
     employeeId: string,
     input: CertificateInput,
     grant: AccessGrant,
   ): Promise<MedicalCertificate> {
-    await this.employees.get(employeeId, grant);
-    return this.create(employeeId, input, grant);
+    const employee = await this.employees.get(employeeId, grant);
+    const own = employee.userId === grant.userId;
+    return this.create(employeeId, input, grant, own ? 'pending' : 'accepted');
   }
 
   async listMine(userId: string): Promise<MedicalCertificate[]> {
@@ -116,7 +120,7 @@ export class MedicalCertificatesService {
     return rows.map(toCertificate);
   }
 
-  /** Documento do próprio atestado (o funcionário sempre pode ver o que enviou). */
+  /** Documento do próprio atestado (o funcionário sempre pode ver o que foi anexado). */
   async myDocument(id: string, userId: string): Promise<DownloadLink> {
     const row = await this.db.client.medicalCertificate.findFirst({
       where: { id, employee: { userId } },
@@ -126,32 +130,17 @@ export class MedicalCertificatesService {
     return this.files.createDownloadLink(row.fileId);
   }
 
-  async cancelMine(id: string, userId: string): Promise<MedicalCertificate> {
-    const updated = await this.db.client.$transaction(async (tx) => {
-      const result = await tx.medicalCertificate.updateMany({
-        where: { id, status: 'pending', employee: { userId } },
-        data: { status: 'cancelled' },
-      });
-      if (result.count === 0) return false;
-      await this.audit.record(
-        {
-          action: 'medical_certificate.cancelled',
-          resourceType: 'medical_certificate',
-          resourceId: id,
-        },
-        tx,
-      );
-      return true;
-    });
-    if (!updated) throw notPending();
-    return this.get(id);
-  }
-
+  /**
+   * Atestados no escopo. Os do próprio usuário ficam de fora (segregação): ele não pode
+   * analisá-los e os acompanha em "Meus atestados".
+   */
   async list(query: ListQuery, grant: AccessGrant): Promise<MedicalCertificate[]> {
     if (!grant.scope) return [];
-    const scope = employeeScopeWhere(grant.scope, await this.employees.actor(grant));
+    const actor = await this.employees.actor(grant);
+    const scope = employeeScopeWhere(grant.scope, actor);
     if (!scope) return [];
     const filters: Prisma.MedicalCertificateWhereInput[] = [{ employee: scope }];
+    if (actor.employeeId) filters.push({ employeeId: { not: actor.employeeId } });
     if (query.status) filters.push({ status: query.status });
     if (query.employeeId) filters.push({ employeeId: query.employeeId });
     if (query.from) filters.push({ endDate: { gte: toCalendarDate(query.from) } });
@@ -176,7 +165,18 @@ export class MedicalCertificatesService {
     });
     if (!row) throw new NotFoundException('Atestado não encontrado.');
     await this.employees.get(row.employeeId, grant);
-    return { id: row.id, cid: row.cid, document: await this.files.createDownloadLink(row.fileId) };
+    const file = await this.db.client.storedFile.findUniqueOrThrow({
+      where: { id: row.fileId },
+      select: { contentType: true },
+    });
+    const previewable = PREVIEWABLE_CONTENT_TYPES.includes(file.contentType);
+    return {
+      id: row.id,
+      cid: row.cid,
+      document: await this.files.createDownloadLink(row.fileId),
+      preview: previewable ? await this.files.createDownloadLink(row.fileId, 'inline') : null,
+      contentType: file.contentType,
+    };
   }
 
   async accept(id: string, note: string | null, grant: AccessGrant): Promise<MedicalCertificate> {
@@ -218,6 +218,7 @@ export class MedicalCertificatesService {
     employeeId: string,
     input: CertificateInput,
     grant: AccessGrant,
+    status: 'pending' | 'accepted',
   ): Promise<MedicalCertificate> {
     // Só um arquivo enviado por quem registra, confirmado e com a finalidade certa.
     const file = await this.files.getOwn(input.fileId).catch(() => null);
@@ -279,6 +280,8 @@ export class MedicalCertificatesService {
           cid: input.cid ?? null,
           notes: input.notes,
           submittedBy: grant.userId,
+          status,
+          ...(status === 'accepted' ? { reviewedBy: grant.userId, reviewedAt: new Date() } : {}),
         },
         select: CERTIFICATE_SELECT,
       });
@@ -288,7 +291,7 @@ export class MedicalCertificatesService {
           resourceType: 'medical_certificate',
           resourceId: created.id,
           // Nunca o CID: a trilha de auditoria não guarda dado sensível.
-          metadata: { employeeId, startDate: input.startDate, endDate: input.endDate },
+          metadata: { employeeId, startDate: input.startDate, endDate: input.endDate, status },
         },
         tx,
       );
@@ -309,7 +312,10 @@ export class MedicalCertificatesService {
     });
     if (!current) throw new NotFoundException('Atestado não encontrado.');
     await this.employees.get(current.employeeId, grant);
-    if (current.status !== 'pending') throw notPending();
+    // Um atestado anexado já como válido ainda pode ser marcado como inválido.
+    const from: readonly MedicalCertificateStatus[] =
+      status === 'rejected' ? ['pending', 'accepted'] : ['pending'];
+    if (!from.includes(current.status)) throw notPending();
     if (current.employee.userId === grant.userId) {
       throw new ProblemException({
         type: ProblemType.SelfApproval,
@@ -322,7 +328,7 @@ export class MedicalCertificatesService {
     await this.db.client.$transaction(async (tx) => {
       // Só uma análise vence, mesmo com duas pessoas decidindo ao mesmo tempo.
       const claimed = await tx.medicalCertificate.updateMany({
-        where: { id, status: 'pending' },
+        where: { id, status: current.status },
         data: { status, reviewedBy: grant.userId, reviewedAt: new Date(), reviewNote: note },
       });
       if (claimed.count === 0) throw notPending();
@@ -336,6 +342,7 @@ export class MedicalCertificatesService {
         tx,
       );
     });
+    await this.notifier.certificateReviewed(grant.companyId, current.employeeId, status);
     return this.get(id);
   }
 
@@ -345,17 +352,6 @@ export class MedicalCertificatesService {
       select: CERTIFICATE_SELECT,
     });
     return toCertificate(row);
-  }
-
-  private async ownEmployee(userId: string) {
-    const own = await this.db.client.employee.findUnique({
-      where: { userId },
-      select: { id: true },
-    });
-    if (!own) {
-      throw new NotFoundException('Seu usuário não está ligado a um cadastro de funcionário.');
-    }
-    return own;
   }
 }
 

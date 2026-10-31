@@ -2,6 +2,7 @@ import type { AdjustmentInput } from '@excellence/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ChevronLeftIcon, ChevronRightIcon, PlusIcon } from 'lucide-react';
 import { useState } from 'react';
+import { Link } from 'react-router';
 import { toast } from 'sonner';
 import { Alert } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
@@ -47,7 +48,14 @@ export function MyTimesheetPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold">Meu ponto</h1>
+        <Link
+          to="/ponto"
+          className="inline-flex items-center gap-1 text-sm font-semibold text-primary"
+        >
+          <ChevronLeftIcon className="size-4" aria-hidden="true" />
+          Registrar ponto
+        </Link>
+        <h1 className="text-2xl font-semibold">Espelho de ponto</h1>
         <p className="text-muted-foreground">
           Clique numa marcação para pedir que seja desconsiderada.
         </p>

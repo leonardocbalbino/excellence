@@ -35,18 +35,21 @@ test('administrador: cadastro obrigatório de MFA, sessão mantida e criação d
   await page.getByLabel('Guardei os códigos de recuperação').check();
   await page.getByRole('button', { name: 'Continuar' }).click();
 
-  await expect(page.getByRole('heading', { name: 'Olá, Ana' })).toBeVisible();
+  // O Administrador não é funcionário (não bate ponto): vai direto para a visão geral.
+  await expect(page.getByRole('heading', { name: 'Visão geral' })).toBeVisible();
+  await expect(page).toHaveURL(/\/gestao$/);
+  await expect(page.getByRole('link', { name: 'Meu espaço' })).toHaveCount(0);
 
   // Recarregar mantém a sessão (refresh pelo cookie httpOnly).
   await page.reload();
-  await expect(page.getByRole('heading', { name: 'Olá, Ana' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Visão geral' })).toBeVisible();
 
   // Gestão de perfis.
   const nav = page.getByRole('navigation', { name: 'Menu principal' });
   await nav.getByRole('link', { name: 'Perfis de acesso' }).click();
   await expect(page.getByRole('cell', { name: /^RH/ })).toBeVisible();
   await page.getByRole('link', { name: 'Novo perfil' }).click();
-  await page.getByLabel('Nome').fill('Portaria e2e');
+  await page.getByLabel('Nome', { exact: true }).fill('Portaria e2e');
   await page.getByRole('checkbox', { name: 'Ver perfis, permissões e escopos' }).check();
   await page.getByRole('checkbox', { name: 'Toda a empresa' }).check();
   await page.getByRole('checkbox', { name: 'Somente os próprios dados' }).uncheck();
@@ -67,12 +70,24 @@ test('funcionário: sem MFA obrigatório, vê só o que o perfil permite e sai',
   await expect(page.getByRole('heading', { name: 'Olá, Fábio' })).toBeVisible();
 
   const nav = page.getByRole('navigation', { name: 'Menu principal' });
-  await expect(nav.getByRole('link')).toHaveText(['Início']);
+  // Só a área pessoal: sem troca para a gestão.
+  await expect(nav.getByRole('link')).toHaveText([
+    'Início',
+    'Registrar ponto',
+    'Rondas',
+    'Escala',
+    'Atestados',
+    'Folha',
+    'Benefícios',
+    'Comunicados',
+  ]);
+  await expect(page.getByRole('link', { name: 'Área de gestão' })).toHaveCount(0);
 
   await page.goto('/acesso/perfis');
   await expect(page.getByRole('heading', { name: 'Acesso negado' })).toBeVisible();
 
-  await page.getByRole('button', { name: 'Sair' }).click();
+  await page.getByRole('button', { name: 'Conta de Fábio Funcionário' }).click();
+  await page.getByRole('menuitem', { name: 'Sair' }).click();
   await expect(page).toHaveURL(/\/login/);
   // Depois do logout, o cookie não restaura mais a sessão.
   await page.goto('/');

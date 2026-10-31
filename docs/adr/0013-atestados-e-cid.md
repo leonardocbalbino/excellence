@@ -1,6 +1,6 @@
 # 0013 — Atestados: envio, análise e CID como dado sensível
 
-- **Status:** aceito
+- **Status:** aceito (o envio pelo funcionário foi substituído pelo anexo da administração, ADR 0020)
 - **Data:** 2026-09-25
 
 ## Contexto

@@ -21,7 +21,7 @@ export interface NewTimeEntry {
   distanceMeters?: number | null;
   geofenceStatus: GeofenceStatus;
   selfieFileId?: string | null;
-  source: 'web' | 'mobile' | 'adjustment';
+  source: 'web' | 'mobile' | 'mobile_offline' | 'adjustment';
   ipAddress?: string | null;
   userAgent?: string | null;
   createdBy: string;

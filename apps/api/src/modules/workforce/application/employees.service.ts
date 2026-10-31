@@ -17,7 +17,7 @@ import { AuditService, toAuditJson } from '../../audit/application/audit.service
 import { generateTemporaryPassword } from '../../auth/application/password.service';
 import { PasswordHasher } from '../../auth/infrastructure/password-hasher';
 import { CompanyService } from '../../organization/application/company.service';
-import { duplicated } from '../../organization/application/catalog-rules';
+import { duplicated, invalidReference } from '../../organization/application/catalog-rules';
 import { employeeStatus, fromCalendarDate, toCalendarDate, todayIn } from '../domain/calendar';
 import {
   type EmployeePlacement,
@@ -234,6 +234,65 @@ export class EmployeesService {
       );
       return after;
     });
+  }
+
+  /**
+   * Leva um funcionário já cadastrado para o posto `unitId` (pasta do posto, ADR 0020). O
+   * departamento de outro posto sai do cadastro. Quem está, ou vai entrar, numa escala do posto
+   * atual precisa trocar de escala antes: a escala de um posto só vale nele.
+   */
+  async moveToUnit(id: string, unitId: string, grant: AccessGrant): Promise<Employee> {
+    const before = await this.get(id, grant);
+    if (before.unit.id === unitId) return before;
+
+    const today = toCalendarDate(todayIn(await this.company.timezone()));
+    const [department, ownSchedule] = await Promise.all([
+      before.department
+        ? this.db.client.department.findUnique({
+            where: { id: before.department.id },
+            select: { unitId: true },
+          })
+        : null,
+      this.db.client.employeeScheduleAssignment.findFirst({
+        where: {
+          employeeId: id,
+          OR: [{ endDate: null }, { endDate: { gte: today } }],
+          schedule: { unitId: { not: null, notIn: [unitId] } },
+        },
+        select: { schedule: { select: { name: true } } },
+        orderBy: { startDate: 'asc' },
+      }),
+    ]);
+    if (ownSchedule) {
+      throw invalidReference(
+        'unitId',
+        `O funcionário está na escala "${ownSchedule.schedule.name}", de outro posto. Troque a escala dele antes de trazê-lo para este posto.`,
+      );
+    }
+    // Departamento geral (sem posto) acompanha o funcionário.
+    const keepDepartment = !department?.unitId || department.unitId === unitId;
+
+    return this.update(
+      id,
+      {
+        registrationNumber: before.registrationNumber,
+        name: before.name,
+        socialName: before.socialName,
+        cpf: before.cpf,
+        pis: before.pis,
+        birthDate: before.birthDate,
+        email: before.email,
+        phone: before.phone,
+        hireDate: before.hireDate,
+        terminationDate: before.terminationDate,
+        unitId,
+        departmentId: keepDepartment ? (before.department?.id ?? null) : null,
+        positionId: before.position?.id ?? null,
+        unionId: before.union?.id ?? null,
+        managerId: before.manager?.id ?? null,
+      },
+      grant,
+    );
   }
 
   /**

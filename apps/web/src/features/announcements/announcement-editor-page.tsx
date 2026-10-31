@@ -170,14 +170,14 @@ function DraftForm({ announcement }: { announcement: Announcement | null }) {
           <legend className="text-sm font-medium">Público</legend>
           <p className="text-sm text-muted-foreground">
             Sem nada marcado, vai para toda a empresa. Marcando, vai para quem está lotado em alguma
-            das unidades ou dos departamentos.
+            dos postos de trabalho ou dos departamentos.
           </p>
           {fieldErrors.audience ? (
             <p className="text-sm text-destructive">{fieldErrors.audience}</p>
           ) : null}
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="grid gap-2">
-              <span className="text-sm font-medium">Unidades</span>
+              <span className="text-sm font-medium">Postos de trabalho</span>
               {units.data?.map((unit) => (
                 <div key={unit.id} className="flex items-center gap-2">
                   <Checkbox

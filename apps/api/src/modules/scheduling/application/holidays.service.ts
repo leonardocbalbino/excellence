@@ -60,7 +60,7 @@ export class HolidaysService {
     assertCompanyWide(grant);
     const before = id ? await this.get(id) : null;
     if (input.unitId && (await this.db.client.unit.count({ where: { id: input.unitId } })) === 0) {
-      throw invalidReference('unitId', 'Unidade não encontrada.');
+      throw invalidReference('unitId', 'Posto de trabalho não encontrado.');
     }
     // Só guarda os campos da abrangência escolhida (o banco também confere).
     const data = {

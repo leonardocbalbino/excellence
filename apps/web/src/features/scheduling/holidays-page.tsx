@@ -41,7 +41,7 @@ const SCOPE_LABELS: Record<HolidayScope, string> = {
   state: 'Estadual',
   city: 'Municipal',
   company: 'Toda a empresa',
-  unit: 'Uma unidade',
+  unit: 'Um posto de trabalho',
 };
 
 export function HolidaysPage() {
@@ -83,7 +83,7 @@ export function HolidaysPage() {
         <div>
           <h1 className="text-2xl font-semibold">Feriados</h1>
           <p className="text-muted-foreground">
-            Aparecem na escala prevista das unidades a que se aplicam.
+            Aparecem na escala prevista dos postos a que se aplicam.
           </p>
         </div>
         {canManage ? (
@@ -266,7 +266,7 @@ function HolidayForm({
             </FormField>
           ) : null}
           {scope === 'unit' ? (
-            <FormField label="Unidade" error={errors.unitId?.message}>
+            <FormField label="Posto de trabalho" error={errors.unitId?.message}>
               {(field) => (
                 <Select {...field} {...form.register('unitId', { setValueAs: emptyToNull })}>
                   <option value="">Selecione</option>

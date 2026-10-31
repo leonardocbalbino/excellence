@@ -44,12 +44,12 @@ export async function checkEmployeeReferences(
   ]);
 
   if (!unit?.isActive)
-    errors.push({ path: 'unitId', message: 'Unidade não encontrada ou inativa' });
+    errors.push({ path: 'unitId', message: 'Posto de trabalho não encontrado ou inativo' });
   if (refs.departmentId) {
     if (!department?.isActive) {
       errors.push({ path: 'departmentId', message: 'Departamento não encontrado ou inativo' });
     } else if (department.unitId && department.unitId !== refs.unitId) {
-      errors.push({ path: 'departmentId', message: 'O departamento pertence a outra unidade' });
+      errors.push({ path: 'departmentId', message: 'O departamento pertence a outro posto' });
     }
   }
   if (refs.positionId && !position?.isActive) {

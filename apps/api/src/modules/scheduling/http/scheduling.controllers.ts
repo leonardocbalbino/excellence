@@ -5,13 +5,13 @@ import {
   holidayInputSchema,
   holidayListQuerySchema,
   holidaySchema,
-  includeInactiveQuerySchema,
   type PlannedDay,
   plannedDaySchema,
   plannedRangeQuerySchema,
   type ScheduleAssignment,
   scheduleAssignmentInputSchema,
   scheduleAssignmentSchema,
+  scheduleCatalogQuerySchema,
   type Shift,
   shiftInputSchema,
   shiftSchema,
@@ -34,7 +34,7 @@ import { WorkSchedulesService } from '../application/work-schedules.service';
 import { nationalHolidaySuggestions } from '../domain/national-holidays';
 
 const idParam = z.uuid();
-type IncludeInactive = z.output<typeof includeInactiveQuerySchema>;
+type CatalogQuery = z.output<typeof scheduleCatalogQuerySchema>;
 type Range = z.output<typeof plannedRangeQuerySchema>;
 
 @ApiTags('scheduling')
@@ -46,8 +46,8 @@ export class ShiftsController {
   @Get()
   @RequirePermission('schedules:read')
   @ZodResponse(HttpStatus.OK, z.array(shiftSchema))
-  list(@ZodQuery(includeInactiveQuerySchema) query: IncludeInactive): Promise<Shift[]> {
-    return this.shifts.list(query.includeInactive);
+  list(@ZodQuery(scheduleCatalogQuerySchema) query: CatalogQuery): Promise<Shift[]> {
+    return this.shifts.list(query.includeInactive, query.unitId);
   }
 
   @Get(':id')
@@ -95,8 +95,8 @@ export class WorkSchedulesController {
   @Get()
   @RequirePermission('schedules:read')
   @ZodResponse(HttpStatus.OK, z.array(workScheduleSchema))
-  list(@ZodQuery(includeInactiveQuerySchema) query: IncludeInactive): Promise<WorkSchedule[]> {
-    return this.schedules.list(query.includeInactive);
+  list(@ZodQuery(scheduleCatalogQuerySchema) query: CatalogQuery): Promise<WorkSchedule[]> {
+    return this.schedules.list(query.includeInactive, query.unitId);
   }
 
   @Get(':id')

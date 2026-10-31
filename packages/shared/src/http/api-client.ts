@@ -15,8 +15,12 @@ import {
   auditLogQuerySchema,
 } from '../audit/audit.schemas.js';
 import {
+  type AccountInput,
+  accountInputSchema,
   authenticatedResponseSchema,
   authUserSchema,
+  type ForgotPasswordInput,
+  forgotPasswordInputSchema,
   type LoginRequest,
   loginRequestSchema,
   loginResponseSchema,
@@ -26,6 +30,8 @@ import {
   mfaSetupResponseSchema,
   type RefreshRequest,
   refreshRequestSchema,
+  type ResetPasswordInput,
+  resetPasswordInputSchema,
 } from '../auth/auth.schemas.js';
 import {
   type ProblemDetails,
@@ -33,7 +39,10 @@ import {
   problemDetailsSchema,
 } from '../errors/problem-details.js';
 import {
+  type AvatarInput,
+  avatarInputSchema,
   downloadLinkSchema,
+  myAvatarSchema,
   storedFileSchema,
   type UploadRequest,
   uploadRequestSchema,
@@ -66,7 +75,10 @@ import {
   type EmployeeListQuery,
   employeeListQuerySchema,
   employeePageSchema,
+  employeeHistoryEventSchema,
   employeeSchema,
+  type EmployeeUnitInput,
+  employeeUnitInputSchema,
 } from '../workforce/employees.schemas.js';
 import {
   type HolidayInput,
@@ -93,9 +105,68 @@ import {
   type ClockSettings,
   chainVerificationSchema,
   clockSettingsSchema,
+  type DailyAttendanceQuery,
+  dailyAttendanceSchema,
   timeEntrySchema,
   timesheetSchema,
 } from '../time-tracking/time-tracking.schemas.js';
+import {
+  myPatrolsSchema,
+  type PatrolCheckinInput,
+  patrolCheckinInputSchema,
+  patrolBoardSchema,
+  type PatrolOccurrenceInput,
+  patrolOccurrenceInputSchema,
+  type PatrolOccurrenceListQuery,
+  type PatrolOccurrenceResolution,
+  patrolOccurrenceResolutionSchema,
+  patrolOccurrenceSchema,
+  patrolPointInputSchema,
+  patrolPointSchema,
+  patrolRouteInputSchema,
+  patrolRouteSchema,
+  type PatrolRunFinish,
+  patrolRunFinishSchema,
+  patrolRunSchema,
+  patrolRunStartSchema,
+  unitPatrolSummarySchema,
+} from '../patrols/patrols.schemas.js';
+import {
+  benefitInputSchema,
+  benefitSchema,
+  type EmployeeBenefitInput,
+  employeeBenefitInputSchema,
+  employeeBenefitSchema,
+  myBenefitSchema,
+  usefulLinkInputSchema,
+  usefulLinkSchema,
+} from '../benefits/benefits.schemas.js';
+import {
+  type BenefitDaysAdjustmentInput,
+  benefitDaysAdjustmentInputSchema,
+  benefitDaysSummarySchema,
+  myPayrollPreviewSchema,
+  payrollGenerateSchema,
+  payrollPeriodDetailSchema,
+  payrollPeriodSchema,
+  type ScheduleRateInput,
+  scheduleRateInputSchema,
+  scheduleRateSchema,
+  unitMonthlySummarySchema,
+} from '../payroll/payroll.schemas.js';
+import {
+  conversationDetailSchema,
+  type ConversationListQuery,
+  type ConversationMessageInput,
+  conversationMessageInputSchema,
+  conversationMessageSchema,
+  type ConversationStart,
+  conversationStartSchema,
+  conversationSummarySchema,
+  conversationUnreadSchema,
+  type PushDeviceInput,
+  pushDeviceInputSchema,
+} from '../conversations/conversations.schemas.js';
 import {
   type AnnouncementInput,
   announcementInputSchema,
@@ -278,6 +349,22 @@ export function createApiClient(options: ApiClientOptions) {
     };
   }
 
+  /** Turnos e escalas: com `unitId`, só os do posto e os gerais (ADR 0020). */
+  function unitCatalog<Out extends z.ZodType, In extends z.ZodType>(
+    path: string,
+    schema: Out,
+    inputSchema: In,
+  ) {
+    return {
+      ...crud(path, schema, inputSchema),
+      list: (includeInactive = false, unitId?: string) =>
+        request('GET', path, {
+          query: { includeInactive: String(includeInactive), ...(unitId ? { unitId } : {}) },
+          schema: z.array(schema),
+        }),
+    };
+  }
+
   const noRetry = { retryOnUnauthorized: false } as const;
 
   return {
@@ -296,8 +383,246 @@ export function createApiClient(options: ApiClientOptions) {
     departments: crud('/departments', departmentSchema, departmentInputSchema),
     positions: crud('/positions', positionSchema, positionInputSchema),
     unions: crud('/unions', laborUnionSchema, laborUnionInputSchema),
-    shifts: crud('/shifts', shiftSchema, shiftInputSchema),
-    workSchedules: crud('/work-schedules', workScheduleSchema, workScheduleInputSchema),
+    patrolPoints: {
+      ...crud('/patrol-points', patrolPointSchema, patrolPointInputSchema),
+      /** Gera um novo QR: o impresso antes deixa de valer. */
+      regenerateCode: (id: string) =>
+        request('POST', `/patrol-points/${encodeURIComponent(id)}/code`, {
+          schema: patrolPointSchema,
+        }),
+    },
+    patrolRoutes: crud('/patrol-routes', patrolRouteSchema, patrolRouteInputSchema),
+    benefits: {
+      ...crud('/benefits', benefitSchema, benefitInputSchema),
+      mine: () => request('GET', '/me/benefits', { schema: z.array(myBenefitSchema) }),
+      ofEmployee: (employeeId: string) =>
+        request('GET', `/employees/${encodeURIComponent(employeeId)}/benefits`, {
+          schema: z.array(employeeBenefitSchema),
+        }),
+      assign: (employeeId: string, input: EmployeeBenefitInput) =>
+        request('POST', `/employees/${encodeURIComponent(employeeId)}/benefits`, {
+          body: input,
+          bodySchema: employeeBenefitInputSchema,
+          schema: employeeBenefitSchema,
+        }),
+      updateAssignment: (employeeId: string, id: string, input: EmployeeBenefitInput) =>
+        request(
+          'PUT',
+          `/employees/${encodeURIComponent(employeeId)}/benefits/${encodeURIComponent(id)}`,
+          { body: input, bodySchema: employeeBenefitInputSchema, schema: employeeBenefitSchema },
+        ),
+      removeAssignment: (employeeId: string, id: string) =>
+        request(
+          'DELETE',
+          `/employees/${encodeURIComponent(employeeId)}/benefits/${encodeURIComponent(id)}`,
+        ),
+    },
+    conversations: {
+      // ─── Funcionário ───
+      mine: () =>
+        request('GET', '/me/conversations', { schema: z.array(conversationSummarySchema) }),
+      start: (input: ConversationStart) =>
+        request('POST', '/me/conversations', {
+          body: input,
+          bodySchema: conversationStartSchema,
+          schema: conversationDetailSchema,
+        }),
+      /** Abrir marca como lidas as mensagens do RH. */
+      openMine: (id: string) =>
+        request('GET', `/me/conversations/${encodeURIComponent(id)}`, {
+          schema: conversationDetailSchema,
+        }),
+      replyMine: (id: string, input: ConversationMessageInput) =>
+        request('POST', `/me/conversations/${encodeURIComponent(id)}/messages`, {
+          body: input,
+          bodySchema: conversationMessageInputSchema,
+          schema: conversationMessageSchema,
+        }),
+      myUnread: () =>
+        request('GET', '/me/conversations/unread', { schema: conversationUnreadSchema }),
+      /** Link temporário de um anexo da conversa (funcionário ou RH). */
+      attachment: (conversationId: string, fileId: string) =>
+        request(
+          'GET',
+          `/conversations/${encodeURIComponent(conversationId)}/attachments/${encodeURIComponent(fileId)}`,
+          { schema: downloadLinkSchema },
+        ),
+      // ─── RH ───
+      list: (query: ConversationListQuery = {}) =>
+        request('GET', '/conversations', { query, schema: z.array(conversationSummarySchema) }),
+      get: (id: string) =>
+        request('GET', `/conversations/${encodeURIComponent(id)}`, {
+          schema: conversationDetailSchema,
+        }),
+      reply: (id: string, input: ConversationMessageInput) =>
+        request('POST', `/conversations/${encodeURIComponent(id)}/messages`, {
+          body: input,
+          bodySchema: conversationMessageInputSchema,
+          schema: conversationMessageSchema,
+        }),
+      close: (id: string) =>
+        request('POST', `/conversations/${encodeURIComponent(id)}/close`, {
+          schema: conversationSummarySchema,
+        }),
+      reopen: (id: string) =>
+        request('POST', `/conversations/${encodeURIComponent(id)}/reopen`, {
+          schema: conversationSummarySchema,
+        }),
+      unread: () => request('GET', '/conversations/unread', { schema: conversationUnreadSchema }),
+    },
+    profile: {
+      /** Link temporário da foto de perfil do usuário logado (null = sem foto). */
+      avatar: () => request('GET', '/me/avatar', { schema: myAvatarSchema }),
+      setAvatar: (input: AvatarInput) =>
+        request('PUT', '/me/avatar', {
+          body: input,
+          bodySchema: avatarInputSchema,
+          schema: myAvatarSchema,
+        }),
+      removeAvatar: () => request('DELETE', '/me/avatar'),
+    },
+    push: {
+      /** Registra o aparelho para receber notificações (app mobile). */
+      register: (input: PushDeviceInput) =>
+        request('POST', '/me/push-devices', { body: input, bodySchema: pushDeviceInputSchema }),
+      unregister: (token: string) =>
+        request('DELETE', `/me/push-devices/${encodeURIComponent(token)}`),
+    },
+    usefulLinks: {
+      ...crud('/useful-links', usefulLinkSchema, usefulLinkInputSchema),
+      mine: () => request('GET', '/me/useful-links', { schema: z.array(usefulLinkSchema) }),
+    },
+    payroll: {
+      list: () => request('GET', '/payroll-periods', { schema: z.array(payrollPeriodSchema) }),
+      get: (id: string) =>
+        request('GET', `/payroll-periods/${encodeURIComponent(id)}`, {
+          schema: payrollPeriodDetailSchema,
+        }),
+      /** Gera (ou gera de novo, se não estiver fechado) o fechamento do mês. */
+      generate: (month: string) =>
+        request('POST', '/payroll-periods', {
+          body: { month },
+          bodySchema: payrollGenerateSchema,
+          schema: payrollPeriodDetailSchema,
+        }),
+      publish: (id: string) =>
+        request('POST', `/payroll-periods/${encodeURIComponent(id)}/publish`, {
+          schema: payrollPeriodSchema,
+        }),
+      close: (id: string) =>
+        request('POST', `/payroll-periods/${encodeURIComponent(id)}/close`, {
+          schema: payrollPeriodSchema,
+        }),
+      /** Arquivo CSV para o escritório de contabilidade. */
+      exportCsv: (id: string) =>
+        requestText('GET', `/payroll-periods/${encodeURIComponent(id)}/export`),
+      mine: () =>
+        request('GET', '/me/payroll-previews', { schema: z.array(myPayrollPreviewSchema) }),
+      /** Valores por plantão das escalas do posto, com vigência mensal. */
+      rates: (unitId: string) =>
+        request('GET', `/units/${encodeURIComponent(unitId)}/schedule-rates`, {
+          schema: z.array(scheduleRateSchema),
+        }),
+      saveRate: (unitId: string, input: ScheduleRateInput) =>
+        request('PUT', `/units/${encodeURIComponent(unitId)}/schedule-rates`, {
+          body: input,
+          bodySchema: scheduleRateInputSchema,
+          schema: scheduleRateSchema,
+        }),
+      removeRate: (unitId: string, rateId: string) =>
+        request(
+          'DELETE',
+          `/units/${encodeURIComponent(unitId)}/schedule-rates/${encodeURIComponent(rateId)}`,
+        ),
+      /** Resumo do mês do posto (calculado na hora). */
+      unitSummary: (unitId: string, month: string) =>
+        request('GET', `/units/${encodeURIComponent(unitId)}/monthly-summary`, {
+          query: { month },
+          schema: unitMonthlySummarySchema,
+        }),
+      /** VA e VT do mês por funcionário, com o resumo da empresa e dos postos. */
+      benefitDays: (month: string, employeeId?: string) =>
+        request('GET', '/benefit-days', {
+          query: { month, ...(employeeId ? { employeeId } : {}) },
+          schema: benefitDaysSummarySchema,
+        }),
+      /** Lança (ou troca) a exceção no VA ou VT de um funcionário no mês. */
+      adjustBenefitDays: (input: BenefitDaysAdjustmentInput) =>
+        request('PUT', '/benefit-days/adjustments', {
+          body: input,
+          bodySchema: benefitDaysAdjustmentInputSchema,
+        }),
+      /** Desfaz a exceção: o valor volta a ser o calculado. */
+      removeBenefitDaysAdjustment: (id: string) =>
+        request('DELETE', `/benefit-days/adjustments/${encodeURIComponent(id)}`),
+    },
+    patrols: {
+      mine: () => request('GET', '/me/patrols', { schema: myPatrolsSchema }),
+      /** Inicia a ronda. Use a mesma idempotencyKey ao reenviar. */
+      start: (routeId: string, idempotencyKey: string) =>
+        request('POST', '/me/patrol-runs', {
+          body: { routeId },
+          bodySchema: patrolRunStartSchema,
+          schema: patrolRunSchema,
+          headers: { 'Idempotency-Key': idempotencyKey },
+        }),
+      checkin: (runId: string, input: PatrolCheckinInput, idempotencyKey: string) =>
+        request('POST', `/me/patrol-runs/${encodeURIComponent(runId)}/checkins`, {
+          body: input,
+          bodySchema: patrolCheckinInputSchema,
+          schema: patrolRunSchema,
+          headers: { 'Idempotency-Key': idempotencyKey },
+        }),
+      finish: (runId: string, input: PatrolRunFinish = {}) =>
+        request('POST', `/me/patrol-runs/${encodeURIComponent(runId)}/finish`, {
+          body: input,
+          bodySchema: patrolRunFinishSchema,
+          schema: patrolRunSchema,
+        }),
+      board: (date: string) =>
+        request('GET', '/patrol-runs/board', { query: { date }, schema: patrolBoardSchema }),
+      get: (runId: string) =>
+        request('GET', `/patrol-runs/${encodeURIComponent(runId)}`, { schema: patrolRunSchema }),
+      // ─── Ocorrências (ADR 0024) ───
+      /** Registra uma ocorrência na ronda em andamento (vai por e-mail aos destinatários do posto). */
+      reportOccurrence: (runId: string, input: PatrolOccurrenceInput) =>
+        request('POST', `/me/patrol-runs/${encodeURIComponent(runId)}/occurrences`, {
+          body: input,
+          bodySchema: patrolOccurrenceInputSchema,
+          schema: patrolOccurrenceSchema,
+        }),
+      occurrences: (query: PatrolOccurrenceListQuery = {}) =>
+        request('GET', '/patrol-occurrences', {
+          query,
+          schema: z.array(patrolOccurrenceSchema),
+        }),
+      occurrence: (id: string) =>
+        request('GET', `/patrol-occurrences/${encodeURIComponent(id)}`, {
+          schema: patrolOccurrenceSchema,
+        }),
+      occurrencePhoto: (id: string) =>
+        request('GET', `/patrol-occurrences/${encodeURIComponent(id)}/photo`, {
+          schema: downloadLinkSchema,
+        }),
+      resolveOccurrence: (id: string, input: PatrolOccurrenceResolution) =>
+        request('PUT', `/patrol-occurrences/${encodeURIComponent(id)}/resolution`, {
+          body: input,
+          bodySchema: patrolOccurrenceResolutionSchema,
+          schema: patrolOccurrenceSchema,
+        }),
+      /** Reenvia o e-mail da ocorrência aos destinatários atuais do posto. */
+      resendOccurrence: (id: string) =>
+        request('POST', `/patrol-occurrences/${encodeURIComponent(id)}/email`, {
+          schema: patrolOccurrenceSchema,
+        }),
+      unitSummary: (unitId: string, month: string) =>
+        request('GET', `/units/${encodeURIComponent(unitId)}/patrol-summary`, {
+          query: { month },
+          schema: unitPatrolSummarySchema,
+        }),
+    },
+    shifts: unitCatalog('/shifts', shiftSchema, shiftInputSchema),
+    workSchedules: unitCatalog('/work-schedules', workScheduleSchema, workScheduleInputSchema),
     holidays: {
       list: (year: number) =>
         request('GET', '/holidays', { query: { year }, schema: z.array(holidaySchema) }),
@@ -350,6 +675,9 @@ export function createApiClient(options: ApiClientOptions) {
           query: { month },
           schema: timesheetSchema,
         }),
+      /** Quadro do dia: marcações e escala de cada funcionário no escopo. */
+      daily: (query: DailyAttendanceQuery) =>
+        request('GET', '/time-entries/daily', { query, schema: dailyAttendanceSchema }),
       verify: (employeeId: string) =>
         request('GET', `/employees/${encodeURIComponent(employeeId)}/time-entries-verification`, {
           schema: chainVerificationSchema,
@@ -444,21 +772,11 @@ export function createApiClient(options: ApiClientOptions) {
         }),
     },
     medicalCertificates: {
-      submit: (input: MedicalCertificateInput) =>
-        request('POST', '/me/medical-certificates', {
-          body: input,
-          bodySchema: medicalCertificateInputSchema,
-          schema: medicalCertificateSchema,
-        }),
       mine: () =>
         request('GET', '/me/medical-certificates', { schema: z.array(medicalCertificateSchema) }),
       myDocument: (id: string) =>
         request('GET', `/me/medical-certificates/${encodeURIComponent(id)}/document`, {
           schema: downloadLinkSchema,
-        }),
-      cancel: (id: string) =>
-        request('POST', `/me/medical-certificates/${encodeURIComponent(id)}/cancel`, {
-          schema: medicalCertificateSchema,
         }),
       registerFor: (employeeId: string, input: MedicalCertificateInput) =>
         request('POST', `/employees/${encodeURIComponent(employeeId)}/medical-certificates`, {
@@ -528,6 +846,11 @@ export function createApiClient(options: ApiClientOptions) {
       get: (id: string) =>
         request('GET', `/employees/${encodeURIComponent(id)}`, { schema: employeeSchema }),
       mine: () => request('GET', '/me/employee', { schema: employeeSchema }),
+      /** Linha do tempo do funcionário (cadastro, escalas, benefícios, atestados, ajustes). */
+      history: (id: string) =>
+        request('GET', `/employees/${encodeURIComponent(id)}/history`, {
+          schema: z.array(employeeHistoryEventSchema),
+        }),
       create: (input: EmployeeInput) =>
         request('POST', '/employees', {
           body: input,
@@ -538,6 +861,13 @@ export function createApiClient(options: ApiClientOptions) {
         request('PUT', `/employees/${encodeURIComponent(id)}`, {
           body: input,
           bodySchema: employeeInputSchema,
+          schema: employeeSchema,
+        }),
+      /** Traz um funcionário já cadastrado para o posto `unitId`. */
+      moveToUnit: (id: string, input: EmployeeUnitInput) =>
+        request('PUT', `/employees/${encodeURIComponent(id)}/unit`, {
+          body: input,
+          bodySchema: employeeUnitInputSchema,
           schema: employeeSchema,
         }),
       createAccount: (id: string, input: CreateAccountInput) =>
@@ -598,6 +928,26 @@ export function createApiClient(options: ApiClientOptions) {
       me: () => request('GET', '/auth/me', { schema: authUserSchema }),
       changePassword: (input: ChangePasswordInput) =>
         request('POST', '/auth/password', { body: input, bodySchema: changePasswordInputSchema }),
+      /** Envia o link de redefinição (se o e-mail existir; a resposta é sempre a mesma). */
+      forgotPassword: (input: ForgotPasswordInput) =>
+        request('POST', '/auth/password/forgot', {
+          body: input,
+          bodySchema: forgotPasswordInputSchema,
+          ...noRetry,
+        }),
+      resetPassword: (input: ResetPasswordInput) =>
+        request('POST', '/auth/password/reset', {
+          body: input,
+          bodySchema: resetPasswordInputSchema,
+          ...noRetry,
+        }),
+      /** Troca o próprio nome e e-mail de login. */
+      updateAccount: (input: AccountInput) =>
+        request('PUT', '/auth/account', {
+          body: input,
+          bodySchema: accountInputSchema,
+          schema: authUserSchema,
+        }),
     },
     access: {
       mine: () => request('GET', '/me/access', { schema: myAccessSchema }),
@@ -622,6 +972,11 @@ export function createApiClient(options: ApiClientOptions) {
       },
       users: {
         list: () => request('GET', '/users', { schema: z.array(userWithRolesSchema) }),
+        /** Apaga o MFA do usuário e encerra as sessões: no próximo login ele cadastra de novo. */
+        resetMfa: (userId: string) =>
+          request('POST', `/users/${encodeURIComponent(userId)}/mfa/reset`, {
+            schema: userWithRolesSchema,
+          }),
         assignRoles: (userId: string, input: AssignRolesInput) =>
           request('PUT', `/users/${encodeURIComponent(userId)}/roles`, {
             body: input,

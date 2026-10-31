@@ -6,6 +6,7 @@ import type { Prisma } from '../../../generated/prisma/client';
 import { TenantPrismaService } from '../../../infrastructure/prisma/tenant-prisma.service';
 import type { AccessGrant } from '../../access-control/http/access.decorators';
 import { AuditService } from '../../audit/application/audit.service';
+import { Notifier } from '../../notifications/application/notifier';
 import { CompanyService } from '../../organization/application/company.service';
 import { invalidReference } from '../../organization/application/catalog-rules';
 import { EmployeesService } from '../../workforce/application/employees.service';
@@ -64,6 +65,7 @@ export class AdjustmentsService {
     private readonly employees: EmployeesService,
     private readonly company: CompanyService,
     private readonly audit: AuditService,
+    private readonly notifier: Notifier,
   ) {}
 
   /** Solicitação do próprio funcionário. */
@@ -97,16 +99,25 @@ export class AdjustmentsService {
     return this.toAdjustments(rows);
   }
 
-  /** Solicitações dos funcionários no escopo da permissão de aprovação. */
+  /**
+   * Solicitações dos funcionários no escopo da permissão de aprovação. As do próprio aprovador
+   * ficam de fora: ele não pode decidi-las (segregação) e as acompanha na área pessoal.
+   */
   async listForApprover(
     status: Adjustment['status'] | undefined,
     grant: AccessGrant,
   ): Promise<Adjustment[]> {
     if (!grant.scope) return [];
-    const scope = employeeScopeWhere(grant.scope, await this.employees.actor(grant));
+    const actor = await this.employees.actor(grant);
+    const scope = employeeScopeWhere(grant.scope, actor);
     if (!scope) return [];
     const rows = await this.db.client.timeAdjustmentRequest.findMany({
-      where: { ...(status ? { status } : {}), employee: scope },
+      where: {
+        ...(status ? { status } : {}),
+        employee: {
+          AND: [scope, ...(actor.employeeId ? [{ id: { not: actor.employeeId } }] : [])],
+        },
+      },
       select: ADJUSTMENT_SELECT,
       orderBy: { createdAt: 'asc' },
       take: 200,
@@ -179,6 +190,7 @@ export class AdjustmentsService {
         tx,
       );
     });
+    await this.notifier.adjustmentDecided(grant.companyId, request.employeeId, true, note);
     return this.get(id);
   }
 
@@ -208,6 +220,7 @@ export class AdjustmentsService {
         tx,
       );
     });
+    await this.notifier.adjustmentDecided(grant.companyId, request.employeeId, false, note);
     return this.get(id);
   }
 

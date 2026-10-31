@@ -1,36 +1,23 @@
-import type { MedicalCertificateInput } from '@excellence/shared';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { FileTextIcon, PlusIcon } from 'lucide-react';
-import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { FileTextIcon } from 'lucide-react';
 import { toast } from 'sonner';
 import { Alert } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/feedback';
 import { errorMessage, useApi } from '@/lib/services';
-import { CertificateForm } from './certificate-form';
 import { CERTIFICATE_STATUS, certificatePeriod, certificatesQueryKey } from './labels';
 
+/**
+ * Atestados do próprio funcionário, só para consulta: ele entrega o documento à
+ * administração, que o anexa ao sistema. Aqui ele confirma que o anexo foi feito e abre o
+ * documento.
+ */
 export function MyCertificatesPage() {
   const api = useApi();
-  const queryClient = useQueryClient();
-  const [adding, setAdding] = useState(false);
   const certificates = useQuery({
     queryKey: [...certificatesQueryKey, 'me'],
     queryFn: () => api.medicalCertificates.mine(),
-  });
-  const refresh = () => queryClient.invalidateQueries({ queryKey: certificatesQueryKey });
-
-  const submit = async (input: MedicalCertificateInput) => {
-    await api.medicalCertificates.submit(input);
-    await refresh();
-    toast.success('Atestado enviado para análise do RH.');
-    setAdding(false);
-  };
-  const cancel = useMutation({
-    mutationFn: (id: string) => api.medicalCertificates.cancel(id),
-    onSuccess: refresh,
   });
   const openDocument = async (id: string) => {
     try {
@@ -43,38 +30,21 @@ export function MyCertificatesPage() {
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
-      <div className="flex flex-wrap items-end justify-between gap-2">
-        <div>
-          <h1 className="text-2xl font-semibold">Meus atestados</h1>
-          <p className="text-muted-foreground">Envie a foto ou o PDF do atestado.</p>
-        </div>
-        {adding ? null : (
-          <Button onClick={() => setAdding(true)}>
-            <PlusIcon />
-            Enviar atestado
-          </Button>
-        )}
+      <div>
+        <h1 className="text-2xl font-semibold">Meus atestados</h1>
+        <p className="text-muted-foreground">
+          Entregue o atestado à administração. Depois que ele for anexado ao sistema, aparece aqui e
+          você pode abrir o documento.
+        </p>
       </div>
-
-      {adding ? (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Novo atestado</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <CertificateForm onSubmit={submit} onCancel={() => setAdding(false)} />
-          </CardContent>
-        </Card>
-      ) : null}
 
       {certificates.isError ? (
         <Alert variant="destructive">{errorMessage(certificates.error)}</Alert>
       ) : null}
-      {cancel.isError ? <Alert variant="destructive">{errorMessage(cancel.error)}</Alert> : null}
       {certificates.isPending ? (
         <Skeleton className="h-40 w-full" />
       ) : certificates.data?.length === 0 ? (
-        <Alert>Nenhum atestado enviado.</Alert>
+        <Alert>Nenhum atestado anexado até agora.</Alert>
       ) : (
         <ul className="grid gap-2">
           {certificates.data?.map((certificate) => (
@@ -84,9 +54,12 @@ export function MyCertificatesPage() {
             >
               <span>
                 <span className="font-medium">{certificatePeriod(certificate)}</span>
+                <span className="block text-sm text-muted-foreground">
+                  Anexado em {new Date(certificate.createdAt).toLocaleDateString('pt-BR')}
+                </span>
                 {certificate.reviewNote ? (
                   <span className="block text-sm text-muted-foreground">
-                    Resposta do RH: {certificate.reviewNote}
+                    Observação da administração: {certificate.reviewNote}
                   </span>
                 ) : null}
               </span>
@@ -102,11 +75,6 @@ export function MyCertificatesPage() {
                 >
                   <FileTextIcon />
                 </Button>
-                {certificate.status === 'pending' ? (
-                  <Button variant="ghost" size="sm" onClick={() => cancel.mutate(certificate.id)}>
-                    Cancelar
-                  </Button>
-                ) : null}
               </span>
             </li>
           ))}

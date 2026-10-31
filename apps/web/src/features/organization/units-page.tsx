@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { MapPinIcon, PlusIcon } from 'lucide-react';
+import { FolderOpenIcon, MapPinIcon, PlusIcon } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router';
 import { Alert } from '@/components/ui/alert';
@@ -34,14 +34,17 @@ export function UnitsPage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold">Unidades</h1>
-          <p className="text-muted-foreground">Locais de trabalho, com endereço e cerca virtual.</p>
+          <h1 className="text-2xl font-semibold">Postos de trabalho</h1>
+          <p className="text-muted-foreground">
+            Cada posto (condomínio) tem a sua pasta: funcionários, escalas, valores por plantão e
+            resumo do mês.
+          </p>
         </div>
         {canManage ? (
           <Button asChild>
-            <Link to="/cadastros/unidades/nova">
+            <Link to="/cadastros/postos/novo">
               <PlusIcon />
-              Nova unidade
+              Novo posto
             </Link>
           </Button>
         ) : null}
@@ -59,22 +62,23 @@ export function UnitsPage() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Unidade</TableHead>
+              <TableHead>Posto</TableHead>
               <TableHead>Cidade</TableHead>
               <TableHead>Cerca virtual</TableHead>
+              <TableHead className="sr-only">Ações</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {units.isPending ? (
               <TableRow>
-                <TableCell colSpan={3}>
+                <TableCell colSpan={4}>
                   <Skeleton className="h-6 w-full" />
                 </TableCell>
               </TableRow>
             ) : units.data?.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={3} className="text-center text-muted-foreground">
-                  Nenhuma unidade cadastrada.
+                <TableCell colSpan={4} className="text-center text-muted-foreground">
+                  Nenhum posto de trabalho cadastrado.
                 </TableCell>
               </TableRow>
             ) : (
@@ -82,7 +86,7 @@ export function UnitsPage() {
                 <TableRow key={unit.id}>
                   <TableCell>
                     <Link
-                      to={`/cadastros/unidades/${unit.id}`}
+                      to={`/cadastros/postos/${unit.id}`}
                       className="font-medium text-primary hover:underline"
                     >
                       {unit.name}
@@ -102,6 +106,14 @@ export function UnitsPage() {
                     ) : (
                       <span className="text-muted-foreground">Sem cerca</span>
                     )}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <Button asChild variant="outline" size="sm">
+                      <Link to={`/cadastros/postos/${unit.id}`}>
+                        <FolderOpenIcon />
+                        Abrir pasta
+                      </Link>
+                    </Button>
                   </TableCell>
                 </TableRow>
               ))

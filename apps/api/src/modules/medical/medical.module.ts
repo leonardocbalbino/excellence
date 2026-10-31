@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { FilesModule } from '../files/files.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 import { WorkforceModule } from '../workforce/workforce.module';
 import { MedicalCertificatesService } from './application/medical-certificates.service';
 import {
@@ -10,7 +11,7 @@ import {
 
 /** Atestados: envio, análise pelo RH e CID como dado sensível auditado (ADR 0013). */
 @Module({
-  imports: [FilesModule, WorkforceModule],
+  imports: [FilesModule, NotificationsModule, WorkforceModule],
   controllers: [
     MyMedicalCertificatesController,
     EmployeeMedicalCertificatesController,

@@ -37,3 +37,21 @@ export function todayIso(): string {
 export function addDaysIso(date: string, days: number): string {
   return new Date(calendar(date).getTime() + days * 86_400_000).toISOString().slice(0, 10);
 }
+
+/** Agora → "Sábado, 26 de setembro" (só a primeira letra em maiúscula). */
+export function formatLongToday(now: Date): string {
+  const text = now.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' });
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+const brl = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
+
+/** 2350.5 → "R$ 2.350,50"; null → "—". */
+export function formatBRL(value: number | null | undefined): string {
+  return value === null || value === undefined ? '—' : brl.format(value);
+}
+
+/** Minutos com sinal em horas: -75 → "-1h15". */
+export function formatSignedMinutes(minutes: number): string {
+  return minutes < 0 ? `-${formatMinutes(-minutes)}` : formatMinutes(minutes);
+}

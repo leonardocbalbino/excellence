@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { parityInMonth } from '@excellence/shared';
 import { nationalHolidaySuggestions } from './national-holidays';
 import {
   addDays,
@@ -37,6 +38,7 @@ const fiveTwo: PlannerSchedule = {
   kind: 'cycle',
   cycleAnchor: 'monday',
   days: [day, day, day, day, day, null, null],
+  parityMonth: null,
   weeklyMinutes: null,
 };
 const twelveThirtySix: PlannerSchedule = {
@@ -44,6 +46,7 @@ const twelveThirtySix: PlannerSchedule = {
   kind: 'cycle',
   cycleAnchor: 'assignment',
   days: [twelve, null],
+  parityMonth: null,
   weeklyMinutes: null,
 };
 const flexible: PlannerSchedule = {
@@ -51,10 +54,11 @@ const flexible: PlannerSchedule = {
   kind: 'flexible',
   cycleAnchor: null,
   days: [],
+  parityMonth: null,
   weeklyMinutes: 2640,
 };
 
-const unit = { id: 'u1', state: 'SP', city: 'São Paulo' };
+const unit = { id: 'u1', state: 'MA', city: 'São Luís' };
 const schedules = new Map([fiveTwo, twelveThirtySix, flexible].map((s) => [s.id, s]));
 const holiday = (overrides: Partial<PlannerHoliday>): PlannerHoliday => ({
   id: 'h',
@@ -178,19 +182,19 @@ describe('feriados', () => {
   it.each([
     [holiday({ scope: 'national' }), true],
     [holiday({ scope: 'company' }), true],
-    [holiday({ scope: 'state', state: 'SP' }), true],
+    [holiday({ scope: 'state', state: 'MA' }), true],
     [holiday({ scope: 'state', state: 'RJ' }), false],
-    [holiday({ scope: 'city', state: 'SP', city: 'sao paulo' }), true],
-    [holiday({ scope: 'city', state: 'SP', city: 'Campinas' }), false],
+    [holiday({ scope: 'city', state: 'MA', city: 'sao luis' }), true],
+    [holiday({ scope: 'city', state: 'MA', city: 'Imperatriz' }), false],
     [holiday({ scope: 'unit', unitId: 'u1' }), true],
     [holiday({ scope: 'unit', unitId: 'u2' }), false],
-  ])('%j se aplica à unidade de SP: %s', (h, expected) => {
+  ])('%j se aplica à unidade de São Luís: %s', (h, expected) => {
     expect(holidayApplies(h, unit)).toBe(expected);
   });
 
   it('feriado estadual não se aplica a unidade sem endereço', () => {
     expect(
-      holidayApplies(holiday({ scope: 'state', state: 'SP' }), {
+      holidayApplies(holiday({ scope: 'state', state: 'MA' }), {
         id: 'x',
         state: null,
         city: null,
@@ -220,5 +224,65 @@ describe('feriados', () => {
       name: 'Dia Nacional de Zumbi e da Consciência Negra',
       legalBasis: 'Lei 14.759/2023',
     });
+  });
+});
+
+describe('12x36 par/ímpar', () => {
+  const odd: PlannerSchedule = {
+    id: 'impar',
+    kind: 'cycle',
+    cycleAnchor: 'odd',
+    parityMonth: '2026-10',
+    days: [twelve, null],
+    weeklyMinutes: null,
+  };
+  const even: PlannerSchedule = { ...odd, id: 'par', cycleAnchor: 'even' };
+  const plan = (schedule: PlannerSchedule, from: string, to: string) =>
+    planDays({
+      from,
+      to,
+      // A data de ciclo do funcionário não conta: quem manda é a escala.
+      assignments: [
+        {
+          scheduleId: schedule.id,
+          startDate: '2026-01-01',
+          endDate: null,
+          cycleStartDate: '2026-10-02',
+        },
+      ],
+      schedules: new Map([[schedule.id, schedule]]),
+      holidays: [],
+      unit,
+    })
+      .filter((d) => d.shift)
+      .map((d) => Number(d.date.slice(8)));
+
+  it('ímpar em outubro (31 dias): trabalha 1, 3… 31 e em novembro vira par', () => {
+    expect(plan(odd, '2026-10-01', '2026-10-31')).toEqual([
+      1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29, 31,
+    ]);
+    expect(plan(odd, '2026-11-01', '2026-11-06')).toEqual([2, 4, 6]);
+  });
+
+  it('novembro tem 30 dias: dezembro segue par; depois de dezembro (31) volta a ímpar', () => {
+    expect(plan(odd, '2026-12-01', '2026-12-04')).toEqual([2, 4]);
+    expect(plan(odd, '2027-01-01', '2027-01-05')).toEqual([1, 3, 5]);
+  });
+
+  it('par em outubro: trabalha 2… 30, folga 31 e em novembro vira ímpar', () => {
+    expect(plan(even, '2026-10-28', '2026-11-03')).toEqual([28, 30, 1, 3]);
+  });
+
+  it('parityInMonth mostra a paridade de cada mês, inclusive fevereiro bissexto', () => {
+    expect(parityInMonth('odd', '2026-10', '2026-10')).toBe('odd');
+    expect(parityInMonth('odd', '2026-10', '2026-11')).toBe('even');
+    expect(parityInMonth('odd', '2026-10', '2026-12')).toBe('even');
+    expect(parityInMonth('odd', '2026-10', '2027-01')).toBe('odd');
+    expect(parityInMonth('even', '2026-10', '2026-11')).toBe('odd');
+    // 2028: fevereiro com 29 dias vira; 2027 (28 dias) não.
+    expect(parityInMonth('odd', '2027-02', '2027-03')).toBe('odd');
+    expect(parityInMonth('odd', '2028-02', '2028-03')).toBe('even');
+    // Meses antes da referência também batem.
+    expect(parityInMonth('odd', '2026-11', '2026-10')).toBe('even');
   });
 });

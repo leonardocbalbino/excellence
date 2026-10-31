@@ -6,6 +6,7 @@ import { HttpStatus, Inject, Injectable, NotFoundException } from '@nestjs/commo
 import {
   type DownloadLink,
   type FilePurpose,
+  PREVIEWABLE_CONTENT_TYPES,
   ProblemType,
   type StoredFileInfo,
   type UploadTicket,
@@ -177,20 +178,45 @@ export class FilesService {
    * Link temporário de download. **Não checa permissão**: o chamador (módulo dono do
    * registro) é responsável por isso.
    */
-  async createDownloadLink(fileId: string): Promise<DownloadLink> {
+  async createDownloadLink(
+    fileId: string,
+    disposition: 'attachment' | 'inline' = 'attachment',
+  ): Promise<DownloadLink> {
     const file = await this.db.client.storedFile.findUnique({ where: { id: fileId } });
     if (file?.status !== 'uploaded') throw new NotFoundException('Arquivo não encontrado.');
+    // Só PDF e imagens comuns abrem no navegador; o resto sempre baixa.
+    const inline = disposition === 'inline' && PREVIEWABLE_CONTENT_TYPES.includes(file.contentType);
     const url = await getSignedUrl(
       this.presign,
       new GetObjectCommand({
         Bucket: this.bucket,
         Key: file.storageKey,
         ResponseContentType: file.contentType,
-        ResponseContentDisposition: `attachment; filename="${asciiFileName(file.originalName)}"; filename*=UTF-8''${encodeURIComponent(file.originalName)}`,
+        ResponseContentDisposition: `${inline ? 'inline' : 'attachment'}; filename="${asciiFileName(file.originalName)}"; filename*=UTF-8''${encodeURIComponent(file.originalName)}`,
       }),
       { expiresIn: this.ttlSeconds },
     );
     return { url, expiresAt: new Date(Date.now() + this.ttlSeconds * 1000).toISOString() };
+  }
+
+  /**
+   * Conteúdo de um arquivo confirmado (ex.: foto anexada a um e-mail). **Não checa
+   * permissão**: o chamador (módulo dono do registro) é responsável por isso.
+   */
+  async read(
+    fileId: string,
+  ): Promise<{ content: Buffer; contentType: string; originalName: string }> {
+    const file = await this.db.client.storedFile.findUnique({ where: { id: fileId } });
+    if (file?.status !== 'uploaded') throw new NotFoundException('Arquivo não encontrado.');
+    const object = await this.s3.send(
+      new GetObjectCommand({ Bucket: this.bucket, Key: file.storageKey }),
+    );
+    const bytes = (await object.Body?.transformToByteArray()) ?? new Uint8Array();
+    return {
+      content: Buffer.from(bytes),
+      contentType: file.contentType,
+      originalName: file.originalName,
+    };
   }
 
   /**

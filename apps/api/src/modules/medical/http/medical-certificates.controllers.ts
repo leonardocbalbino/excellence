@@ -25,22 +25,15 @@ const idParam = z.uuid();
 type CertificateBody = z.output<typeof medicalCertificateInputSchema>;
 type ReviewBody = z.output<typeof medicalCertificateReviewSchema>;
 
+/**
+ * Atestados do próprio funcionário: só consulta. Quem anexa é a administração
+ * (`EmployeeMedicalCertificatesController`), com o documento entregue pelo funcionário.
+ */
 @ApiTags('medical-certificates')
 @ApiBearerAuth()
 @Controller('me/medical-certificates')
 export class MyMedicalCertificatesController {
   constructor(private readonly certificates: MedicalCertificatesService) {}
-
-  @Post()
-  @AnyAuthenticated()
-  @ApiOperation({ summary: 'Envia um atestado do próprio funcionário' })
-  @ZodResponse(HttpStatus.CREATED, medicalCertificateSchema)
-  submit(
-    @ZodBody(medicalCertificateInputSchema) body: CertificateBody,
-    @Access() grant: AccessGrant,
-  ): Promise<MedicalCertificate> {
-    return this.certificates.submitMine(body, grant);
-  }
 
   @Get()
   @AnyAuthenticated()
@@ -59,16 +52,6 @@ export class MyMedicalCertificatesController {
   ): Promise<DownloadLink> {
     return this.certificates.myDocument(id, grant.userId);
   }
-
-  @Post(':id/cancel')
-  @AnyAuthenticated()
-  @ZodResponse(HttpStatus.CREATED, medicalCertificateSchema)
-  cancel(
-    @ZodParam('id', idParam) id: string,
-    @Access() grant: AccessGrant,
-  ): Promise<MedicalCertificate> {
-    return this.certificates.cancelMine(id, grant.userId);
-  }
 }
 
 @ApiTags('medical-certificates')
@@ -79,7 +62,7 @@ export class EmployeeMedicalCertificatesController {
 
   @Post()
   @RequirePermission('medical_certificates:manage')
-  @ApiOperation({ summary: 'Registra um atestado em nome do funcionário' })
+  @ApiOperation({ summary: 'Anexa o atestado entregue pelo funcionário (entra como válido)' })
   @ZodResponse(HttpStatus.CREATED, medicalCertificateSchema)
   register(
     @ZodParam('employeeId', idParam) employeeId: string,

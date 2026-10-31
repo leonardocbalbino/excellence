@@ -155,6 +155,11 @@ export class DepartmentsController {
   }
 }
 
+/** Salário do cargo: só com `payroll:manage` (ADR 0017). */
+function managesPayroll(grant: AccessGrant): boolean {
+  return grant.access?.permissions.has('payroll:manage') ?? false;
+}
+
 @ApiTags('organization')
 @ApiBearerAuth()
 @Controller('positions')
@@ -164,15 +169,18 @@ export class PositionsController {
   @Get()
   @RequirePermission('positions:read')
   @ZodResponse(HttpStatus.OK, z.array(positionSchema))
-  list(@ZodQuery(includeInactiveQuerySchema) query: IncludeInactive): Promise<Position[]> {
-    return this.catalogs.listPositions(query.includeInactive);
+  list(
+    @ZodQuery(includeInactiveQuerySchema) query: IncludeInactive,
+    @Access() grant: AccessGrant,
+  ): Promise<Position[]> {
+    return this.catalogs.listPositions(query.includeInactive, managesPayroll(grant));
   }
 
   @Get(':id')
   @RequirePermission('positions:read')
   @ZodResponse(HttpStatus.OK, positionSchema)
-  get(@ZodParam('id', idParam) id: string): Promise<Position> {
-    return this.catalogs.getPosition(id);
+  get(@ZodParam('id', idParam) id: string, @Access() grant: AccessGrant): Promise<Position> {
+    return this.catalogs.getPosition(id, managesPayroll(grant));
   }
 
   @Post()
@@ -182,7 +190,7 @@ export class PositionsController {
     @ZodBody(positionInputSchema) body: z.output<typeof positionInputSchema>,
     @Access() grant: AccessGrant,
   ): Promise<Position> {
-    return this.catalogs.savePosition(null, body, grant);
+    return this.catalogs.savePosition(null, body, grant, managesPayroll(grant));
   }
 
   @Put(':id')
@@ -193,7 +201,7 @@ export class PositionsController {
     @ZodBody(positionInputSchema) body: z.output<typeof positionInputSchema>,
     @Access() grant: AccessGrant,
   ): Promise<Position> {
-    return this.catalogs.savePosition(id, body, grant);
+    return this.catalogs.savePosition(id, body, grant, managesPayroll(grant));
   }
 
   @Delete(':id')

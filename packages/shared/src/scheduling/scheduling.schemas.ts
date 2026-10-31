@@ -22,10 +22,27 @@ export function shiftSpanMinutes(start: string, end: string): number {
   return span > 0 ? span : span + 1440;
 }
 
+// ─── Posto dono ───────────────────────────────────────────────────────────────────
+
+/**
+ * Turnos e escalas pertencem a um posto (condomínio) ou são gerais da empresa (`null`). Uma
+ * escala de posto usa turnos gerais ou do mesmo posto; uma escala geral, só turnos gerais.
+ */
+export const ownerUnitSchema = z.object({ id: z.uuid(), name: z.string() }).nullable();
+
+/** Filtro das listas: com `unitId`, só os cadastros do posto e os gerais. */
+export const scheduleCatalogQuerySchema = z.object({
+  includeInactive: z.stringbool().default(false),
+  unitId: z.uuid().optional(),
+});
+export type ScheduleCatalogQuery = z.input<typeof scheduleCatalogQuerySchema>;
+
 // ─── Turnos ───────────────────────────────────────────────────────────────────────
 
 export const shiftSchema = z.object({
   id: z.uuid(),
+  /** Posto dono; null = turno geral. */
+  unit: ownerUnitSchema,
   name: z.string(),
   code: z.string().nullable(),
   start: timeOfDaySchema,
@@ -47,6 +64,11 @@ export type Shift = z.infer<typeof shiftSchema>;
  */
 export const shiftInputSchema = z
   .object({
+    /** Posto dono; vazio = turno geral. */
+    unitId: z
+      .uuid()
+      .nullish()
+      .transform((v) => v ?? null),
     name: z.string().trim().min(2).max(80),
     code: optionalText(20),
     start: timeOfDaySchema,
@@ -79,17 +101,45 @@ export const scheduleKindSchema = z.enum(['cycle', 'flexible']);
 /**
  * Onde o ciclo começa:
  * - `monday`: o dia 1 do ciclo é segunda-feira (escalas semanais com folga em dia fixo);
- * - `assignment`: o dia 1 é a data de início do ciclo de cada funcionário (12x36, folgas
- *   rotativas).
+ * - `assignment`: o dia 1 é a data de início do ciclo de cada funcionário (folgas rotativas);
+ * - `odd` / `even`: 12x36 nos dias ímpares / pares do mês de referência (`parityMonth`). O
+ *   ciclo segue corrido: depois de um mês de 31 dias (ou de fevereiro com 29) a paridade vira.
  */
-export const cycleAnchorSchema = z.enum(['monday', 'assignment']);
+export const cycleAnchorSchema = z.enum(['monday', 'assignment', 'odd', 'even']);
+export type CycleAnchor = z.infer<typeof cycleAnchorSchema>;
+
+export const PARITY_LABELS = { odd: 'ímpares', even: 'pares' } as const;
+
+const parityMonthSchema = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'Use AAAA-MM');
+
+/** Dia 1 do ciclo de uma escala par/ímpar: dia 1 (ímpar) ou 2 (par) do mês de referência. */
+export function parityCycleStart(anchor: 'odd' | 'even', parityMonth: string): string {
+  return `${parityMonth}-${anchor === 'odd' ? '01' : '02'}`;
+}
+
+/** Em que dias (ímpares ou pares) a escala trabalha no mês `month` (AAAA-MM). */
+export function parityInMonth(
+  anchor: 'odd' | 'even',
+  parityMonth: string,
+  month: string,
+): 'odd' | 'even' {
+  const start = Date.parse(`${parityCycleStart(anchor, parityMonth)}T00:00:00Z`);
+  const firstOfMonth = Date.parse(`${month}-01T00:00:00Z`);
+  const offset = Math.round((firstOfMonth - start) / 86_400_000);
+  // Dia 1 do mês cai num dia de trabalho (índice par do ciclo de 2) = mês ímpar.
+  return ((offset % 2) + 2) % 2 === 0 ? 'odd' : 'even';
+}
 
 export const workScheduleSchema = z.object({
   id: z.uuid(),
+  /** Posto dono; null = escala geral. */
+  unit: ownerUnitSchema,
   name: z.string(),
   code: z.string().nullable(),
   kind: scheduleKindSchema,
   cycleAnchor: cycleAnchorSchema.nullable(),
+  /** Mês de referência das escalas par/ímpar (AAAA-MM). */
+  parityMonth: z.string().nullable(),
   /** Turno de cada dia do ciclo (null = folga). Vazio em escala flexível. */
   days: z.array(z.uuid().nullable()),
   /** Carga de referência da escala flexível (minutos por semana). */
@@ -104,10 +154,16 @@ export const MAX_CYCLE_DAYS = 56;
 
 export const workScheduleInputSchema = z
   .object({
+    /** Posto dono; vazio = escala geral. */
+    unitId: z
+      .uuid()
+      .nullish()
+      .transform((v) => v ?? null),
     name: z.string().trim().min(2).max(80),
     code: optionalText(20),
     kind: scheduleKindSchema,
     cycleAnchor: cycleAnchorSchema.nullable(),
+    parityMonth: parityMonthSchema.nullish().transform((v) => v ?? null),
     days: z.array(z.uuid().nullable()).max(MAX_CYCLE_DAYS),
     weeklyMinutes: z.number().int().min(1).max(10_080).nullable(),
     notes: optionalText(1000),
@@ -141,6 +197,22 @@ export const workScheduleInputSchema = z
           path: ['days'],
           message: 'Ciclo começando na segunda-feira deve ter semanas completas (7, 14, 21… dias)',
         });
+      }
+      if (schedule.cycleAnchor === 'odd' || schedule.cycleAnchor === 'even') {
+        if (schedule.days.length !== 2 || schedule.days[0] === null || schedule.days[1] !== null) {
+          ctx.addIssue({
+            code: 'custom',
+            path: ['days'],
+            message: 'Escala par/ímpar é 12x36: dia 1 com turno e dia 2 de folga',
+          });
+        }
+        if (!schedule.parityMonth) {
+          ctx.addIssue({
+            code: 'custom',
+            path: ['parityMonth'],
+            message: 'Informe o mês de referência',
+          });
+        }
       }
     } else if (schedule.weeklyMinutes === null) {
       ctx.addIssue({ code: 'custom', path: ['weeklyMinutes'], message: 'Informe a carga semanal' });
@@ -183,7 +255,8 @@ export const holidayInputSchema = z
       need('state', holiday.state !== null, 'Informe a UF');
       need('city', holiday.city !== null, 'Informe o município');
     }
-    if (holiday.scope === 'unit') need('unitId', holiday.unitId !== null, 'Informe a unidade');
+    if (holiday.scope === 'unit')
+      need('unitId', holiday.unitId !== null, 'Informe o posto de trabalho');
   });
 export type HolidayInput = z.input<typeof holidayInputSchema>;
 

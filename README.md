@@ -48,17 +48,25 @@ pnpm dev             # API em :3000, web em :5173
 
 ## Usuários de teste (seed)
 
-O seed cria a empresa de exemplo, 2 unidades (Matriz em São Paulo e Filial em Campinas, com
+O seed cria a empresa de exemplo, 1 unidade (Matriz em São Luís, com
 coordenadas e cerca virtual), departamentos, cargos, um sindicato, os 4 perfis padrão e 6
 funcionários. Senha: valor de `SEED_PASSWORD` no `.env`. Os perfis Administrador e RH exigem MFA: no primeiro
 login, o sistema pede o cadastro no aplicativo autenticador.
 
-| E-mail                     | Perfil        |
-| -------------------------- | ------------- |
-| admin@exemplo.com.br       | Administrador |
-| rh@exemplo.com.br          | RH            |
-| gestor@exemplo.com.br      | Gestor        |
-| funcionario@exemplo.com.br | Funcionário   |
+Para testar as rondas, o seed cria 4 pontos na Matriz e a rota "Perímetro" do vigilante Fábio
+(funcionario@exemplo.com.br), com horários a cada 2 h das 08:00 às 18:00. Os QR codes ficam em
+Gestão › Rondas › Pontos e QR codes, entrando como RH ou Administrador.
+
+O seed também define o salário base dos cargos, três benefícios (vale-transporte, vale-refeição e
+plano de saúde) para todos os funcionários e links úteis do governo. O fechamento do mês fica em
+Gestão › Remuneração › Folha de pagamento.
+
+| E-mail                     | Perfil        | Área inicial                                                             |
+| -------------------------- | ------------- | ------------------------------------------------------------------------ |
+| admin@exemplo.com.br       | Administrador | Gestão (não é funcionário: não bate ponto)                               |
+| rh@exemplo.com.br          | RH            | Pessoal, com acesso à gestão                                             |
+| gestor@exemplo.com.br      | Gestor        | Pessoal, com acesso à gestão da própria equipe (escala, ajustes, rondas) |
+| funcionario@exemplo.com.br | Funcionário   | Pessoal                                                                  |
 
 ## Estrutura
 

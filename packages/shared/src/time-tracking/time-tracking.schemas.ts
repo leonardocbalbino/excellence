@@ -25,9 +25,14 @@ export const clockInputSchema = z.object({
   latitude: z.number().min(-90).max(90).nullish(),
   longitude: z.number().min(-180).max(180).nullish(),
   accuracyMeters: z.number().min(0).max(100_000).nullish(),
-  /** Horário do dispositivo: só auditoria (o oficial é o do servidor). */
+  /** Horário do dispositivo: só auditoria (o oficial é o do servidor, ou `offlineRecordedAt`). */
   deviceTimestamp: isoInstant.nullish(),
   selfieFileId: z.uuid().nullish(),
+  /**
+   * Feito sem conexão no app: momento do registro no aparelho. Aceito até 72 h para trás e
+   * nunca no futuro; fica sinalizado como offline (ADR 0019, pendência P-026).
+   */
+  offlineRecordedAt: isoInstant.nullish(),
 });
 export type ClockInput = z.input<typeof clockInputSchema>;
 
@@ -56,6 +61,8 @@ export const timeEntrySchema = z.object({
   referencesEntryId: z.uuid().nullable(),
   /** Marcação desconsiderada por ajuste aprovado (continua gravada). */
   disregarded: z.boolean(),
+  /** Feita sem conexão no app, com o horário do aparelho (ADR 0019). */
+  offline: z.boolean().default(false),
   hash: z.string(),
 });
 export type TimeEntry = z.infer<typeof timeEntrySchema>;
@@ -132,6 +139,57 @@ export const timesheetSchema = z.object({
 export type Timesheet = z.infer<typeof timesheetSchema>;
 
 export const timesheetQuerySchema = z.object({ month: monthSchema });
+
+// ─── Quadro do dia (gestão) ───────────────────────────────────────────────────────
+
+/**
+ * Situação do funcionário no dia de trabalho, só a partir das marcações e da escala (sem
+ * tolerâncias nem regras legais):
+ * - `present`: número ímpar de marcações (está em jornada ou esqueceu a saída);
+ * - `finished`: marcações em pares;
+ * - `no_entries`: tem turno previsto e nenhuma marcação;
+ * - `justified`: atestado aceito cobrindo o dia, sem marcações;
+ * - `off`: folga, feriado ou sem escala, sem marcações.
+ */
+export const attendanceStatusSchema = z.enum([
+  'present',
+  'finished',
+  'no_entries',
+  'justified',
+  'off',
+]);
+export type AttendanceStatus = z.infer<typeof attendanceStatusSchema>;
+
+export const dailyAttendanceQuerySchema = z.object({
+  date: calendarDateSchema,
+  unitId: z.uuid().optional(),
+});
+export type DailyAttendanceQuery = z.input<typeof dailyAttendanceQuerySchema>;
+
+export const dailyAttendanceSchema = z.object({
+  date: calendarDateSchema,
+  /**
+   * Funcionários ativos no escopo de `time_entries:read`, sem o próprio registro de quem
+   * consulta (o próprio ponto fica na área pessoal).
+   */
+  items: z.array(
+    z.object({
+      employee: z.object({
+        id: z.uuid(),
+        name: z.string(),
+        registrationNumber: z.string(),
+        unit: z.object({ id: z.uuid(), name: z.string() }),
+        department: z.object({ id: z.uuid(), name: z.string() }).nullable(),
+      }),
+      timezone: z.string(),
+      planned: plannedDaySchema,
+      entries: timesheetDaySchema.shape.entries,
+      workedMinutes: z.number().int(),
+      status: attendanceStatusSchema,
+    }),
+  ),
+});
+export type DailyAttendance = z.infer<typeof dailyAttendanceSchema>;
 
 // ─── Ajustes ──────────────────────────────────────────────────────────────────────
 

@@ -20,6 +20,10 @@ test('RH importa planilha, cria acesso e o funcionário troca a senha temporári
   await enrollMfa(page);
   await expect(page.getByRole('heading', { name: 'Olá, Rafael' })).toBeVisible();
 
+  // O RH também bate ponto: começa na área pessoal e troca para a de gestão.
+  await page.getByRole('link', { name: 'Área de gestão' }).click();
+  await expect(page.getByRole('heading', { name: 'Visão geral' })).toBeVisible();
+
   // Importação: envio direto ao storage (MinIO), conferência e gravação.
   await page
     .getByRole('navigation', { name: 'Menu principal' })
@@ -29,7 +33,7 @@ test('RH importa planilha, cria acesso e o funcionário troca a senha temporári
   const csv = [
     'matricula;nome;nome_social;cpf;pis;data_nascimento;email;telefone;data_admissao;unidade;departamento;cargo;sindicato;matricula_gestor',
     `E2E-1;Helena Prado;;${cpf('300000001')};;;;;01/09/2026;MATRIZ;OPS;Vigilante;;0003`,
-    `E2E-2;Igor Teles;Iara Teles;${cpf('300000002')};;;;;01/09/2026;CAMPINAS;OPS;Vigilante;;E2E-1`,
+    `E2E-2;Igor Teles;Iara Teles;${cpf('300000002')};;;;;01/09/2026;MATRIZ;OPS;Vigilante;;E2E-1`,
   ].join('\n');
   await page.getByLabel('Planilha').setInputFiles({
     name: 'funcionarios.csv',
@@ -44,14 +48,17 @@ test('RH importa planilha, cria acesso e o funcionário troca a senha temporári
   await page.getByRole('link', { name: 'Ver funcionários' }).click();
   await page.getByLabel('Buscar').fill('Teles');
   await page.getByRole('button', { name: 'Buscar' }).click();
-  await page.getByRole('link', { name: 'Iara Teles' }).click();
+  await page.getByRole('link', { name: 'Iara Teles', exact: true }).click();
   await expect(page.getByLabel('Gestor direto')).toHaveValue(/.+/);
+  await page.getByRole('tab', { name: 'Acesso ao sistema' }).click();
   await page.getByLabel('E-mail de login').fill('iara@exemplo.com.br');
   await page.getByRole('button', { name: 'Criar acesso' }).click();
   const temporaryPassword = (await page.locator('code').innerText()).trim();
   expect(temporaryPassword).toHaveLength(12);
 
-  await page.getByRole('button', { name: 'Sair' }).click();
+  // Na gestão, sair fica no menu da conta (cartão do usuário no rodapé do menu).
+  await page.getByRole('button', { name: /^Conta de / }).click();
+  await page.getByRole('menuitem', { name: 'Sair' }).click();
   await expect(page).toHaveURL(/\/login/);
 
   // Primeiro acesso: a senha temporária só permite trocar a senha.

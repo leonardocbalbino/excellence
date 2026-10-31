@@ -3,6 +3,7 @@ import { FilesModule } from '../files/files.module';
 import { MedicalModule } from '../medical/medical.module';
 import { OrganizationModule } from '../organization/organization.module';
 import { SchedulingModule } from '../scheduling/scheduling.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 import { WorkforceModule } from '../workforce/workforce.module';
 import { AdjustmentsService } from './application/adjustments.service';
 import { ClockSettingsService } from './application/clock-settings.service';
@@ -18,7 +19,14 @@ import {
 
 /** Ponto: marcações append-only com hash encadeado, espelho e ajustes (ADR 0012). */
 @Module({
-  imports: [FilesModule, MedicalModule, OrganizationModule, SchedulingModule, WorkforceModule],
+  imports: [
+    FilesModule,
+    MedicalModule,
+    NotificationsModule,
+    OrganizationModule,
+    SchedulingModule,
+    WorkforceModule,
+  ],
   controllers: [
     MyTimeController,
     TimeEntriesController,

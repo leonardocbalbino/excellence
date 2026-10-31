@@ -73,6 +73,8 @@ describe('RBAC (integração)', () => {
       );
       expect(me).toEqual({
         permissions: [],
+        hasEmployeeRecord: false,
+        hasPatrolRoutes: false,
         mfaSetupRequired: false,
         passwordChangeRequired: false,
       });

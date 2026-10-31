@@ -20,8 +20,12 @@ export const PERMISSIONS = {
   'roles:manage': { description: 'Criar, editar e excluir perfis', sensitive: false },
   'users:read': { description: 'Ver usuários e seus perfis', sensitive: false },
   'users:manage': { description: 'Atribuir perfis a usuários', sensitive: false },
-  'units:read': { description: 'Ver unidades', sensitive: false },
-  'units:manage': { description: 'Cadastrar e editar unidades', sensitive: false },
+  'users:reset_mfa': {
+    description: 'Redefinir a verificação em duas etapas de outro usuário (ex.: perdeu o celular)',
+    sensitive: false,
+  },
+  'units:read': { description: 'Ver postos de trabalho', sensitive: false },
+  'units:manage': { description: 'Cadastrar e editar postos de trabalho', sensitive: false },
   'departments:read': { description: 'Ver departamentos', sensitive: false },
   'departments:manage': { description: 'Cadastrar e editar departamentos', sensitive: false },
   'positions:read': { description: 'Ver cargos', sensitive: false },
@@ -67,6 +71,31 @@ export const PERMISSIONS = {
   },
   'announcements:manage': {
     description: 'Escrever, publicar e arquivar comunicados e ver quem leu',
+    sensitive: false,
+  },
+  'conversations:manage': {
+    description: 'Atender as conversas dos funcionários com o RH (ocorrências e demais assuntos)',
+    sensitive: false,
+  },
+  'useful_links:manage': {
+    description: 'Cadastrar os links úteis mostrados aos funcionários',
+    sensitive: false,
+  },
+  'benefits:manage': {
+    description: 'Cadastrar benefícios e atribuí-los aos funcionários, com valores',
+    sensitive: false,
+  },
+  'payroll:manage': {
+    description:
+      'Ver e definir salários dos cargos, fechar o mês, publicar a prévia e exportar para a contabilidade',
+    sensitive: true,
+  },
+  'patrols:read': {
+    description: 'Acompanhar rondas e ver os check-ins',
+    sensitive: false,
+  },
+  'patrols:manage': {
+    description: 'Cadastrar pontos, rotas e horários de ronda e imprimir os QR codes',
     sensitive: false,
   },
   // A trilha de auditoria revela quem acessou dados sensíveis: sua leitura também é auditada.

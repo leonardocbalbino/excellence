@@ -89,3 +89,27 @@ export const mfaActivateResponseSchema = z.object({
   session: authenticatedResponseSchema.optional(),
 });
 export type MfaActivateResponse = z.infer<typeof mfaActivateResponseSchema>;
+
+// ─── Esqueci minha senha e dados da conta ─────────────────────────────────────────
+
+/** Pedido do link de redefinição. A resposta é a mesma exista ou não o e-mail. */
+export const forgotPasswordInputSchema = z.object({ email: emailSchema });
+export type ForgotPasswordInput = z.input<typeof forgotPasswordInputSchema>;
+
+/** Validade do link enviado por e-mail, em minutos. */
+export const PASSWORD_RESET_MINUTES = 30;
+
+export const resetPasswordInputSchema = z.object({
+  token: z.string().min(20, 'Link inválido').max(200),
+  // O tamanho mínimo efetivo é parâmetro da API (PASSWORD_MIN_LENGTH).
+  newPassword: z.string().min(8, 'Use pelo menos 8 caracteres').max(256),
+});
+export type ResetPasswordInput = z.input<typeof resetPasswordInputSchema>;
+
+/** Nome e e-mail de login do próprio usuário. Trocar o e-mail pede a senha atual. */
+export const accountInputSchema = z.object({
+  name: z.string().trim().min(2, 'Informe o nome').max(120),
+  email: emailSchema,
+  currentPassword: z.string().max(256).optional(),
+});
+export type AccountInput = z.input<typeof accountInputSchema>;

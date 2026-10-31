@@ -1,0 +1,119 @@
+name: Transferir posto (staging → produção)
+
+# Leva um posto do staging para produção com os funcionários informados
+# (apps/api/scripts/transfer-unit.ts) e/ou deixa o staging só com esse posto
+# (apps/api/scripts/prune-to-unit.ts). Rode primeiro em "simular": o log mostra o que seria
+# feito e nada é gravado. Em "aplicar", o banco que vai mudar ganha antes um backup, guardado
+# na VPS (~/backups/excellence). Ver deploy/README.md.
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: O que fazer
+        type: choice
+        options: [transferir para produção, limpar staging]
+        default: transferir para produção
+      mode:
+        description: Modo
+        type: choice
+        options: [simular, aplicar]
+        default: simular
+      unit:
+        description: Nome do posto no staging
+        default: RESERVA LAGOA
+      employees:
+        description: 'Funcionários: NOME:CPF; NOME:CPF; ... (só na transferência)'
+        required: false
+      hire_date:
+        description: Data do vínculo (AAAA-MM-DD)
+        default: '2026-11-01'
+
+concurrency:
+  group: transfer-unit
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # Mexe em produção: valem as regras do environment production. Os dois bancos ficam na
+    # mesma VPS, então um túnel atende os dois.
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Instalar dependências
+        run: pnpm install --frozen-lockfile
+
+      - name: Preparar (shared e client do Prisma)
+        run: |
+          pnpm turbo run build --filter=@excellence/shared
+          pnpm --filter @excellence/api db:generate
+
+      - name: Configurar SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.VPS_SSH_KEY }}
+
+      - name: Adicionar VPS aos known_hosts
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -p ${{ secrets.VPS_SSH_PORT || 22 }} ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Executar (via túnel SSH)
+        env:
+          SSH_PORT: ${{ secrets.VPS_SSH_PORT || 22 }}
+          DATABASE_URL_PROD: ${{ secrets.DATABASE_URL_PROD }}
+          DATABASE_URL_STAGING: ${{ secrets.DATABASE_URL_STAGING }}
+          OPERATION: ${{ inputs.operation }}
+          APPLY: ${{ inputs.mode == 'aplicar' }}
+          UNIT: ${{ inputs.unit }}
+          EMPLOYEES: ${{ inputs.employees }}
+          HIRE_DATE: ${{ inputs.hire_date }}
+        run: |
+          set -o pipefail
+          VPS="${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}"
+          ssh -p "$SSH_PORT" -fN -o ExitOnForwardFailure=yes -L 127.0.0.1:5432:127.0.0.1:5432 "$VPS"
+
+          # Backup antes de gravar ou apagar. A VPS não tem pg_dump: ele roda aqui, na mesma
+          # versão do servidor (pg_dump mais antigo que o servidor recusa), e o arquivo vai
+          # direto por SSH para ~/backups/excellence na VPS, sem ficar no GitHub.
+          if [ "$APPLY" = "true" ]; then
+            if [ "$OPERATION" = "limpar staging" ]; then
+              TARGET="$DATABASE_URL_STAGING"; LABEL=staging
+            else
+              TARGET="$DATABASE_URL_PROD"; LABEL=prod
+            fi
+            # libpq não aceita parâmetros do Prisma (?schema=...).
+            TARGET="${TARGET%%\?*}"
+            MAJOR=$(psql "$TARGET" -tAc 'show server_version_num' | cut -c1-2)
+            sudo install -d /usr/share/postgresql-common/pgdg
+            sudo curl -fsSL -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
+              https://www.postgresql.org/media/keys/ACCC4CF8.asc
+            echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
+              | sudo tee /etc/apt/sources.list.d/pgdg.list >/dev/null
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq "postgresql-client-$MAJOR" >/dev/null
+            FILE="excellence/$(date +%Y%m%d-%H%M%S)-$LABEL.dump"
+            "/usr/lib/postgresql/$MAJOR/bin/pg_dump" --format=custom "$TARGET" \
+              | ssh -p "$SSH_PORT" "$VPS" "mkdir -p ~/backups/excellence && cat > ~/backups/$FILE && ls -lh ~/backups/$FILE"
+          fi
+
+          # Os scripts usam o schema atual: os dois bancos sobem para a versão do código antes.
+          DATABASE_URL="$DATABASE_URL_STAGING" pnpm --filter @excellence/api db:deploy
+          if [ "$OPERATION" = "limpar staging" ]; then
+            DATABASE_URL="$DATABASE_URL_STAGING" PRUNE_KEEP_UNIT="$UNIT" PRUNE_APPLY="$APPLY" \
+              pnpm --filter @excellence/api exec tsx scripts/prune-to-unit.ts
+          else
+            DATABASE_URL="$DATABASE_URL_PROD" pnpm --filter @excellence/api db:deploy
+            SOURCE_DATABASE_URL="$DATABASE_URL_STAGING" DATABASE_URL="$DATABASE_URL_PROD" \
+              TRANSFER_UNIT="$UNIT" TRANSFER_EMPLOYEES="$EMPLOYEES" TRANSFER_HIRE_DATE="$HIRE_DATE" \
+              TRANSFER_APPLY="$APPLY" pnpm --filter @excellence/api exec tsx scripts/transfer-unit.ts
+          fi

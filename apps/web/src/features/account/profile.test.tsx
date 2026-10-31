@@ -1,0 +1,126 @@
+import type { Employee } from '@excellence/shared';
+import { screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { http, HttpResponse } from 'msw';
+import { renderApp } from '@/test/render-app';
+import { API, server, sessionHandlers, TEST_USER } from '@/test/server';
+
+const employee: Employee = {
+  id: '01900000-0000-7000-8000-000000000704',
+  registrationNumber: '0004',
+  name: 'Fábio Funcionário',
+  socialName: null,
+  cpf: '10000000442',
+  pis: '12056412547',
+  birthDate: '1990-04-12',
+  email: 'fabio@exemplo.com.br',
+  phone: '98999998888',
+  hireDate: '2023-05-15',
+  terminationDate: null,
+  status: 'active',
+  unit: { id: '01900000-0000-7000-8000-000000000301', name: 'Matriz — São Luís' },
+  department: { id: '01900000-0000-7000-8000-000000000401', name: 'Operações' },
+  position: { id: '01900000-0000-7000-8000-000000000501', name: 'Vigilante' },
+  union: null,
+  manager: { id: '01900000-0000-7000-8000-000000000703', name: 'Gabriela Gestora' },
+  userId: TEST_USER.id,
+};
+
+describe('Meu perfil', () => {
+  it('mostra os dados do cadastro e da conta, só para leitura', async () => {
+    server.use(
+      ...sessionHandlers([], { hasEmployeeRecord: true }),
+      http.get(`${API}/auth/me`, () => HttpResponse.json(TEST_USER)),
+      http.get(`${API}/me/employee`, () => HttpResponse.json(employee)),
+    );
+    renderApp('/perfil');
+    expect(await screen.findByText('100.000.004-42')).toBeInTheDocument();
+    expect(screen.getByText('(98) 99999-8888')).toBeInTheDocument();
+    expect(screen.getByText('Gabriela Gestora')).toBeInTheDocument();
+    expect(screen.getByText('15/05/2023')).toBeInTheDocument();
+    expect(screen.getByText(/Fale com o RH/)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Trocar senha' })).toHaveAttribute(
+      'href',
+      '/conta/senha',
+    );
+    // Preferências: o tema também fica no perfil.
+    expect(screen.getByRole('radio', { name: 'Escuro' })).toBeInTheDocument();
+    // Sem campos de texto editáveis: o cadastro é do RH.
+    expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
+  });
+
+  it('sem cadastro de funcionário, mostra só a conta de acesso', async () => {
+    server.use(
+      ...sessionHandlers(['roles:read']),
+      http.get(`${API}/auth/me`, () => HttpResponse.json(TEST_USER)),
+    );
+    renderApp('/perfil');
+    expect(await screen.findByText(/não está ligado a um cadastro/)).toBeInTheDocument();
+    const account = screen.getByRole('region', { name: 'Conta de acesso' });
+    expect(within(account).getByText(TEST_USER.email)).toBeInTheDocument();
+    expect(screen.queryByText('Dados pessoais')).not.toBeInTheDocument();
+  });
+
+  it('na gestão, perfil, tema, segurança e sair ficam no menu da conta', async () => {
+    server.use(
+      ...sessionHandlers(['roles:read']),
+      http.get(`${API}/auth/me`, () => HttpResponse.json(TEST_USER)),
+    );
+    const user = userEvent.setup();
+    renderApp('/perfil');
+    await screen.findByRole('heading', { name: 'Meu perfil' });
+    // O menu lateral não tem mais esses itens soltos.
+    const sidebar = screen.getByRole('complementary');
+    expect(within(sidebar).queryByText('Sair')).not.toBeInTheDocument();
+    expect(within(sidebar).queryByRole('radio', { name: 'Escuro' })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: `Conta de ${TEST_USER.name}` }));
+    expect(await screen.findByRole('menuitem', { name: 'Meu perfil' })).toBeInTheDocument();
+    expect(screen.getByRole('menuitemradio', { name: 'Escuro' })).toBeInTheDocument();
+    // TODO(mfa): voltar a exigir o item quando o MFA for reativado.
+    expect(screen.queryByRole('menuitem', { name: 'Segurança da conta' })).not.toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: 'Sair' })).toBeInTheDocument();
+  });
+});
+
+describe('Meu perfil: foto, nome e e-mail', () => {
+  it('troca nome e e-mail; o e-mail novo pede a senha atual e o menu atualiza na hora', async () => {
+    let sent: Record<string, unknown> | undefined;
+    server.use(
+      ...sessionHandlers(['roles:read']),
+      http.get(`${API}/auth/me`, () => HttpResponse.json(TEST_USER)),
+      http.put(`${API}/auth/account`, async ({ request }) => {
+        sent = (await request.json()) as Record<string, unknown>;
+        return HttpResponse.json({ ...TEST_USER, name: 'Ana Nova', email: 'ana@nova.com.br' });
+      }),
+    );
+    const user = userEvent.setup();
+    renderApp('/perfil');
+
+    expect(await screen.findByRole('button', { name: /Adicionar foto/ })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Editar nome e e-mail' }));
+    const name = screen.getByLabelText('Nome');
+    await user.clear(name);
+    await user.type(name, 'Ana Nova');
+    expect(screen.queryByLabelText('Senha atual')).not.toBeInTheDocument();
+
+    const email = screen.getByLabelText('E-mail de login');
+    await user.clear(email);
+    await user.type(email, 'ana@nova.com.br');
+    await user.click(screen.getByRole('button', { name: 'Salvar' }));
+    expect(
+      await screen.findByText('Confirme a sua senha para trocar o e-mail'),
+    ).toBeInTheDocument();
+
+    await user.type(screen.getByLabelText('Senha atual'), 'senha-atual-123');
+    await user.click(screen.getByRole('button', { name: 'Salvar' }));
+    const account = await screen.findByRole('region', { name: 'Conta de acesso' });
+    expect(await within(account).findByText('ana@nova.com.br')).toBeInTheDocument();
+    expect(sent).toEqual({
+      name: 'Ana Nova',
+      email: 'ana@nova.com.br',
+      currentPassword: 'senha-atual-123',
+    });
+    expect(screen.getByRole('button', { name: 'Conta de Ana Nova' })).toBeInTheDocument();
+  });
+});

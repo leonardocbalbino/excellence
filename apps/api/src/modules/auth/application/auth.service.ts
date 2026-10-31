@@ -1,4 +1,4 @@
-import { HttpStatus, Inject, Injectable } from '@nestjs/common';
+import { HttpStatus, /* Inject, */ Injectable } from '@nestjs/common';
 import {
   type AuthClient,
   type AuthenticatedResponse,
@@ -12,7 +12,8 @@ import type { Prisma } from '../../../generated/prisma/client';
 import { PrismaService } from '../../../infrastructure/prisma/prisma.service';
 import { AuditService } from '../../audit/application/audit.service';
 import type { AuthPrincipal } from '../domain/auth-principal';
-import { MFA_POLICY, type MfaPolicy } from '../domain/mfa-policy';
+// TODO(mfa): reativar junto com o MFA.
+// import { MFA_POLICY, type MfaPolicy } from '../domain/mfa-policy';
 import { LoginThrottler, type ThrottleStatus } from '../infrastructure/login-throttler';
 import { PasswordHasher } from '../infrastructure/password-hasher';
 import {
@@ -56,7 +57,8 @@ export class AuthService {
     private readonly tokens: TokenService,
     private readonly refreshTokens: RefreshTokenService,
     private readonly mfa: MfaService,
-    @Inject(MFA_POLICY) private readonly mfaPolicy: MfaPolicy,
+    // TODO(mfa): reativar junto com o MFA.
+    // @Inject(MFA_POLICY) private readonly mfaPolicy: MfaPolicy,
     private readonly audit: AuditService,
   ) {}
 
@@ -89,26 +91,28 @@ export class AuthService {
     }
     await this.throttler.clearLogin(input.email, meta.ip);
 
-    const subject = { userId: user.id, companyId: user.companyId };
-    if (user.mfaEnabled) {
-      const { token, expiresIn } = await this.tokens.issueMfaToken(
-        'mfa_challenge',
-        subject,
-        input.client,
-      );
-      return { kind: 'mfa', body: { status: 'mfa_required', mfaToken: token, expiresIn } };
-    }
-    if (await this.mfaPolicy.isMfaRequired(user)) {
-      const { token, expiresIn } = await this.tokens.issueMfaToken(
-        'mfa_enrollment',
-        subject,
-        input.client,
-      );
-      return {
-        kind: 'mfa',
-        body: { status: 'mfa_enrollment_required', mfaToken: token, expiresIn },
-      };
-    }
+    // TODO(mfa): MFA desligado temporariamente até validar com o cliente. Para reativar,
+    // descomentar este bloco e o cálculo de `mfaRequired` em AccessResolverService.
+    // const subject = { userId: user.id, companyId: user.companyId };
+    // if (user.mfaEnabled) {
+    //   const { token, expiresIn } = await this.tokens.issueMfaToken(
+    //     'mfa_challenge',
+    //     subject,
+    //     input.client,
+    //   );
+    //   return { kind: 'mfa', body: { status: 'mfa_required', mfaToken: token, expiresIn } };
+    // }
+    // if (await this.mfaPolicy.isMfaRequired(user)) {
+    //   const { token, expiresIn } = await this.tokens.issueMfaToken(
+    //     'mfa_enrollment',
+    //     subject,
+    //     input.client,
+    //   );
+    //   return {
+    //     kind: 'mfa',
+    //     body: { status: 'mfa_enrollment_required', mfaToken: token, expiresIn },
+    //   };
+    // }
     return { kind: 'session', session: await this.createSession(user, input.client, meta) };
   }
 

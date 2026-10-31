@@ -16,7 +16,14 @@ import { PlannedDays } from './planned-days';
 import { assignmentsQueryKey, plannedQueryKey, workSchedulesQueryKey } from './query-keys';
 
 /** Escala do funcionário: histórico de vínculos, novo vínculo e as próximas duas semanas. */
-export function EmployeeSchedulePanel({ employeeId }: { employeeId: string }) {
+export function EmployeeSchedulePanel({
+  employeeId,
+  unitId,
+}: {
+  employeeId: string;
+  /** Posto do funcionário: só as escalas dele e as gerais (ADR 0020). */
+  unitId: string;
+}) {
   const api = useApi();
   const queryClient = useQueryClient();
   const canAssign = useCan('schedules:assign');
@@ -34,8 +41,8 @@ export function EmployeeSchedulePanel({ employeeId }: { employeeId: string }) {
     queryFn: () => api.schedule.planned(employeeId, today, addDaysIso(today, 13)),
   });
   const schedules = useQuery({
-    queryKey: [...workSchedulesQueryKey, 'options'],
-    queryFn: () => api.workSchedules.list(),
+    queryKey: [...workSchedulesQueryKey, 'options', unitId],
+    queryFn: () => api.workSchedules.list(false, unitId),
     enabled: canAssign,
   });
   const selected = schedules.data?.find((s) => s.id === scheduleId);

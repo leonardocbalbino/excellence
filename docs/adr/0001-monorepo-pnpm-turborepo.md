@@ -25,8 +25,8 @@ Precisamos de um único lugar para versionar esses contratos e de um pipeline qu
 - **ESLint 10** flat config com `typescript-eslint` `strictTypeChecked` + `stylisticTypeChecked`;
   **Prettier** apenas para formatação (`eslint-config-prettier`).
 - **Vitest** como runner único; na API via `unplugin-swc` para emitir metadata de decorators.
-- **Conventional Commits** via commitlint + husky (`commit-msg`), lint-staged no `pre-commit`.
-- **CI** no GitHub Actions: format check, lint, typecheck, test, build e commitlint em PRs.
+- husky com lint-staged (Prettier) no `pre-commit`. Mensagens de commit livres: commitlint foi removido.
+- **CI** no GitHub Actions: format check, lint, typecheck, test, build em PRs.
 
 ## Consequências
 

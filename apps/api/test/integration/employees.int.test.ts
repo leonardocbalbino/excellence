@@ -369,7 +369,11 @@ describe('Funcionários (integração)', () => {
       const access = myAccessSchema.parse(
         (await http().get('/api/v1/me/access').set(tempAuth)).body,
       );
-      expect(access).toMatchObject({ passwordChangeRequired: true, permissions: ['units:read'] });
+      expect(access).toMatchObject({
+        passwordChangeRequired: true,
+        permissions: ['units:read'],
+        hasEmployeeRecord: true,
+      });
 
       const weak = await http()
         .post('/api/v1/auth/password')

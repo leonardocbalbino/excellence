@@ -2,21 +2,22 @@ import type { MyAnnouncement } from '@excellence/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { CheckCheckIcon, ChevronLeftIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router';
 import { Alert } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton, Spinner } from '@/components/ui/feedback';
 import { errorMessage, useApi } from '@/lib/services';
-import { announcementsQueryKey, formatInstant } from './labels';
-
-const feedKey = [...announcementsQueryKey, 'me'] as const;
+import { formatInstant, myFeedQueryKey } from './labels';
 
 /** Mural de comunicados do usuário. Abrir registra a leitura; alguns pedem ciência. */
 export function MyAnnouncementsPage() {
   const api = useApi();
-  const [openId, setOpenId] = useState<string | null>(null);
-  const feed = useQuery({ queryKey: feedKey, queryFn: () => api.announcements.feed() });
+  // `?id=` abre direto um comunicado (atalho da tela inicial).
+  const [params] = useSearchParams();
+  const [openId, setOpenId] = useState<string | null>(params.get('id'));
+  const feed = useQuery({ queryKey: myFeedQueryKey, queryFn: () => api.announcements.feed() });
 
   if (openId) return <AnnouncementReader id={openId} onBack={() => setOpenId(null)} />;
 
@@ -75,12 +76,12 @@ function AnnouncementReader({ id, onBack }: { id: string; onBack: () => void }) 
   const open = useMutation({ mutationFn: () => api.announcements.open(id) });
   const acknowledge = useMutation({
     mutationFn: () => api.announcements.acknowledge(id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: feedKey }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: myFeedQueryKey }),
   });
   const { mutate } = open;
   useEffect(() => {
     mutate(undefined, {
-      onSuccess: () => void queryClient.invalidateQueries({ queryKey: feedKey }),
+      onSuccess: () => void queryClient.invalidateQueries({ queryKey: myFeedQueryKey }),
     });
   }, [mutate, queryClient]);
 

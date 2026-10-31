@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import {
   cnpjSchema,
+  moneySchema,
   optionalText,
   postalCodeSchema,
   stateSchema,
@@ -55,6 +56,8 @@ export const unitSchema = z.object({
   geofenceRadiusMeters: z.number().int().nullable(),
   /** Fuso da unidade; null = fuso da empresa. */
   timezone: z.string().nullable(),
+  /** Quem recebe por e-mail as ocorrências das rondas do posto (administração, síndico…). */
+  occurrenceEmails: z.array(z.string()),
   isActive: z.boolean(),
 });
 export type Unit = z.infer<typeof unitSchema>;
@@ -79,6 +82,10 @@ export const unitInputSchema = z
       .max(GEOFENCE_RADIUS_LIMITS.max)
       .nullable(),
     timezone: timezoneSchema.nullable(),
+    occurrenceEmails: z
+      .array(z.email('E-mail inválido').trim().toLowerCase())
+      .max(20, 'No máximo 20 e-mails')
+      .default([]),
     isActive: z.boolean().default(true),
   })
   .superRefine((unit, ctx) => {
@@ -93,7 +100,7 @@ export const unitInputSchema = z
       ctx.addIssue({
         code: 'custom',
         path: ['geofenceRadiusMeters'],
-        message: 'A cerca virtual exige as coordenadas da unidade',
+        message: 'A cerca virtual exige as coordenadas do posto',
       });
     }
   });
@@ -124,6 +131,8 @@ export const positionSchema = z.object({
   name: z.string(),
   /** Código CBO (Classificação Brasileira de Ocupações), 6 dígitos. */
   cbo: z.string().nullable(),
+  /** Salário base do cargo, em reais. Só aparece para quem tem `payroll:manage`. */
+  baseSalary: z.number().nullable(),
   isActive: z.boolean(),
 });
 export type Position = z.infer<typeof positionSchema>;
@@ -137,6 +146,8 @@ export const positionInputSchema = z.object({
     .pipe(z.string().regex(/^\d{6}$/, 'CBO deve ter 6 dígitos'))
     .nullish()
     .transform((v) => v ?? null),
+  /** Em reais; ignorado para quem não tem `payroll:manage` (o valor atual é mantido). */
+  baseSalary: moneySchema.nullish(),
   isActive: z.boolean().default(true),
 });
 export type PositionInput = z.input<typeof positionInputSchema>;

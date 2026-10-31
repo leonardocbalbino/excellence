@@ -8,18 +8,21 @@ import {
   unitInputSchema,
 } from '@excellence/shared';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeftIcon, LocateFixedIcon, Trash2Icon } from 'lucide-react';
+import { ArrowLeftIcon, FolderOpenIcon, LocateFixedIcon, Trash2Icon } from 'lucide-react';
+import { Tabs } from 'radix-ui';
 import { useState } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
-import { Link, useNavigate, useParams } from 'react-router';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import { toast } from 'sonner';
 import { Alert } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Skeleton, Spinner } from '@/components/ui/feedback';
 import { FormField } from '@/components/ui/form-field';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
 import { getCurrentPosition } from '@/lib/device/geolocation';
@@ -28,11 +31,34 @@ import { emptyToNull, numberOrNull } from '@/lib/form-values';
 import { errorMessage, useApi } from '@/lib/services';
 import { BRAZIL_TIMEZONES } from '@/lib/timezones';
 import { useCan } from '../access/access';
+import { ShiftsCatalog } from '../scheduling/shifts-page';
+import { WorkSchedulesList } from '../scheduling/work-schedules-page';
 import { unitsQueryKey } from './query-keys';
+import type { FolderTab } from './unit-folder-path';
+import { UnitEmployeesTab } from './unit-folder/employees-tab';
+import { PatrolPointsCatalog } from '../patrols/patrol-points-page';
+import { PatrolRoutesList } from '../patrols/patrol-routes-page';
+import { UnitPatrolsTab } from './unit-folder/patrols-tab';
+import { UnitRatesTab } from './unit-folder/rates-tab';
+import { UnitSummaryTab } from './unit-folder/summary-tab';
 
+const TAB_CLASS =
+  'shrink-0 border-b-2 border-transparent px-3 py-2.5 text-sm font-medium text-muted-foreground transition-colors outline-none hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 data-[state=active]:border-primary data-[state=active]:font-semibold data-[state=active]:text-primary';
+
+/**
+ * Pasta do posto de trabalho (condomínio), ADR 0020: tudo o que é do posto num lugar só —
+ * funcionários, escalas e turnos, valores por plantão, resumo do mês e o cadastro. A aba
+ * fica no endereço (`?aba=resumo`). Novo posto: só o cadastro.
+ */
 export function UnitEditorPage() {
   const { id } = useParams();
   const api = useApi();
+  const [params, setParams] = useSearchParams();
+  const canReadEmployees = useCan('employees:read');
+  const canReadSchedules = useCan('schedules:read');
+  const canManagePayroll = useCan('payroll:manage');
+  const canReadPatrols = useCan('patrols:read');
+  const canManagePatrols = useCan('patrols:manage');
   const unit = useQuery({
     queryKey: [...unitsQueryKey, id],
     queryFn: () => api.units.get(id ?? ''),
@@ -40,27 +66,108 @@ export function UnitEditorPage() {
   });
   const loading = id !== undefined && unit.isPending;
 
+  const tabs: { value: FolderTab; label: string; show: boolean }[] = [
+    { value: 'funcionarios', label: 'Funcionários', show: canReadEmployees },
+    { value: 'escalas', label: 'Escalas e turnos', show: canReadSchedules },
+    { value: 'valores', label: 'Valores por plantão', show: canManagePayroll },
+    { value: 'resumo', label: 'Resumo mensal', show: canManagePayroll },
+    { value: 'rondas', label: 'Rondas, rotas e QR codes', show: canReadPatrols },
+    { value: 'dados', label: 'Dados do posto', show: true },
+  ];
+  const visible = tabs.filter((t) => t.show);
+  const fallback = visible[0]?.value ?? 'dados';
+  const tab: FolderTab = visible.find((t) => t.value === params.get('aba'))?.value ?? fallback;
+
+  const form = (
+    <Card>
+      <CardContent className="pt-6">
+        {loading ? (
+          <Skeleton className="h-96 w-full" />
+        ) : (
+          <UnitForm key={unit.data?.id ?? 'nova'} unit={unit.data} />
+        )}
+      </CardContent>
+    </Card>
+  );
+
   return (
-    <div className="mx-auto max-w-3xl space-y-6">
+    <div className={id ? 'mx-auto max-w-5xl space-y-6' : 'mx-auto max-w-3xl space-y-6'}>
       <Button asChild variant="ghost" size="sm">
-        <Link to="/cadastros/unidades">
+        <Link to="/cadastros/postos">
           <ArrowLeftIcon />
-          Unidades
+          Postos de trabalho
         </Link>
       </Button>
-      <h1 className="text-2xl font-semibold">
-        {id ? (unit.data?.name ?? 'Unidade') : 'Nova unidade'}
-      </h1>
+      <div>
+        <div className="flex flex-wrap items-center gap-2">
+          {id ? <FolderOpenIcon className="size-6 text-primary" aria-hidden="true" /> : null}
+          <h1 className="text-2xl font-semibold">
+            {id ? (unit.data?.name ?? 'Posto de trabalho') : 'Novo posto de trabalho'}
+          </h1>
+          {unit.data && !unit.data.isActive ? <Badge variant="secondary">Inativo</Badge> : null}
+        </div>
+        {unit.data?.city ? (
+          <p className="text-sm text-muted-foreground">
+            {unit.data.city}
+            {unit.data.state ? `/${unit.data.state}` : ''}
+          </p>
+        ) : null}
+      </div>
       {unit.isError ? <Alert variant="destructive">{errorMessage(unit.error)}</Alert> : null}
-      <Card>
-        <CardContent className="pt-6">
-          {loading ? (
-            <Skeleton className="h-96 w-full" />
-          ) : (
-            <UnitForm key={unit.data?.id ?? 'nova'} unit={unit.data} />
-          )}
-        </CardContent>
-      </Card>
+
+      {id === undefined ? (
+        form
+      ) : (
+        <Tabs.Root
+          value={tab}
+          onValueChange={(value) =>
+            setParams(value === fallback ? {} : { aba: value }, { replace: true })
+          }
+        >
+          <Tabs.List aria-label="Seções do posto" className="flex overflow-x-auto border-b">
+            {visible.map((t) => (
+              <Tabs.Trigger key={t.value} value={t.value} className={TAB_CLASS}>
+                {t.label}
+              </Tabs.Trigger>
+            ))}
+          </Tabs.List>
+          {canReadEmployees ? (
+            <Tabs.Content value="funcionarios" className="pt-6 outline-none">
+              <UnitEmployeesTab unitId={id} />
+            </Tabs.Content>
+          ) : null}
+          {canReadSchedules ? (
+            <Tabs.Content value="escalas" className="space-y-10 pt-6 outline-none">
+              <WorkSchedulesList unitId={id} />
+              <ShiftsCatalog unitId={id} />
+            </Tabs.Content>
+          ) : null}
+          {canManagePayroll ? (
+            <>
+              <Tabs.Content value="valores" className="pt-6 outline-none">
+                <UnitRatesTab unitId={id} />
+              </Tabs.Content>
+              <Tabs.Content value="resumo" className="pt-6 outline-none">
+                <UnitSummaryTab unitId={id} />
+              </Tabs.Content>
+            </>
+          ) : null}
+          {canReadPatrols ? (
+            <Tabs.Content value="rondas" className="space-y-10 pt-6 outline-none">
+              <UnitPatrolsTab unitId={id} />
+              {canManagePatrols ? (
+                <>
+                  <PatrolRoutesList unitId={id} />
+                  <PatrolPointsCatalog unitId={id} />
+                </>
+              ) : null}
+            </Tabs.Content>
+          ) : null}
+          <Tabs.Content value="dados" className="pt-6 outline-none">
+            {form}
+          </Tabs.Content>
+        </Tabs.Root>
+      )}
     </div>
   );
 }
@@ -89,11 +196,19 @@ function UnitForm({ unit }: { unit: Unit | undefined }) {
       longitude: unit?.longitude ?? null,
       geofenceRadiusMeters: unit?.geofenceRadiusMeters ?? null,
       timezone: unit?.timezone ?? null,
+      occurrenceEmails: unit?.occurrenceEmails ?? [],
       isActive: unit?.isActive ?? true,
     },
   });
   const isActive = useWatch({ control: form.control, name: 'isActive' });
   const { errors, isSubmitting } = form.formState;
+  // Erro do primeiro e-mail inválido da lista (ou da lista toda).
+  const emailErrors = errors.occurrenceEmails;
+  const emailError =
+    emailErrors?.message ??
+    (Array.isArray(emailErrors)
+      ? (emailErrors as ({ message?: string } | undefined)[]).find((e) => e?.message)?.message
+      : undefined);
 
   const locate = async () => {
     setLocating(true);
@@ -114,8 +229,8 @@ function UnitForm({ unit }: { unit: Unit | undefined }) {
     try {
       const saved = unit ? await api.units.update(unit.id, values) : await api.units.create(values);
       await queryClient.invalidateQueries({ queryKey: unitsQueryKey });
-      toast.success('Unidade salva.');
-      if (!unit) void navigate(`/cadastros/unidades/${saved.id}`, { replace: true });
+      toast.success('Posto de trabalho salvo.');
+      if (!unit) void navigate(`/cadastros/postos/${saved.id}`, { replace: true });
     } catch (error) {
       applyFieldErrors(error, form.setError);
       setSubmitError(error);
@@ -123,12 +238,12 @@ function UnitForm({ unit }: { unit: Unit | undefined }) {
   });
 
   const remove = async () => {
-    if (!unit || !window.confirm(`Excluir a unidade "${unit.name}"?`)) return;
+    if (!unit || !window.confirm(`Excluir o posto "${unit.name}"?`)) return;
     try {
       await api.units.remove(unit.id);
       await queryClient.invalidateQueries({ queryKey: unitsQueryKey });
-      toast.success('Unidade excluída.');
-      void navigate('/cadastros/unidades', { replace: true });
+      toast.success('Posto de trabalho excluído.');
+      void navigate('/cadastros/postos', { replace: true });
     } catch (error) {
       setSubmitError(error);
     }
@@ -153,7 +268,7 @@ function UnitForm({ unit }: { unit: Unit | undefined }) {
         >
           {(field) => <Input {...field} {...text('code')} />}
         </FormField>
-        <FormField label="CNPJ da unidade" error={errors.cnpj?.message}>
+        <FormField label="CNPJ do posto" error={errors.cnpj?.message}>
           {(field) => <Input {...field} {...text('cnpj')} />}
         </FormField>
         <FormField label="CEP" error={errors.postalCode?.message}>
@@ -245,6 +360,30 @@ function UnitForm({ unit }: { unit: Unit | undefined }) {
         </div>
       </fieldset>
 
+      <fieldset className="grid gap-4" disabled={!canManage}>
+        <legend className="mb-2 font-semibold">Ocorrências das rondas</legend>
+        <FormField
+          label="E-mails que recebem as ocorrências"
+          error={emailError}
+          hint="Administração, síndico e quem mais precisar saber. Um por linha (ou separados por vírgula)."
+        >
+          {(field) => (
+            <Textarea
+              {...field}
+              className="min-h-24"
+              placeholder={'sindico@condominio.com.br\nadministracao@empresa.com.br'}
+              {...form.register('occurrenceEmails', {
+                setValueAs: (value: unknown) =>
+                  (Array.isArray(value) ? value.join('\n') : typeof value === 'string' ? value : '')
+                    .split(/[\n,;]+/)
+                    .map((email) => email.trim())
+                    .filter(Boolean),
+              })}
+            />
+          )}
+        </FormField>
+      </fieldset>
+
       <div className="flex items-center gap-2">
         <Checkbox
           id="unit-active"
@@ -254,7 +393,7 @@ function UnitForm({ unit }: { unit: Unit | undefined }) {
             form.setValue('isActive', checked === true, { shouldDirty: true })
           }
         />
-        <Label htmlFor="unit-active">Unidade ativa</Label>
+        <Label htmlFor="unit-active">Posto ativo</Label>
       </div>
 
       {submitError ? <Alert variant="destructive">{errorMessage(submitError)}</Alert> : null}
@@ -262,7 +401,7 @@ function UnitForm({ unit }: { unit: Unit | undefined }) {
         <div className="flex flex-wrap gap-2">
           <Button type="submit" disabled={isSubmitting}>
             {isSubmitting ? <Spinner /> : null}
-            Salvar unidade
+            Salvar posto
           </Button>
           {unit ? (
             <Button type="button" variant="outline" onClick={() => void remove()}>

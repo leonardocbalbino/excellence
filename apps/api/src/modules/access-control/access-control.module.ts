@@ -3,6 +3,7 @@ import { MFA_POLICY } from '../auth/domain/mfa-policy';
 import { AccessResolver } from './application/access-resolver.service';
 import { PermissionCatalogSync } from './application/permission-catalog';
 import { RolesService } from './application/roles.service';
+import { UserMfaService } from './application/user-mfa.service';
 import { UserRolesService } from './application/user-roles.service';
 import {
   MyAccessController,
@@ -21,6 +22,7 @@ import { RoleBasedMfaPolicy } from './infrastructure/role-based-mfa.policy';
     PermissionCatalogSync,
     RolesService,
     UserRolesService,
+    UserMfaService,
     PermissionGuard,
     { provide: MFA_POLICY, useClass: RoleBasedMfaPolicy },
   ],

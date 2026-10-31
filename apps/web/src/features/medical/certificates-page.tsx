@@ -1,6 +1,6 @@
 import type { MedicalCertificate, MedicalCertificateSensitive } from '@excellence/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { CheckIcon, EyeIcon, XIcon } from 'lucide-react';
+import { CheckIcon, DownloadIcon, ExternalLinkIcon, EyeIcon, XIcon } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router';
 import { toast } from 'sonner';
@@ -21,7 +21,7 @@ type StatusFilter = MedicalCertificate['status'] | 'all';
 /** Atestados dos funcionários no escopo. O CID só aparece sob demanda, com leitura auditada. */
 export function CertificatesPage() {
   const api = useApi();
-  const [status, setStatus] = useState<StatusFilter>('pending');
+  const [status, setStatus] = useState<StatusFilter>('all');
   const certificates = useQuery({
     queryKey: [...certificatesQueryKey, 'list', status],
     queryFn: () => api.medicalCertificates.list(status === 'all' ? {} : { status: status }),
@@ -33,7 +33,8 @@ export function CertificatesPage() {
         <div>
           <h1 className="text-2xl font-semibold">Atestados</h1>
           <p className="text-muted-foreground">
-            Análise dos atestados enviados. O efeito na folha é definido no motor de cálculo.
+            Atestados anexados pela administração. Para anexar, abra o funcionário (ou a pasta do
+            posto) e use “Anexar atestado”.
           </p>
         </div>
         <div className="grid gap-2">
@@ -44,8 +45,8 @@ export function CertificatesPage() {
             onChange={(e) => setStatus(e.target.value as StatusFilter)}
           >
             <option value="pending">Em análise</option>
-            <option value="accepted">Aceitos</option>
-            <option value="rejected">Recusados</option>
+            <option value="accepted">Válidos</option>
+            <option value="rejected">Inválidos</option>
             <option value="cancelled">Cancelados</option>
             <option value="all">Todos</option>
           </Select>
@@ -79,14 +80,14 @@ function CertificateCard({ certificate }: { certificate: MedicalCertificate }) {
   const accept = useMutation({
     mutationFn: () => api.medicalCertificates.accept(certificate.id, { note: note || null }),
     onSuccess: async () => {
-      toast.success('Atestado aceito.');
+      toast.success('Atestado marcado como válido.');
       await refresh();
     },
   });
   const reject = useMutation({
     mutationFn: () => api.medicalCertificates.reject(certificate.id, { note }),
     onSuccess: async () => {
-      toast.success('Atestado recusado.');
+      toast.success('Atestado marcado como inválido.');
       await refresh();
     },
   });
@@ -127,18 +128,50 @@ function CertificateCard({ certificate }: { certificate: MedicalCertificate }) {
 
         {canReadSensitive ? (
           sensitive ? (
-            <div className="flex flex-wrap items-center gap-3 rounded-md border bg-muted/40 p-3 text-sm">
-              <span>
-                CID: <strong>{sensitive.cid ?? 'não informado'}</strong>
-              </span>
-              <a
-                href={sensitive.document.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-primary hover:underline"
-              >
-                Abrir documento
-              </a>
+            <div className="grid gap-3 rounded-lg border bg-muted/40 p-3 text-sm">
+              <div className="flex flex-wrap items-center gap-3">
+                <span>
+                  CID: <strong>{sensitive.cid ?? 'não informado'}</strong>
+                </span>
+                <span className="ml-auto flex flex-wrap gap-2">
+                  {sensitive.preview ? (
+                    <Button asChild variant="outline" size="sm">
+                      <a href={sensitive.preview.url} target="_blank" rel="noopener noreferrer">
+                        <ExternalLinkIcon />
+                        Abrir em nova aba
+                      </a>
+                    </Button>
+                  ) : null}
+                  <Button asChild size="sm">
+                    <a href={sensitive.document.url} rel="noopener noreferrer">
+                      <DownloadIcon />
+                      Baixar
+                    </a>
+                  </Button>
+                </span>
+              </div>
+              {sensitive.preview ? (
+                sensitive.contentType === 'application/pdf' ? (
+                  <iframe
+                    src={sensitive.preview.url}
+                    title={`Atestado de ${certificate.employee.name}`}
+                    className="h-[70vh] w-full rounded-md border bg-card"
+                  />
+                ) : (
+                  <img
+                    src={sensitive.preview.url}
+                    alt={`Atestado de ${certificate.employee.name}`}
+                    className="max-h-[70vh] w-full rounded-md border bg-card object-contain"
+                  />
+                )
+              ) : (
+                <p className="text-muted-foreground">
+                  Este formato não abre no navegador. Use “Baixar” para ver o arquivo.
+                </p>
+              )}
+              <p className="text-xs text-muted-foreground">
+                O link vale por alguns minutos. Para ver de novo depois, recarregue a página.
+              </p>
             </div>
           ) : (
             <div className="flex flex-wrap items-center gap-2">
@@ -149,7 +182,7 @@ function CertificateCard({ certificate }: { certificate: MedicalCertificate }) {
                 disabled={reveal.isPending}
               >
                 {reveal.isPending ? <Spinner /> : <EyeIcon />}
-                Ver documento{certificate.hasCid ? ' e CID' : ''}
+                Ver atestado{certificate.hasCid ? ' e CID' : ''}
               </Button>
               <span className="text-xs text-muted-foreground">
                 Dado sensível: o acesso fica registrado na auditoria.
@@ -158,11 +191,32 @@ function CertificateCard({ certificate }: { certificate: MedicalCertificate }) {
           )
         ) : null}
 
+        {canReview && certificate.status === 'accepted' ? (
+          <div className="grid gap-2">
+            <Label htmlFor={`review-${certificate.id}`}>Motivo para marcar como inválido</Label>
+            <div className="flex flex-wrap gap-2">
+              <Input
+                id={`review-${certificate.id}`}
+                className="min-w-48 flex-1"
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+              />
+              <Button
+                variant="outline"
+                onClick={() => reject.mutate()}
+                disabled={busy || note.trim() === ''}
+              >
+                {reject.isPending ? <Spinner /> : <XIcon />}
+                Marcar como inválido
+              </Button>
+            </div>
+          </div>
+        ) : null}
         {canReview && certificate.status === 'pending' ? (
           <>
             <div className="grid gap-2">
               <Label htmlFor={`review-${certificate.id}`}>
-                Observação (obrigatória para recusar)
+                Observação (obrigatória se inválido)
               </Label>
               <Input
                 id={`review-${certificate.id}`}
@@ -173,7 +227,7 @@ function CertificateCard({ certificate }: { certificate: MedicalCertificate }) {
             <div className="flex gap-2">
               <Button onClick={() => accept.mutate()} disabled={busy}>
                 {accept.isPending ? <Spinner /> : <CheckIcon />}
-                Aceitar
+                Válido
               </Button>
               <Button
                 variant="outline"
@@ -181,7 +235,7 @@ function CertificateCard({ certificate }: { certificate: MedicalCertificate }) {
                 disabled={busy || note.trim() === ''}
               >
                 {reject.isPending ? <Spinner /> : <XIcon />}
-                Recusar
+                Inválido
               </Button>
             </div>
           </>

@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { isPermission, type Permission, type RoleScope } from '@excellence/shared';
+import { isPermission, type Permission, PERMISSION_KEYS, type RoleScope } from '@excellence/shared';
 import { PrismaService } from '../../../infrastructure/prisma/prisma.service';
 import { type DataScope, mergeScopes, toRoleScope } from '../domain/data-scope';
 
@@ -33,6 +33,7 @@ export class AccessResolver {
         isActive: true,
         mfaEnabled: true,
         mustChangePassword: true,
+        isSuperAdmin: true,
         userRoles: {
           select: {
             role: {
@@ -49,9 +50,10 @@ export class AccessResolver {
     if (!user) return null;
 
     const scopesByPermission = new Map<Permission, RoleScope[]>();
-    let mfaRequired = false;
+    // TODO(mfa): MFA desligado temporariamente até validar com o cliente (ver AuthService.login).
+    const mfaRequired = false;
     for (const { role } of user.userRoles) {
-      mfaRequired ||= role.requiresMfa;
+      // mfaRequired ||= role.requiresMfa;
       const scopes = role.scopes.map(toRoleScope);
       for (const { permissionKey } of role.permissions) {
         if (!isPermission(permissionKey)) continue;
@@ -65,6 +67,11 @@ export class AccessResolver {
     const permissions = new Map<Permission, DataScope>();
     for (const [permission, scopes] of scopesByPermission)
       permissions.set(permission, mergeScopes(scopes));
+    // Super admin (desenvolvedor): todo o catálogo, com escopo de empresa.
+    if (user.isSuperAdmin) {
+      const companyWide = mergeScopes([{ type: 'company' }]);
+      for (const permission of PERMISSION_KEYS) permissions.set(permission, companyWide);
+    }
 
     return {
       userId,

@@ -1,5 +1,5 @@
 import type { HolidayScope, PlannedDay } from '@excellence/shared';
-import { minutesToTime } from '@excellence/shared';
+import { minutesToTime, parityCycleStart } from '@excellence/shared';
 
 export interface PlannerShift {
   id: string;
@@ -12,7 +12,9 @@ export interface PlannerShift {
 export interface PlannerSchedule {
   id: string;
   kind: 'cycle' | 'flexible';
-  cycleAnchor: 'monday' | 'assignment' | null;
+  cycleAnchor: 'monday' | 'assignment' | 'odd' | 'even' | null;
+  /** Mês de referência das escalas par/ímpar (AAAA-MM). */
+  parityMonth: string | null;
   /** Turno de cada dia do ciclo (null = folga). */
   days: (PlannerShift | null)[];
   weeklyMinutes: number | null;
@@ -62,6 +64,15 @@ export function daysBetween(from: string, to: string): number {
 export function cycleIndex(date: string, anchor: string, cycleLength: number): number {
   const offset = daysBetween(anchor, date) % cycleLength;
   return offset < 0 ? offset + cycleLength : offset;
+}
+
+/** Data do dia 1 do ciclo: fixa (segunda, par/ímpar) ou a de cada funcionário. */
+function cycleAnchorDate(schedule: PlannerSchedule, assignment: PlannerAssignment): string {
+  if (schedule.cycleAnchor === 'monday') return MONDAY_REFERENCE;
+  if ((schedule.cycleAnchor === 'odd' || schedule.cycleAnchor === 'even') && schedule.parityMonth) {
+    return parityCycleStart(schedule.cycleAnchor, schedule.parityMonth);
+  }
+  return assignment.cycleStartDate;
 }
 
 function normalizeCity(city: string): string {
@@ -134,8 +145,7 @@ export function planDays(input: {
 
     let shift: PlannerShift | null = null;
     if (schedule?.kind === 'cycle' && schedule.days.length > 0 && assignment) {
-      const anchor =
-        schedule.cycleAnchor === 'monday' ? MONDAY_REFERENCE : assignment.cycleStartDate;
+      const anchor = cycleAnchorDate(schedule, assignment);
       shift = schedule.days[cycleIndex(date, anchor, schedule.days.length)] ?? null;
     }
 

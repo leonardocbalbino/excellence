@@ -2,6 +2,7 @@ import { HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
 import {
   type ClockReceipt,
   type clockInputSchema,
+  type DailyAttendance,
   ProblemType,
   type TimeEntry,
   type Timesheet,
@@ -16,9 +17,12 @@ import { CompanyService } from '../../organization/application/company.service';
 import { AssignmentsService } from '../../scheduling/application/assignments.service';
 import { addDays } from '../../scheduling/domain/planner';
 import { EmployeesService } from '../../workforce/application/employees.service';
-import { fromCalendarDate, todayIn } from '../../workforce/domain/calendar';
+import { fromCalendarDate, toCalendarDate, todayIn } from '../../workforce/domain/calendar';
+import { employeeScopeWhere } from '../../workforce/domain/employee-scope';
 import { evaluateGeofence } from '../domain/geofence';
+import { OFFLINE_SOURCE, resolveOfflineTime } from '../domain/offline';
 import { verifyChain } from '../domain/hash-chain';
+import { attendanceStatus } from '../domain/attendance';
 import { buildTimesheetDays } from '../domain/timesheet';
 import { fromZoned, toZoned } from '../domain/zoned-time';
 import { ClockSettingsService } from './clock-settings.service';
@@ -55,6 +59,9 @@ const ENTRY_SELECT = {
   hash: true,
   unit: { select: { id: true, name: true, timezone: true } },
 } as const;
+
+/** Teto do quadro do dia; empresas maiores consultam por unidade (`unitId`). */
+const DAILY_LIMIT = 1000;
 
 function fail(type: string, status: number, detail: string): ProblemException {
   return new ProblemException({
@@ -130,12 +137,25 @@ export class TimeTrackingService {
       }
     }
 
+    const official = resolveOfflineTime({
+      offlineRecordedAt: input.offlineRecordedAt,
+      source: client.source,
+      now: new Date(),
+    });
+    if (!official.ok) {
+      throw fail(
+        ProblemType.OfflineEntryRejected,
+        HttpStatus.UNPROCESSABLE_ENTITY,
+        official.reason,
+      );
+    }
+
     const fence = evaluateGeofence(employee.unit, position);
     if (fence.status === 'outside' && settings.outsideGeofence === 'block') {
       throw fail(
         ProblemType.OutsideGeofence,
         HttpStatus.UNPROCESSABLE_ENTITY,
-        `Você está a ${Math.round(fence.distanceMeters ?? 0)} m da unidade, fora da área permitida.`,
+        `Você está a ${Math.round(fence.distanceMeters ?? 0)} m do posto de trabalho, fora da área permitida.`,
       );
     }
 
@@ -145,7 +165,7 @@ export class TimeTrackingService {
         employeeId: employee.id,
         unitId: employee.unit.id,
         kind: 'clock',
-        recordedAt: null,
+        recordedAt: official.recordedAt,
         deviceRecordedAt: input.deviceTimestamp ? new Date(input.deviceTimestamp) : null,
         latitude: position?.latitude ?? null,
         longitude: position?.longitude ?? null,
@@ -153,7 +173,7 @@ export class TimeTrackingService {
         distanceMeters: fence.distanceMeters,
         geofenceStatus: fence.status,
         selfieFileId: input.selfieFileId ?? null,
-        source: client.source,
+        source: official.offline ? OFFLINE_SOURCE : client.source,
         ipAddress: client.ip,
         userAgent: client.userAgent,
         createdBy: grant.userId,
@@ -257,6 +277,124 @@ export class TimeTrackingService {
       })),
     );
     return { ...result, entries: rows.length };
+  }
+
+  /**
+   * Quadro do dia para a gestão: marcações e escala de cada funcionário ativo no escopo de
+   * `time_entries:read`. O próprio registro de quem consulta fica de fora (segregação: o
+   * próprio ponto é visto na área pessoal).
+   */
+  async daily(
+    date: string,
+    unitId: string | undefined,
+    grant: AccessGrant,
+  ): Promise<DailyAttendance> {
+    if (!grant.scope) return { date, items: [] };
+    const actor = await this.employees.actor(grant);
+    const scope = employeeScopeWhere(grant.scope, actor);
+    if (!scope) return { date, items: [] };
+
+    const day = toCalendarDate(date);
+    const employees = await this.db.client.employee.findMany({
+      where: {
+        AND: [
+          scope,
+          { hireDate: { lte: day } },
+          { OR: [{ terminationDate: null }, { terminationDate: { gte: day } }] },
+          ...(actor.employeeId ? [{ id: { not: actor.employeeId } }] : []),
+          ...(unitId ? [{ unitId }] : []),
+        ],
+      },
+      orderBy: [{ name: 'asc' }, { id: 'asc' }],
+      take: DAILY_LIMIT,
+      select: {
+        id: true,
+        name: true,
+        socialName: true,
+        registrationNumber: true,
+        unit: { select: { id: true, name: true, timezone: true } },
+        department: { select: { id: true, name: true } },
+      },
+    });
+    if (employees.length === 0) return { date, items: [] };
+
+    const ids = employees.map((e) => e.id);
+    const companyTz = await this.company.timezone();
+    const settings = await this.settings.get();
+    // Véspera: turno que atravessa a meia-noite pode puxar marcações de hoje para ontem.
+    const planned = await this.assignments.planMany(ids, addDays(date, -1), date);
+    const [rows, certificates] = await Promise.all([
+      this.db.client.timeEntry.findMany({
+        where: {
+          employeeId: { in: ids },
+          // Janela larga o bastante para qualquer fuso; o recorte exato é por dia de trabalho.
+          recordedAt: {
+            gte: fromZoned(addDays(date, -1), '00:00', 'UTC'),
+            lt: fromZoned(addDays(date, 3), '00:00', 'UTC'),
+          },
+        },
+        orderBy: { recordedAt: 'asc' },
+        select: {
+          id: true,
+          employeeId: true,
+          kind: true,
+          recordedAt: true,
+          geofenceStatus: true,
+          referencesEntryId: true,
+        },
+      }),
+      this.db.client.medicalCertificate.findMany({
+        where: {
+          employeeId: { in: ids },
+          status: 'accepted',
+          startDate: { lte: day },
+          endDate: { gte: day },
+        },
+        select: { employeeId: true, id: true },
+      }),
+    ]);
+    const disregarded = new Set(
+      rows.filter((r) => r.kind === 'disregard').map((r) => r.referencesEntryId),
+    );
+    const effective = rows.filter((r) => r.kind !== 'disregard' && !disregarded.has(r.id));
+    const justified = new Set(certificates.map((c) => c.employeeId));
+
+    return {
+      date,
+      items: employees.map((employee) => {
+        const timezone = employee.unit.timezone ?? companyTz;
+        const [today] = buildTimesheetDays({
+          planned: planned.get(employee.id) ?? [],
+          entries: effective.filter((r) => r.employeeId === employee.id),
+          timezone,
+          graceMinutes: settings.overnightGraceMinutes,
+          pendingByDate: new Map(),
+        }).filter((d) => d.date === date);
+        const plannedDay = today?.planned ?? {
+          date,
+          unassigned: true,
+          scheduleId: null,
+          shift: null,
+          flexibleWeeklyMinutes: null,
+          holiday: null,
+        };
+        const entries = today?.entries ?? [];
+        return {
+          employee: {
+            id: employee.id,
+            name: employee.socialName ?? employee.name,
+            registrationNumber: employee.registrationNumber,
+            unit: { id: employee.unit.id, name: employee.unit.name },
+            department: employee.department,
+          },
+          timezone,
+          planned: plannedDay,
+          entries,
+          workedMinutes: today?.workedMinutes ?? 0,
+          status: attendanceStatus(entries.length, plannedDay, justified.has(employee.id)),
+        };
+      }),
+    };
   }
 
   // ─── Interno ──────────────────────────────────────────────────────────────────────
@@ -392,6 +530,7 @@ export class TimeTrackingService {
         hasSelfie: row.selfieFileId !== null,
         referencesEntryId: row.referencesEntryId,
         disregarded: disregarded.has(row.id),
+        offline: row.source === OFFLINE_SOURCE,
         hash: row.hash,
       };
     });

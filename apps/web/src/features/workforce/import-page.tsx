@@ -93,8 +93,8 @@ export function ImportPage() {
           <CardTitle className="text-base">1. Prepare a planilha</CardTitle>
           <CardDescription>
             CSV (separado por ponto e vírgula ou vírgula) ou XLSX, até {EMPLOYEE_IMPORT_MAX_ROWS}{' '}
-            linhas. Unidade, departamento, cargo e sindicato aceitam o código ou o nome cadastrado;
-            o gestor é a matrícula. Datas em DD/MM/AAAA.
+            linhas. Posto (coluna "unidade"), departamento, cargo e sindicato aceitam o código ou o
+            nome cadastrado; o gestor é a matrícula. Datas em DD/MM/AAAA.
           </CardDescription>
         </CardHeader>
         <CardContent>

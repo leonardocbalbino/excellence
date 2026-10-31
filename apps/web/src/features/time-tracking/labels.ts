@@ -1,10 +1,10 @@
 import type { Adjustment, TimeEntry } from '@excellence/shared';
 
 export const GEOFENCE_LABELS: Record<TimeEntry['geofenceStatus'], string> = {
-  inside: 'Dentro da área da unidade',
-  outside: 'Fora da área da unidade',
+  inside: 'Dentro da área do posto',
+  outside: 'Fora da área do posto',
   no_location: 'Sem localização',
-  no_fence: 'Unidade sem cerca virtual',
+  no_fence: 'Posto sem cerca virtual',
 };
 
 export const ADJUSTMENT_STATUS: Record<Adjustment['status'], string> = {

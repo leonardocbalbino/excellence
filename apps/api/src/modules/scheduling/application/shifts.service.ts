@@ -11,12 +11,14 @@ import { TenantPrismaService } from '../../../infrastructure/prisma/tenant-prism
 import { assertCompanyWide } from '../../access-control/application/access-rules';
 import type { AccessGrant } from '../../access-control/http/access.decorators';
 import { AuditService, toAuditJson } from '../../audit/application/audit.service';
-import { duplicated, inUse } from '../../organization/application/catalog-rules';
+import { duplicated, inUse, invalidReference } from '../../organization/application/catalog-rules';
+import { catalogWhere } from '../domain/unit-owner';
 
 type ShiftInput = z.output<typeof shiftInputSchema>;
 
 const SHIFT_SELECT = {
   id: true,
+  unit: { select: { id: true, name: true } },
   name: true,
   code: true,
   startMinute: true,
@@ -27,6 +29,7 @@ const SHIFT_SELECT = {
 
 interface ShiftRow {
   id: string;
+  unit: { id: string; name: string } | null;
   name: string;
   code: string | null;
   startMinute: number;
@@ -40,6 +43,7 @@ export function toShift(row: ShiftRow): Shift {
   const end = minutesToTime(row.endMinute);
   return {
     id: row.id,
+    unit: row.unit,
     name: row.name,
     code: row.code,
     start,
@@ -53,6 +57,7 @@ export function toShift(row: ShiftRow): Shift {
 
 function toData(input: ShiftInput) {
   return {
+    unitId: input.unitId,
     name: input.name,
     code: input.code,
     startMinute: timeToMinutes(input.start),
@@ -69,9 +74,10 @@ export class ShiftsService {
     private readonly audit: AuditService,
   ) {}
 
-  async list(includeInactive: boolean): Promise<Shift[]> {
+  /** Com `unitId`, só os turnos do posto e os gerais. */
+  async list(includeInactive: boolean, unitId?: string): Promise<Shift[]> {
     const rows = await this.db.client.shift.findMany({
-      where: includeInactive ? {} : { isActive: true },
+      where: { AND: [includeInactive ? {} : { isActive: true }, catalogWhere(unitId)] },
       select: SHIFT_SELECT,
       orderBy: [{ startMinute: 'asc' }, { name: 'asc' }],
     });
@@ -87,10 +93,26 @@ export class ShiftsService {
   async save(id: string | null, input: ShiftInput, grant: AccessGrant): Promise<Shift> {
     assertCompanyWide(grant);
     const before = id ? await this.get(id) : null;
+    if (input.unitId) {
+      const unit = await this.db.client.unit.count({ where: { id: input.unitId } });
+      if (unit === 0) throw invalidReference('unitId', 'Posto de trabalho não encontrado.');
+    }
     const taken = await this.db.client.shift.count({
-      where: { name: input.name, ...(id ? { id: { not: id } } : {}) },
+      where: { name: input.name, unitId: input.unitId, ...(id ? { id: { not: id } } : {}) },
     });
-    if (taken > 0) throw duplicated('name', 'Já existe um turno com este nome.');
+    if (taken > 0) throw duplicated('name', 'Já existe um turno com este nome neste posto.');
+    // Escala de outro posto (ou geral) não pode ficar com turno de um posto específico.
+    if (id && input.unitId) {
+      const elsewhere = await this.db.client.workScheduleDay.count({
+        where: {
+          shiftId: id,
+          schedule: { OR: [{ unitId: null }, { unitId: { not: input.unitId } }] },
+        },
+      });
+      if (elsewhere > 0) {
+        throw invalidReference('unitId', 'O turno é usado em escalas gerais ou de outro posto.');
+      }
+    }
     return this.db.client.$transaction(async (tx) => {
       const row = id
         ? await tx.shift.update({ where: { id }, data: toData(input), select: SHIFT_SELECT })

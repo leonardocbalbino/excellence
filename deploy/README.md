@@ -77,12 +77,53 @@ vhosts pra `listen 80` + `server_name`, rodar o certbot e religar `AUTH_COOKIE_S
    sudo cp nginx-arquivos.conf /etc/nginx/sites-available/excellence-arquivos
    sudo ln -s /etc/nginx/sites-available/excellence-{prod,staging,arquivos} /etc/nginx/sites-enabled/
    sudo nginx -t && sudo systemctl reload nginx
-   sudo certbot --nginx -d excellence.cartaocolaborativa.com.br \
-     -d dev.excellence.cartaocolaborativa.com.br -d arquivos.excellence.cartaocolaborativa.com.br
+   sudo certbot --nginx -d gestaoexcellence.com.br -d www.gestaoexcellence.com.br \
+     -d staging.gestaoexcellence.com.br -d arquivos.gestaoexcellence.com.br
    ```
 
 5. Primeiro deploy: push na `main` (prod) ou label `staging` num PR. O `pm2 startOrReload` cria o
    processo na primeira vez.
+
+## Domínio gestaoexcellence.com.br (virada para HTTPS)
+
+| Endereço                           | Vai para              |
+| ---------------------------------- | --------------------- |
+| `gestaoexcellence.com.br` e `www.` | prod (8200)           |
+| `staging.gestaoexcellence.com.br`  | staging (8201)        |
+| `arquivos.gestaoexcellence.com.br` | MinIO (8202), os dois |
+
+Nesta ordem (até o passo 4, o acesso por `http://IP:porta` continua funcionando):
+
+1. **DNS (painel da Hostinger)**: registros `A` de `@`, `www`, `staging` e `arquivos` para
+   `169.58.37.26`, e o CDN/proxy da Hostinger desligado (o certbot precisa chegar direto na VPS).
+   Conferir com `nslookup gestaoexcellence.com.br` (tem que responder o IP da VPS).
+2. **Nginx**: copiar os três `nginx-*.conf` (passo 4 da instalação) e `sudo nginx -t && sudo
+systemctl reload nginx`.
+3. **Certificado**: o `certbot` do passo 4 da instalação (acrescenta o 443 e o redirecionamento).
+4. **API**: nos dois `secrets.env`, `S3_PUBLIC_ENDPOINT=https://arquivos.gestaoexcellence.com.br`
+   e `API_CORS_ORIGINS=https://gestaoexcellence.com.br,https://www.gestaoexcellence.com.br` (no
+   staging, `https://staging.gestaoexcellence.com.br`). Nos dois `ecosystem.*.config.js` da VPS,
+   `AUTH_COOKIE_SECURE: 'true'`. Depois `pm2 reload` dos dois. A partir daqui o login pelo IP para
+   de funcionar (cookie `Secure` só vale em HTTPS).
+5. **App**: `PRODUCTION_API_URL` em `apps/mobile/app.config.ts` para
+   `https://gestaoexcellence.com.br/api/v1` (e tirar a liberação de HTTP do iOS) e um build novo.
+
+## Transferir um posto do staging para produção
+
+Workflow **Transferir posto (staging → produção)** (Actions → Run workflow). Sempre primeiro em
+`simular`: o log mostra o que seria feito e nada é gravado.
+
+- `transferir para produção`: copia o posto (escalas, turnos, valores por plantão, feriados,
+  pontos e rotas de ronda com o mesmo QR), o cadastro de benefícios e cria os funcionários da
+  lista (`NOME:CPF; NOME:CPF`) com VA/VT a partir da data do vínculo. A empresa de produção do
+  bootstrap recebe nome e CNPJ da empresa do staging. Rodar de novo não duplica nada.
+- `limpar staging`: deixa a empresa do staging só com esse posto (ver
+  `apps/api/scripts/prune-to-unit.ts`). Se as contagens do posto mantido mudarem, desfaz tudo.
+
+Em `aplicar`, o banco que vai mudar ganha antes um `pg_dump` (feito no runner, na versão do
+servidor) guardado em `~/backups/excellence` na VPS. A VPS não tem as ferramentas do Postgres:
+para voltar, copie o arquivo e rode `pg_restore --clean --if-exists -d "$DATABASE_URL" arquivo.dump`
+de uma máquina com o cliente do Postgres, pelo túnel SSH.
 
 ## GitHub (Settings → Secrets and variables → Actions)
 

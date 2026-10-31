@@ -57,6 +57,27 @@ export const envSchema = z.object({
   // interna do Docker). As URLs pré-assinadas são geradas com ele.
   S3_PUBLIC_ENDPOINT: z.url().optional(),
   FILE_URL_TTL_SECONDS: z.coerce.number().int().min(30).max(3600).default(300),
+
+  // Gera sozinho o fechamento do mês que acabou, a partir do dia 1 (ADR 0020). Desligado
+  // nos testes.
+  PAYROLL_AUTO_GENERATE: z.stringbool().default(true),
+
+  // Notificações push do app (ADR 0022): envio pelo serviço do Expo e lembretes de ponto e
+  // ronda conferidos a cada minuto. Desligado nos testes.
+  PUSH_ENABLED: z.stringbool().default(true),
+  // Token de acesso do Expo, se o projeto exigir push autenticado (Expo › Access tokens).
+  EXPO_ACCESS_TOKEN: z.string().min(1).optional(),
+
+  // E-mail (ADR 0024). Sem SMTP_HOST, nada é enviado e o motivo fica registrado. Local: Mailpit.
+  SMTP_HOST: z.string().min(1).optional(),
+  SMTP_PORT: z.coerce.number().int().min(1).max(65535).default(587),
+  // true = TLS direto (porta 465); false = STARTTLS quando o servidor oferecer (587, 25).
+  SMTP_SECURE: z.stringbool().default(false),
+  SMTP_USER: z.string().min(1).optional(),
+  SMTP_PASSWORD: z.string().min(1).optional(),
+  MAIL_FROM: z.string().min(3).default('Excellence <nao-responda@excellence.local>'),
+  // Endereço público do site (ex.: https://gestaoexcellence.com.br): links dos e-mails.
+  WEB_APP_URL: z.url().optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;

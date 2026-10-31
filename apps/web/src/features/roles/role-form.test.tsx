@@ -84,7 +84,7 @@ describe('RoleForm', () => {
     expect(screen.getByLabelText('Nome')).toHaveValue('Supervisor');
     expect(screen.getByLabelText('Nome')).toBeDisabled();
     expect(screen.getByRole('checkbox', { name: 'Equipe que gerencia' })).toBeChecked();
-    expect(screen.getByText(/Também: Unidade 01900000/)).toBeInTheDocument();
+    expect(screen.getByText(/Também: Posto de trabalho 01900000/)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Salvar perfil' })).not.toBeInTheDocument();
   });
 
