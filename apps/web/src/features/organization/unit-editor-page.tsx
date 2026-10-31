@@ -22,6 +22,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Skeleton, Spinner } from '@/components/ui/feedback';
 import { FormField } from '@/components/ui/form-field';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
 import { getCurrentPosition } from '@/lib/device/geolocation';
@@ -34,10 +35,11 @@ import { ShiftsCatalog } from '../scheduling/shifts-page';
 import { WorkSchedulesList } from '../scheduling/work-schedules-page';
 import { unitsQueryKey } from './query-keys';
 import { UnitEmployeesTab } from './unit-folder/employees-tab';
+import { UnitPatrolsTab } from './unit-folder/patrols-tab';
 import { UnitRatesTab } from './unit-folder/rates-tab';
 import { UnitSummaryTab } from './unit-folder/summary-tab';
 
-type FolderTab = 'funcionarios' | 'escalas' | 'valores' | 'resumo' | 'dados';
+type FolderTab = 'funcionarios' | 'escalas' | 'valores' | 'resumo' | 'rondas' | 'dados';
 
 const TAB_CLASS =
   'shrink-0 border-b-2 border-transparent px-3 py-2.5 text-sm font-medium text-muted-foreground transition-colors outline-none hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 data-[state=active]:border-primary data-[state=active]:font-semibold data-[state=active]:text-primary';
@@ -54,6 +56,7 @@ export function UnitEditorPage() {
   const canReadEmployees = useCan('employees:read');
   const canReadSchedules = useCan('schedules:read');
   const canManagePayroll = useCan('payroll:manage');
+  const canReadPatrols = useCan('patrols:read');
   const unit = useQuery({
     queryKey: [...unitsQueryKey, id],
     queryFn: () => api.units.get(id ?? ''),
@@ -66,6 +69,7 @@ export function UnitEditorPage() {
     { value: 'escalas', label: 'Escalas e turnos', show: canReadSchedules },
     { value: 'valores', label: 'Valores por plantão', show: canManagePayroll },
     { value: 'resumo', label: 'Resumo mensal', show: canManagePayroll },
+    { value: 'rondas', label: 'Rondas', show: canReadPatrols },
     { value: 'dados', label: 'Dados do posto', show: true },
   ];
   const visible = tabs.filter((t) => t.show);
@@ -146,6 +150,11 @@ export function UnitEditorPage() {
               </Tabs.Content>
             </>
           ) : null}
+          {canReadPatrols ? (
+            <Tabs.Content value="rondas" className="pt-6 outline-none">
+              <UnitPatrolsTab unitId={id} />
+            </Tabs.Content>
+          ) : null}
           <Tabs.Content value="dados" className="pt-6 outline-none">
             {form}
           </Tabs.Content>
@@ -179,11 +188,19 @@ function UnitForm({ unit }: { unit: Unit | undefined }) {
       longitude: unit?.longitude ?? null,
       geofenceRadiusMeters: unit?.geofenceRadiusMeters ?? null,
       timezone: unit?.timezone ?? null,
+      occurrenceEmails: unit?.occurrenceEmails ?? [],
       isActive: unit?.isActive ?? true,
     },
   });
   const isActive = useWatch({ control: form.control, name: 'isActive' });
   const { errors, isSubmitting } = form.formState;
+  // Erro do primeiro e-mail inválido da lista (ou da lista toda).
+  const emailErrors = errors.occurrenceEmails;
+  const emailError =
+    emailErrors?.message ??
+    (Array.isArray(emailErrors)
+      ? (emailErrors as ({ message?: string } | undefined)[]).find((e) => e?.message)?.message
+      : undefined);
 
   const locate = async () => {
     setLocating(true);
@@ -333,6 +350,30 @@ function UnitForm({ unit }: { unit: Unit | undefined }) {
             Usar minha localização atual
           </Button>
         </div>
+      </fieldset>
+
+      <fieldset className="grid gap-4" disabled={!canManage}>
+        <legend className="mb-2 font-semibold">Ocorrências das rondas</legend>
+        <FormField
+          label="E-mails que recebem as ocorrências"
+          error={emailError}
+          hint="Administração, síndico e quem mais precisar saber. Um por linha (ou separados por vírgula)."
+        >
+          {(field) => (
+            <Textarea
+              {...field}
+              className="min-h-24"
+              placeholder={'sindico@condominio.com.br\nadministracao@empresa.com.br'}
+              {...form.register('occurrenceEmails', {
+                setValueAs: (value: unknown) =>
+                  (Array.isArray(value) ? value.join('\n') : typeof value === 'string' ? value : '')
+                    .split(/[\n,;]+/)
+                    .map((email) => email.trim())
+                    .filter(Boolean),
+              })}
+            />
+          )}
+        </FormField>
       </fieldset>
 
       <div className="flex items-center gap-2">

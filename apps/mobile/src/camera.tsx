@@ -11,7 +11,7 @@ import Animated, {
   withSequence,
   withTiming,
 } from 'react-native-reanimated';
-import { Button, Card, EmptyState } from './ui';
+import { BRAND, Button, Card, EmptyState } from './ui';
 
 type Permission = ReturnType<typeof useCameraPermissions>;
 
@@ -175,8 +175,8 @@ export function QrScanner({
                 right: 10,
                 height: 3,
                 borderRadius: 2,
-                backgroundColor: '#4fb3a5',
-                shadowColor: '#4fb3a5',
+                backgroundColor: BRAND.gold,
+                shadowColor: BRAND.gold,
                 shadowOpacity: 0.9,
                 shadowRadius: 8,
               },

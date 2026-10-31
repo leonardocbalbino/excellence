@@ -15,7 +15,12 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       injectRegister: false,
-      includeAssets: ['favicon.svg', 'apple-touch-icon.png'],
+      includeAssets: [
+        'favicon.png',
+        'apple-touch-icon.png',
+        'brand/logo.png',
+        'brand/logo-mark.png',
+      ],
       manifest: {
         name: 'Excellence — Pessoas, Ponto e Rondas',
         short_name: 'Excellence',
@@ -25,8 +30,8 @@ export default defineConfig({
         scope: '/',
         display: 'standalone',
         orientation: 'portrait',
-        background_color: '#f4f2ed',
-        theme_color: '#0f5a52',
+        background_color: '#12100c',
+        theme_color: '#12100c',
         icons: [
           { src: 'icon-192.png', sizes: '192x192', type: 'image/png' },
           { src: 'icon-512.png', sizes: '512x512', type: 'image/png' },

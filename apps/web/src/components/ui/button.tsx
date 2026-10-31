@@ -8,7 +8,8 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        default: 'bg-primary text-primary-foreground hover:bg-primary/90',
+        // Botão principal: dourado da logo, com texto escuro.
+        default: 'bg-gold-gradient text-gold-foreground shadow-sm hover:brightness-105',
         destructive: 'bg-destructive text-destructive-foreground hover:bg-destructive/90',
         outline: 'border bg-background hover:bg-accent hover:text-accent-foreground',
         secondary: 'bg-secondary text-secondary-foreground hover:bg-secondary/80',

@@ -8,14 +8,14 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect, useRef, useState } from 'react';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { AppState, Text, View } from 'react-native';
+import { AppState, Image, Text, View } from 'react-native';
 import Animated, { ZoomIn } from 'react-native-reanimated';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { biometricEnabled, confirmIdentity } from '@/device';
 import { offlineQueue } from '@/offline-queue';
 import { accessQueryKey, clockSettingsKey, myPatrolsKey } from '@/query-keys';
 import { createServices, ServicesProvider, useServices, useSession } from '@/services';
-import { Button, styles, Title, useColors, usePulse } from '@/ui';
+import { BRAND, Button, styles, useColors, usePulse } from '@/ui';
 
 const services = createServices();
 const DAY = 24 * 60 * 60_000;
@@ -177,7 +177,7 @@ function LockScreen({
                 width: 120,
                 height: 120,
                 borderRadius: 60,
-                backgroundColor: '#ffffff',
+                backgroundColor: BRAND.gold,
               },
               pulse,
             ]}
@@ -188,15 +188,20 @@ function LockScreen({
               width: 120,
               height: 120,
               borderRadius: 60,
-              backgroundColor: '#ffffff26',
+              backgroundColor: BRAND.gold,
               alignItems: 'center',
               justifyContent: 'center',
             }}
           >
-            <Ionicons name="finger-print" size={64} color="#ffffff" />
+            <Ionicons name="finger-print" size={64} color={BRAND.ink} />
           </Animated.View>
         </View>
-        <Title style={{ color: '#ffffff', fontSize: 30 }}>Excellence</Title>
+        <Image
+          source={require('../assets/logo.png')}
+          accessibilityLabel="Excellence"
+          resizeMode="contain"
+          style={{ width: 200, height: 120 }}
+        />
         <Text style={{ color: '#ffffffcc', fontSize: 16, textAlign: 'center' }}>
           {checking ? 'Abrindo…' : 'Use a digital ou o rosto para destravar.'}
         </Text>

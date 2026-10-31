@@ -90,6 +90,11 @@ export const patrolRouteInputSchema = z
     pointIds: unique(z.uuid(), 'Ponto repetido na rota')
       .min(1, 'Inclua ao menos um ponto')
       .max(100),
+    /**
+     * Quantos pontos a ronda precisa ler para contar como feita. Vazio = todos. Com menos,
+     * o funcionário só encerra explicando o motivo e a ronda fica incompleta.
+     */
+    minPoints: z.number().int().min(1).max(100).nullish(),
     /** Horários de início previstos (fuso da unidade). Vazio: ronda sem horário fixo. */
     startTimes: unique(timeOfDaySchema, 'Horário repetido').max(48).default([]),
     weekdays: unique(weekdaySchema, 'Dia repetido').default([]),
@@ -105,6 +110,13 @@ export const patrolRouteInputSchema = z
         message: 'Escolha os dias em que os horários valem',
       });
     }
+    if (route.minPoints && route.minPoints > route.pointIds.length) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['minPoints'],
+        message: 'Maior que o número de pontos da rota',
+      });
+    }
   });
 export type PatrolRouteInput = z.input<typeof patrolRouteInputSchema>;
 
@@ -115,6 +127,8 @@ export const patrolRouteSchema = z.object({
   description: z.string().nullable(),
   expectedMinutes: z.number().int(),
   enforceOrder: z.boolean(),
+  /** Pontos que a ronda precisa ler; null = todos. */
+  minPoints: z.number().int().nullable(),
   points: z.array(namedRef),
   startTimes: z.array(timeOfDaySchema),
   weekdays: z.array(weekdaySchema),
@@ -162,6 +176,8 @@ export const patrolRunSchema = z.object({
   ),
   checked: z.number().int(),
   total: z.number().int(),
+  /** Quantos pontos a ronda precisa ler para contar como feita (a rota define; padrão: todos). */
+  required: z.number().int(),
   /** Minutos além do previsto (em andamento: até agora; encerrada: no fim). 0 = no prazo. */
   lateMinutes: z.number().int(),
   nextPoint: namedRef.nullable(),
@@ -238,3 +254,100 @@ export const patrolBoardSchema = z.object({
   slots: z.array(patrolSlotSchema),
 });
 export type PatrolBoard = z.infer<typeof patrolBoardSchema>;
+
+// ─── Ocorrências da ronda (ADR 0024) ────────────────────────────────────────────────
+
+/** Número da ocorrência como aparece no e-mail e nas telas: 42 → "N00042". */
+export function formatOccurrenceNumber(number: number): string {
+  return `N${String(number).padStart(5, '0')}`;
+}
+
+export const patrolOccurrenceStatusSchema = z.enum(['open', 'resolved']);
+export type PatrolOccurrenceStatus = z.infer<typeof patrolOccurrenceStatusSchema>;
+
+export const PATROL_OCCURRENCE_STATUS_LABELS: Record<PatrolOccurrenceStatus, string> = {
+  open: 'Em aberto',
+  resolved: 'Resolvida',
+};
+
+/** Registro feito pelo funcionário durante a ronda: o que viu, onde e uma foto. */
+export const patrolOccurrenceInputSchema = z.object({
+  /** Ponto da ronda onde aconteceu (opcional: pode ser entre dois pontos). */
+  pointId: z.uuid().nullish(),
+  description: z.string().trim().min(5, 'Descreva o que aconteceu').max(2000),
+  /** Foto já enviada com a finalidade `patrol_occurrence`. */
+  photoFileId: z.uuid().nullish(),
+});
+export type PatrolOccurrenceInput = z.input<typeof patrolOccurrenceInputSchema>;
+
+/** O que a administração fez e como o problema foi resolvido. */
+export const patrolOccurrenceResolutionSchema = z.object({
+  actionTaken: z.string().trim().min(3, 'Conte o que foi feito').max(2000),
+  /** Vazio = segue em aberto; preenchido = resolvida. */
+  resolution: optionalText(2000),
+});
+export type PatrolOccurrenceResolution = z.input<typeof patrolOccurrenceResolutionSchema>;
+
+export const patrolOccurrenceSchema = z.object({
+  id: z.uuid(),
+  /** Número único na empresa (formatado com `formatOccurrenceNumber`). */
+  number: z.number().int().positive(),
+  unit: namedRef,
+  route: namedRef.nullable(),
+  runId: z.uuid().nullable(),
+  point: namedRef.nullable(),
+  employee: namedRef,
+  occurredAt: isoInstant,
+  /** Hora local do posto. */
+  localDate: calendarDateSchema,
+  localTime: timeOfDaySchema,
+  description: z.string(),
+  hasPhoto: z.boolean(),
+  status: patrolOccurrenceStatusSchema,
+  actionTaken: z.string().nullable(),
+  resolution: z.string().nullable(),
+  resolvedAt: isoInstant.nullable(),
+  resolvedBy: namedRef.nullable(),
+  /** Envio por e-mail aos destinatários do posto: quando foi enviado, ou o erro. */
+  emailedAt: isoInstant.nullable(),
+  emailError: z.string().nullable(),
+});
+export type PatrolOccurrence = z.infer<typeof patrolOccurrenceSchema>;
+
+export const patrolOccurrenceListQuerySchema = z.object({
+  unitId: z.uuid().optional(),
+  status: patrolOccurrenceStatusSchema.optional(),
+  /** AAAA-MM (mês da ocorrência, no fuso do posto). */
+  month: z
+    .string()
+    .regex(/^\d{4}-(0[1-9]|1[0-2])$/)
+    .optional(),
+});
+export type PatrolOccurrenceListQuery = z.input<typeof patrolOccurrenceListQuerySchema>;
+
+/** Resumo do mês das rondas de um posto: horários, rondas feitas e ocorrências. */
+export const unitPatrolSummarySchema = z.object({
+  unit: namedRef,
+  month: z.string(),
+  totals: z.object({
+    /** Horários previstos no mês até hoje. */
+    scheduled: z.number().int(),
+    completed: z.number().int(),
+    incomplete: z.number().int(),
+    /** Horários que passaram sem ronda iniciada. */
+    missed: z.number().int(),
+    occurrences: z.number().int(),
+    openOccurrences: z.number().int(),
+  }),
+  routes: z.array(
+    z.object({
+      route: namedRef,
+      scheduled: z.number().int(),
+      completed: z.number().int(),
+      incomplete: z.number().int(),
+      missed: z.number().int(),
+    }),
+  ),
+  occurrences: z.array(patrolOccurrenceSchema),
+});
+export type UnitPatrolSummary = z.infer<typeof unitPatrolSummarySchema>;

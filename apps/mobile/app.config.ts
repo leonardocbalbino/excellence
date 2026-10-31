@@ -22,9 +22,9 @@ const config: ExpoConfig = {
   userInterfaceStyle: 'automatic',
   icon: '../web/public/icon-512.png',
   splash: {
-    image: '../web/public/icon-512.png',
+    image: '../web/public/brand/splash.png',
     resizeMode: 'contain',
-    backgroundColor: '#0f5a52',
+    backgroundColor: '#12100c',
   },
   ios: {
     bundleIdentifier: 'br.com.excellence.app',
@@ -47,8 +47,8 @@ const config: ExpoConfig = {
     // Sem backup automático do Android: tokens e fila offline não vão para a nuvem.
     allowBackup: false,
     adaptiveIcon: {
-      foregroundImage: '../web/public/icon-maskable-512.png',
-      backgroundColor: '#0f5a52',
+      foregroundImage: '../web/public/brand/adaptive-foreground.png',
+      backgroundColor: '#12100c',
     },
     permissions: [
       'android.permission.CAMERA',
@@ -102,7 +102,7 @@ const config: ExpoConfig = {
       'expo-local-authentication',
       { faceIDPermission: 'O Face ID destrava o app sem digitar a senha.' },
     ],
-    ['expo-notifications', { color: '#0f5a52' }],
+    ['expo-notifications', { color: '#c9a356' }],
     [
       'expo-build-properties',
       // Android também bloqueia HTTP por padrão (mesmo motivo do iOS acima).

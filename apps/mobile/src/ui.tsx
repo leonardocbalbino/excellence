@@ -32,40 +32,57 @@ import Animated, {
 } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-/** Mesmas cores do web (apps/web/src/index.css), com o degradê do app. */
+/**
+ * Identidade Excellence (logo dourada): preto, dourado e creme. Mesmos tokens do web
+ * (apps/web/src/index.css). Fora dos temas, as cores fixas da marca.
+ */
+export const BRAND = {
+  /** Dourado da logo, do claro ao escuro (degradê do botão principal). */
+  goldLight: '#ecd593',
+  gold: '#c9a356',
+  goldDark: '#a77f2e',
+  /** Texto sobre o dourado. */
+  ink: '#16130e',
+  /** Destaques em preto (cartão do ponto, tela de bloqueio). */
+  black: '#12100c',
+  goldGradient: ['#ecd593', '#c9a356', '#a77f2e'] as readonly [string, string, string],
+  heroGradient: ['#24211b', '#0b0a08'] as readonly [string, string],
+};
+
 const LIGHT = {
-  background: '#f4f2ed',
-  foreground: '#16201d',
+  background: '#f6f1e8',
+  foreground: '#1a1712',
   card: '#ffffff',
-  muted: '#ebe8e1',
-  mutedForeground: '#5f6663',
-  primary: '#0f5a52',
-  primaryForeground: '#ffffff',
-  primarySoft: '#e3eeeb',
+  muted: '#efe7d8',
+  mutedForeground: '#6a6152',
+  /** Dourado escuro: texto e ícones legíveis no creme e no branco. */
+  primary: '#8f6d27',
+  primaryForeground: '#fffaf0',
+  primarySoft: '#f4ead3',
   success: '#15803d',
   successSoft: '#e3f4e8',
   warning: '#b4451a',
   warningSoft: '#fbece4',
   destructive: '#b42318',
-  border: '#e3dfd6',
-  gradient: ['#0f5a52', '#16806f'] as readonly [string, string],
+  border: '#e8dfcd',
+  gradient: BRAND.heroGradient,
 };
 const DARK: typeof LIGHT = {
-  background: '#0f1614',
-  foreground: '#eef2f0',
-  card: '#17201d',
-  muted: '#222d2a',
-  mutedForeground: '#a3aeaa',
-  primary: '#4fb3a5',
-  primaryForeground: '#0b1513',
-  primarySoft: '#183330',
+  background: '#0e0d0b',
+  foreground: '#f2ebdd',
+  card: '#181612',
+  muted: '#231f18',
+  mutedForeground: '#a99f8b',
+  primary: '#d6b46c',
+  primaryForeground: '#16130e',
+  primarySoft: '#2b2415',
   success: '#4ade80',
   successSoft: '#163323',
   warning: '#f0936a',
   warningSoft: '#3a2219',
   destructive: '#f07167',
-  border: '#2a3532',
-  gradient: ['#0d4640', '#16705f'] as readonly [string, string],
+  border: '#2e2920',
+  gradient: BRAND.heroGradient,
 };
 
 export type Colors = typeof LIGHT;
@@ -308,11 +325,11 @@ export function Button({
 }) {
   const c = useColors();
   const palette = {
-    primary: { bg: c.primary, fg: c.primaryForeground, border: c.primary },
+    primary: { bg: BRAND.gold, fg: BRAND.ink, border: 'transparent' },
     outline: { bg: 'transparent', fg: c.primary, border: c.primary },
     ghost: { bg: 'transparent', fg: c.primary, border: 'transparent' },
     soft: { bg: c.primarySoft, fg: c.primary, border: c.primarySoft },
-    inverse: { bg: '#ffffff', fg: '#0f5a52', border: '#ffffff' },
+    inverse: { bg: BRAND.gold, fg: BRAND.ink, border: 'transparent' },
     // Sobre o degradê (tela de bloqueio, cartão do ponto).
     inverseGhost: { bg: '#ffffff1f', fg: '#ffffff', border: 'transparent' },
   }[variant];
@@ -504,7 +521,7 @@ export function ProgressBar({
           {
             height: '100%',
             borderRadius: 5,
-            backgroundColor: tone === 'inverse' ? '#ffffff' : c.primary,
+            backgroundColor: tone === 'inverse' ? BRAND.gold : c.primary,
           },
           fill,
         ]}

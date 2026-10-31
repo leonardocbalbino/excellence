@@ -3,13 +3,14 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Redirect } from 'expo-router';
 import { useState } from 'react';
-import { Alert, KeyboardAvoidingView, Platform, ScrollView, Text, View } from 'react-native';
+import { Alert, Image, KeyboardAvoidingView, Platform, ScrollView, Text, View } from 'react-native';
 import Animated, { FadeInDown, FadeInUp, ZoomIn } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { biometricAvailable, biometricEnabled, setBiometricEnabled } from '@/device';
 import { errorMessage, useServices, useSession } from '@/services';
 import {
   Banner,
+  BRAND,
   Button,
   Card,
   haptics,
@@ -117,24 +118,16 @@ export default function LoginScreen() {
           }}
         >
           <View style={[styles.heroBubble, { top: -70, right: -50 }]} />
-          <Animated.View
-            entering={ZoomIn.springify().damping(12)}
-            style={{
-              width: 72,
-              height: 72,
-              borderRadius: 24,
-              backgroundColor: '#ffffff',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            <Ionicons name="shield-checkmark" size={38} color="#0f5a52" />
+          <Animated.View entering={ZoomIn.springify().damping(12)} style={{ alignItems: 'center' }}>
+            <Image
+              source={require('../assets/logo.png')}
+              accessibilityLabel="Excellence"
+              resizeMode="contain"
+              style={{ width: 220, height: 150 }}
+            />
           </Animated.View>
           <Animated.View entering={FadeInUp.delay(120).springify()}>
-            <Text style={{ color: '#fff', fontSize: 34, fontWeight: '800', letterSpacing: -0.5 }}>
-              Excellence
-            </Text>
-            <Text style={{ color: '#ffffffd9', fontSize: 17, marginTop: 4 }}>
+            <Text style={{ color: BRAND.gold, fontSize: 17, marginTop: 4, textAlign: 'center' }}>
               Ponto, rondas e benefícios na palma da mão.
             </Text>
           </Animated.View>

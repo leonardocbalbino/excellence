@@ -22,6 +22,7 @@ import {
   ScrollTextIcon,
   SendIcon,
   ShieldCheckIcon,
+  SirenIcon,
   StethoscopeIcon,
   TicketIcon,
   UserRoundIcon,
@@ -133,6 +134,12 @@ export const MANAGEMENT_NAV: readonly NavSection[] = [
         icon: RouteIcon,
         permission: 'patrols:read',
         end: true,
+      },
+      {
+        label: 'Ocorrências',
+        to: '/gestao/rondas/ocorrencias',
+        icon: SirenIcon,
+        permission: 'patrols:read',
       },
       {
         label: 'Rotas',

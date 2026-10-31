@@ -56,6 +56,8 @@ export const unitSchema = z.object({
   geofenceRadiusMeters: z.number().int().nullable(),
   /** Fuso da unidade; null = fuso da empresa. */
   timezone: z.string().nullable(),
+  /** Quem recebe por e-mail as ocorrências das rondas do posto (administração, síndico…). */
+  occurrenceEmails: z.array(z.string()),
   isActive: z.boolean(),
 });
 export type Unit = z.infer<typeof unitSchema>;
@@ -80,6 +82,10 @@ export const unitInputSchema = z
       .max(GEOFENCE_RADIUS_LIMITS.max)
       .nullable(),
     timezone: timezoneSchema.nullable(),
+    occurrenceEmails: z
+      .array(z.email('E-mail inválido').trim().toLowerCase())
+      .max(20, 'No máximo 20 e-mails')
+      .default([]),
     isActive: z.boolean().default(true),
   })
   .superRefine((unit, ctx) => {
