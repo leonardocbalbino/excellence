@@ -1,8 +1,10 @@
-import { ApiError } from '@excellence/shared';
+import { ApiError, CLOCK_BLOCK_MESSAGES, PUNCH_ACTIONS } from '@excellence/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
+  CalendarCheckIcon,
   CheckCircle2Icon,
   ClipboardListIcon,
+  CoffeeIcon,
   FingerprintIcon,
   MapPinIcon,
   MapPinOffIcon,
@@ -48,6 +50,13 @@ export function ClockPage() {
     queryKey: [...timeEntriesQueryKey, 'me', today],
     queryFn: () => api.time.mine(today, today),
   });
+  // Dia de trabalho: próxima marcação, saída prevista e folga (regras da empresa).
+  const day = useQuery({
+    queryKey: [...timeEntriesQueryKey, 'me', 'work-day'],
+    queryFn: () => api.time.myDay(),
+  });
+  const shift = day.data?.planned.shift ?? null;
+  const returnAt = day.data?.next === 'break_end' ? day.data.expectedBreakEnd : null;
   const [withSelfie, setWithSelfie] = useState(false);
   const [photo, setPhoto] = useState<Blob | null>(null);
   const [locationNote, setLocationNote] = useState<string | null>(null);
@@ -118,10 +127,32 @@ export function ClockPage() {
             <p className="mt-1 text-xs text-muted-foreground">
               O horário registrado é o do servidor, não o do seu aparelho.
             </p>
+            {shift ? (
+              <p className="mt-3 text-sm">
+                Turno {shift.start}–{shift.end} ·{' '}
+                <strong>
+                  {returnAt ? `Retorno previsto ${returnAt}` : `Saída prevista ${shift.end}`}
+                </strong>
+              </p>
+            ) : null}
           </div>
 
-          {settings.isPending ? (
+          {settings.isPending || day.isPending ? (
             <Skeleton className="h-10 w-full" />
+          ) : day.data?.blocked ? (
+            <div className="grid justify-items-center gap-2 rounded-xl bg-muted p-5">
+              {day.data.blocked === 'day_off' ? (
+                <CoffeeIcon className="size-8 text-primary" aria-hidden="true" />
+              ) : (
+                <CalendarCheckIcon className="size-8 text-primary" aria-hidden="true" />
+              )}
+              <p className="font-display text-lg font-bold">
+                {day.data.blocked === 'day_off' ? 'Hoje é sua folga' : 'Jornada de hoje encerrada'}
+              </p>
+              <p className="text-sm text-muted-foreground">
+                {CLOCK_BLOCK_MESSAGES[day.data.blocked]}
+              </p>
+            </div>
           ) : (
             <>
               {selfieRequired ? null : (
@@ -142,7 +173,7 @@ export function ClockPage() {
                 disabled={clock.isPending || (useSelfie && !photo)}
               >
                 {clock.isPending ? <Spinner /> : <FingerprintIcon className="size-6" />}
-                Registrar ponto
+                {day.data?.next ? PUNCH_ACTIONS[day.data.next] : 'Registrar ponto'}
               </Button>
             </>
           )}

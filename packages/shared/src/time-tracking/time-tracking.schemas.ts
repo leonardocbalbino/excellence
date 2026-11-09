@@ -16,6 +16,12 @@ export const clockSettingsSchema = z.object({
    * conta para o dia de trabalho anterior no espelho.
    */
   overnightGraceMinutes: z.number().int().min(0).max(720),
+  /**
+   * Marcar a saída e o retorno do almoço (4 marcações no dia). Desligado: só entrada e saída.
+   */
+  breakPunches: z.boolean(),
+  /** Recusa a marcação que abriria a jornada num dia de folga da escala. */
+  blockOffDay: z.boolean(),
 });
 export type ClockSettings = z.infer<typeof clockSettingsSchema>;
 

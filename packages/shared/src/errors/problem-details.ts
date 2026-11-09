@@ -46,6 +46,8 @@ export const ProblemType = {
   LocationRequired: 'urn:excellence:problem:location-required',
   SelfieRequired: 'urn:excellence:problem:selfie-required',
   OutsideGeofence: 'urn:excellence:problem:outside-geofence',
+  ClockDayOff: 'urn:excellence:problem:clock-day-off',
+  ClockDayComplete: 'urn:excellence:problem:clock-day-complete',
   IdempotencyMismatch: 'urn:excellence:problem:idempotency-mismatch',
   OfflineEntryRejected: 'urn:excellence:problem:offline-entry-rejected',
   AdjustmentNotPending: 'urn:excellence:problem:adjustment-not-pending',

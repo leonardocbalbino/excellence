@@ -6,12 +6,17 @@ import { assertCompanyWide } from '../../access-control/application/access-rules
 import type { AccessGrant } from '../../access-control/http/access.decorators';
 import { AuditService, toAuditJson } from '../../audit/application/audit.service';
 
-/** Padrões enquanto a empresa não configura (P-008: fora da cerca, aceita e sinaliza). */
+/**
+ * Padrões enquanto a empresa não configura (P-008: fora da cerca, aceita e sinaliza). Sem
+ * almoço: só entrada e saída. Folga: não abre jornada (P-030).
+ */
 export const DEFAULT_CLOCK_SETTINGS: ClockSettings = {
   outsideGeofence: 'allow',
   requireLocation: false,
   requireSelfie: false,
   overnightGraceMinutes: 240,
+  breakPunches: false,
+  blockOffDay: true,
 };
 
 @Injectable()
@@ -31,6 +36,8 @@ export class ClockSettingsService {
       requireLocation: row.requireLocation,
       requireSelfie: row.requireSelfie,
       overnightGraceMinutes: row.overnightGraceMin,
+      breakPunches: row.breakPunches,
+      blockOffDay: row.blockOffDay,
     };
   }
 
@@ -42,6 +49,8 @@ export class ClockSettingsService {
       requireLocation: input.requireLocation,
       requireSelfie: input.requireSelfie,
       overnightGraceMin: input.overnightGraceMinutes,
+      breakPunches: input.breakPunches,
+      blockOffDay: input.blockOffDay,
     };
     await this.db.client.$transaction(async (tx) => {
       await tx.clockSettings.upsert({

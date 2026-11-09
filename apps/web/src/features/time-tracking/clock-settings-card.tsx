@@ -12,7 +12,7 @@ import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
 import { errorMessage, useApi } from '@/lib/services';
 
-/** Parâmetros do ponto (regras que dependem de decisão da empresa: pendência P-008). */
+/** Parâmetros do ponto (regras que dependem de decisão da empresa: pendências P-008 e P-030). */
 export function ClockSettingsCard() {
   const api = useApi();
   const settings = useQuery({ queryKey: ['clock-settings'], queryFn: () => api.time.settings() });
@@ -21,8 +21,8 @@ export function ClockSettingsCard() {
       <CardHeader>
         <CardTitle>Registro de ponto</CardTitle>
         <CardDescription>
-          Como a marcação trata localização e foto. Confirme com o jurídico antes de recusar
-          marcações fora da área (pendência P-008).
+          Como a marcação trata localização, foto, almoço e folga. Confirme com o jurídico antes de
+          recusar marcações (pendências P-008 e P-030).
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -90,6 +90,34 @@ function SettingsForm({ initial }: { initial: ClockSettings }) {
           onCheckedChange={(c) => setValues({ ...values, requireSelfie: c === true })}
         />
         <Label htmlFor="require-selfie">Exigir foto (selfie) para marcar</Label>
+      </div>
+      <div className="grid gap-1">
+        <div className="flex items-center gap-2">
+          <Checkbox
+            id="break-punches"
+            checked={values.breakPunches}
+            onCheckedChange={(c) => setValues({ ...values, breakPunches: c === true })}
+          />
+          <Label htmlFor="break-punches">Marcar saída e retorno do almoço</Label>
+        </div>
+        <p className="pl-6 text-sm text-muted-foreground">
+          Ligado: entrada, saída para almoço, retorno do almoço e saída. Desligado: só entrada e
+          saída. Marcações a mais no dia só por ajuste de ponto.
+        </p>
+      </div>
+      <div className="grid gap-1">
+        <div className="flex items-center gap-2">
+          <Checkbox
+            id="block-off-day"
+            checked={values.blockOffDay}
+            onCheckedChange={(c) => setValues({ ...values, blockOffDay: c === true })}
+          />
+          <Label htmlFor="block-off-day">Não abrir o ponto em dia de folga da escala</Label>
+        </div>
+        <p className="pl-6 text-sm text-muted-foreground">
+          Quem trabalhar na folga (dobra, cobertura) precisa de ajuste de ponto aprovado. A saída de
+          um turno que começou na véspera sempre é aceita.
+        </p>
       </div>
       <div className="grid gap-2 sm:w-72">
         <Label htmlFor="overnight-grace">Tolerância após turno noturno (minutos)</Label>

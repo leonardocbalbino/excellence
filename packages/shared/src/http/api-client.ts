@@ -110,6 +110,7 @@ import {
   timeEntrySchema,
   timesheetSchema,
 } from '../time-tracking/time-tracking.schemas.js';
+import { clockDaySchema } from '../time-tracking/clock-day.js';
 import {
   myPatrolsSchema,
   type PatrolCheckinInput,
@@ -659,6 +660,8 @@ export function createApiClient(options: ApiClientOptions) {
           query: { from, to },
           schema: z.array(timeEntrySchema),
         }),
+      /** Meu dia de trabalho: escala, marcações, próxima marcação e o que impede marcar. */
+      myDay: () => request('GET', '/me/clock-day', { schema: clockDaySchema }),
       myTimesheet: (month: string) =>
         request('GET', '/me/timesheet', { query: { month }, schema: timesheetSchema }),
       receipt: (entryId: string) =>
