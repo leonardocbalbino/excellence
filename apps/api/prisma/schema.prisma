@@ -506,7 +506,6 @@ model Employee {
   benefitAdjustments  BenefitDayAdjustment[]
   payrollItems        PayrollItem[]
   conversations       Conversation[]
-  pushDevices         PushDevice[]
 
   @@unique([userId, companyId])
   @@unique([companyId, cpf])
@@ -1342,10 +1341,8 @@ model PushDevice {
   createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   lastSeenAt DateTime @default(now()) @map("last_seen_at") @db.Timestamptz(6)
 
-  company    Company   @relation(fields: [companyId], references: [id])
-  user       User      @relation(fields: [userId, companyId], references: [id, companyId], onDelete: Cascade)
-  employee   Employee? @relation(fields: [employeeId], references: [id])
-  employeeId String?   @db.Uuid
+  company Company @relation(fields: [companyId], references: [id])
+  user    User    @relation(fields: [userId, companyId], references: [id, companyId], onDelete: Cascade)
 
   @@index([companyId, userId])
   @@map("push_devices")
