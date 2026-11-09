@@ -130,7 +130,7 @@ export default function HomeScreen() {
       }}
     >
       <Animated.View
-        entering={FadeInDown.springify().damping(18)}
+        entering={FadeInDown.duration(220)}
         style={[styles.row, { justifyContent: 'flex-start', gap: 14 }]}
       >
         {session.status === 'authenticated' ? (
@@ -266,9 +266,7 @@ export default function HomeScreen() {
         {shortcuts.map((item, index) => (
           <Animated.View
             key={item.label}
-            entering={FadeInDown.delay(120 + index * 50)
-              .springify()
-              .damping(16)}
+            entering={FadeInDown.delay(80 + index * 30).duration(220)}
             style={{ width: '47.5%' }}
           >
             <Touchable

@@ -9,7 +9,7 @@ benefícios e espelho de ponto, não entra no formulário.
 | Pergunta                                       | Resposta                                                                                                                                                |
 | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | O app coleta ou compartilha dados do usuário?  | Sim                                                                                                                                                     |
-| Todos os dados são criptografados em trânsito? | **Não** enquanto a API estiver em HTTP (P-029). Mude para **Sim** quando o domínio com HTTPS estiver no ar.                                             |
+| Todos os dados são criptografados em trânsito? | **Sim**: o app só fala com a API por HTTPS (`gestaoexcellence.com.br`).                                                                                 |
 | O usuário pode pedir a exclusão dos dados?     | Sim, pelo RH da empresa. Informe um link ou um e-mail para o pedido.                                                                                    |
 | Os dados são compartilhados com terceiros?     | Não. Os dados vão só para o servidor do sistema, contratado pela empresa empregadora. Os provedores de infraestrutura não contam como compartilhamento. |
 

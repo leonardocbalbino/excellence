@@ -276,7 +276,7 @@ function RunInProgress({ run }: { run: PatrolRun }) {
           </View>
           <Animated.Text
             key={done}
-            entering={ZoomIn.springify()}
+            entering={ZoomIn.duration(220)}
             style={{
               color: '#ffffff',
               fontSize: 34,
@@ -333,7 +333,7 @@ function RunInProgress({ run }: { run: PatrolRun }) {
             >
               <View style={[styles.row, { flex: 1, justifyContent: 'flex-start', gap: 10 }]}>
                 {checked ? (
-                  <Animated.View entering={ZoomIn.springify().damping(10)}>
+                  <Animated.View entering={ZoomIn.duration(220)}>
                     <Ionicons name="checkmark-circle" size={26} color={c.success} />
                   </Animated.View>
                 ) : isQueued ? (

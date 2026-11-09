@@ -203,7 +203,7 @@ export default function ClockScreen() {
           return (
             <Animated.View
               key={entry.id}
-              entering={FadeInRight.delay(index * 70).springify()}
+              entering={FadeInRight.delay(Math.min(index, 6) * 40).duration(220)}
               style={[styles.row, { justifyContent: 'flex-start', gap: 12 }]}
             >
               <Timeline
@@ -231,7 +231,7 @@ export default function ClockScreen() {
         {queue.map((item, index) => (
           <Animated.View
             key={item.id}
-            entering={FadeInDown.springify()}
+            entering={FadeInDown.duration(220)}
             style={[styles.row, { justifyContent: 'flex-start', gap: 12 }]}
           >
             <Timeline

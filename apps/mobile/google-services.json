@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "998491214715",
+    "project_id": "excellence-be1d8",
+    "storage_bucket": "excellence-be1d8.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:998491214715:android:410015012dc9308c94e3de",
+        "android_client_info": {
+          "package_name": "gestao.excellence"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCnp2hxE7qq4hrmlAER8EA1A6rKli8E7qs"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

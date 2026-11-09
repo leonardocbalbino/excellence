@@ -11,9 +11,12 @@ expo-env.d.ts
 *.mobileprovision
 .env.local
 
-# Chave da conta de serviço da Google Play (a mesma do Cartão Colaborativa): segredo, nunca commitar
+# Chave da conta de serviço da Google Play: segredo, nunca commitar
 google-play-service-account.json
 *-play-*.json
+# Chave do Firebase (FCM V1) enviada ao EAS para o push: segredo, nunca commitar
+fcm-service-account.json
+*firebase-adminsdk*.json
 # Keystore e credenciais locais do EAS, e pacotes gerados
 *.keystore
 credentials.json

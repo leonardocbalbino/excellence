@@ -1,5 +1,5 @@
 import * as ImagePicker from 'expo-image-picker';
-import { Alert } from 'react-native';
+import { Alert, Keyboard } from 'react-native';
 import type { LocalFile } from './device';
 
 const ACCEPTED = ['image/jpeg', 'image/png', 'image/webp'];
@@ -24,13 +24,23 @@ export async function pickImage(
     ...(square ? { aspect: [1, 1] as [number, number] } : {}),
     quality: 0.7,
   };
-  const result =
-    source === 'camera'
-      ? await ImagePicker.launchCameraAsync({
-          ...options,
-          ...(front ? { cameraType: ImagePicker.CameraType.front } : {}),
-        })
-      : await ImagePicker.launchImageLibraryAsync(options);
+  let result: ImagePicker.ImagePickerResult;
+  try {
+    result =
+      source === 'camera'
+        ? await ImagePicker.launchCameraAsync({
+            ...options,
+            ...(front ? { cameraType: ImagePicker.CameraType.front } : {}),
+          })
+        : await ImagePicker.launchImageLibraryAsync(options);
+  } catch (error) {
+    // Antes a falha sumia em silêncio e parecia que o botão não fazia nada.
+    Alert.alert(
+      source === 'camera' ? 'Não foi possível abrir a câmera' : 'Não foi possível abrir a galeria',
+      error instanceof Error ? error.message : undefined,
+    );
+    return null;
+  }
   const asset = result.canceled ? null : result.assets[0];
   if (!asset) return null;
   // Com compressão, o sistema entrega JPEG; outros tipos (HEIC) vão como JPEG também.
@@ -44,10 +54,19 @@ export function chooseImageSource(
   onPick: (source: 'camera' | 'library') => void,
   extra: { text: string; style?: 'destructive'; onPress: () => void }[] = [],
 ): void {
-  Alert.alert('Foto', undefined, [
-    { text: 'Tirar foto', onPress: () => onPick('camera') },
-    { text: 'Escolher da galeria', onPress: () => onPick('library') },
-    ...extra,
-    { text: 'Cancelar', style: 'cancel' },
-  ]);
+  // Teclado aberto (ex.: depois de digitar a descrição) atrapalha a abertura do seletor.
+  Keyboard.dismiss();
+  // No Android, o alerta mostra no máximo 3 botões: o "Cancelar" pode ficar de fora, então
+  // tocar fora do alerta também fecha.
+  Alert.alert(
+    'Foto',
+    undefined,
+    [
+      { text: 'Tirar foto', onPress: () => onPick('camera') },
+      { text: 'Escolher da galeria', onPress: () => onPick('library') },
+      ...extra,
+      { text: 'Cancelar', style: 'cancel' },
+    ],
+    { cancelable: true },
+  );
 }

@@ -119,7 +119,7 @@ export default function LoginScreen() {
           }}
         >
           <View style={[styles.heroBubble, { top: -70, right: -50 }]} />
-          <Animated.View entering={ZoomIn.springify().damping(12)} style={{ alignItems: 'center' }}>
+          <Animated.View entering={ZoomIn.duration(220)} style={{ alignItems: 'center' }}>
             <Image
               source={require('../assets/logo.png')}
               accessibilityLabel="Excellence"
@@ -127,7 +127,7 @@ export default function LoginScreen() {
               style={{ width: 220, height: 150 }}
             />
           </Animated.View>
-          <Animated.View entering={FadeInUp.delay(120).springify()}>
+          <Animated.View entering={FadeInUp.delay(120).duration(220)}>
             <Text style={{ color: BRAND.gold, fontSize: 17, marginTop: 4, textAlign: 'center' }}>
               Ponto, rondas e benefícios na palma da mão.
             </Text>
@@ -135,7 +135,7 @@ export default function LoginScreen() {
         </LinearGradient>
 
         <Animated.View
-          entering={FadeInDown.delay(200).springify().damping(18)}
+          entering={FadeInDown.delay(200).duration(220)}
           style={{
             marginTop: -48,
             paddingHorizontal: 18,

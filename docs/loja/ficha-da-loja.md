@@ -54,7 +54,7 @@ Dúvidas sobre o seu acesso? Fale com o RH da sua empresa.
 | Item                | Tamanho             | Origem                                                                         |
 | ------------------- | ------------------- | ------------------------------------------------------------------------------ |
 | Ícone               | 512×512 PNG         | `apps/web/public/icon-512.png`                                                 |
-| Imagem de destaque  | 1024×500 PNG/JPG    | a criar: fundo verde da marca com o nome e um celular com a tela Ponto         |
+| Imagem de destaque  | 1024×500 PNG/JPG    | a criar: fundo preto com a logo dourada e um celular com a tela Ponto          |
 | Capturas de celular | 2 a 8, 16:9 ou 9:16 | do app em produção: Início, Ponto, Rondas (leitor), Benefícios, Falar com o RH |
 
 As capturas devem usar a conta de teste, com nomes e dados fictícios. Nunca use dados de

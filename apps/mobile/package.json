@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "doctor": "expo-doctor",
     "build:android": "eas-cli build --platform android --profile production",
-    "submit:android": "eas-cli submit --platform android --profile production --latest"
+    "submit:android": "eas-cli submit --platform android --profile production --latest",
+    "submit:android:internal": "eas-cli submit --platform android --profile internal --latest"
   },
   "dependencies": {
     "@excellence/shared": "workspace:*",
