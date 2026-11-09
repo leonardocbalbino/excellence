@@ -1,5 +1,8 @@
 import type { ExpoConfig } from 'expo/config';
 
+// Lido pelo Node na hora do build (o tsconfig do app não traz os tipos do Node).
+const { existsSync } = require('fs') as { existsSync: (path: string) => boolean };
+
 /**
  * App do funcionário (ADR 0019, ADR 0022).
  *
@@ -43,7 +46,13 @@ const config: ExpoConfig = {
     },
   },
   android: {
-    package: 'br.com.excellence.app',
+    // Nome registrado no Play Console (br.com.excellence.app já pertence a outro desenvolvedor).
+    package: 'gestao.excellence',
+    // Firebase (push no Android): baixado do console do Firebase. Não é segredo e vai no git;
+    // sem ele o app funciona, mas não recebe notificações.
+    ...(existsSync('./google-services.json')
+      ? { googleServicesFile: './google-services.json' }
+      : {}),
     // Sem backup automático do Android: tokens e fila offline não vão para a nuvem.
     allowBackup: false,
     adaptiveIcon: {
@@ -106,7 +115,15 @@ const config: ExpoConfig = {
     [
       'expo-build-properties',
       // Android também bloqueia HTTP por padrão (mesmo motivo do iOS acima).
-      { android: { usesCleartextTraffic: apiUrl.startsWith('http://') } },
+      // R8 na versão de loja: remove código e recursos não usados e ofusca o restante (app
+      // menor e mais rápido; a Play aponta "otimização de código DEX baixa" sem ele).
+      {
+        android: {
+          usesCleartextTraffic: apiUrl.startsWith('http://'),
+          enableMinifyInReleaseBuilds: true,
+          enableShrinkResourcesInReleaseBuilds: true,
+        },
+      },
     ],
   ],
   experiments: { typedRoutes: true },

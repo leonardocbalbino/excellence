@@ -88,7 +88,7 @@ export function ClockButton({
           {state === 'busy' ? (
             <ActivityIndicator color={foreground} size="large" />
           ) : state === 'success' ? (
-            <Animated.View entering={ZoomIn.springify().damping(10)}>
+            <Animated.View entering={ZoomIn.duration(220)}>
               <Ionicons name="checkmark-circle" size={76} color={foreground} />
             </Animated.View>
           ) : (

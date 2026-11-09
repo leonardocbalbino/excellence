@@ -95,9 +95,20 @@ export function useColors(): Colors {
 
 // ─── Toque com mola e vibração ──────────────────────────────────────────────────────
 
-const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
+/**
+ * Entradas leves: transições curtas por tempo, sem mola. A mola recalcula a física a cada
+ * quadro e, com vários cartões na tela, pesa em aparelhos simples. O Reanimated já respeita
+ * a opção "reduzir movimento" do sistema.
+ */
+export const enter = {
+  fade: (delay = 0) => FadeIn.duration(180).delay(delay),
+  up: (delay = 0) => FadeInDown.duration(220).delay(delay),
+};
 
-/** Área tocável que encolhe de leve ao pressionar e vibra (toque curto). */
+/**
+ * Área tocável com resposta ao toque (leve redução e vibração curta). O efeito vem do estado
+ * "pressionado" do próprio Pressable: nenhuma animação por botão, o que mantém listas leves.
+ */
 export function Touchable({
   children,
   style,
@@ -111,27 +122,20 @@ export function Touchable({
   haptic?: boolean;
   scaleTo?: number;
 }) {
-  const scale = useSharedValue(1);
-  const animated = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
   return (
-    <AnimatedPressable
+    <Pressable
       {...props}
-      onPressIn={(e) => {
-        scale.value = withSpring(scaleTo, { damping: 18, stiffness: 400 });
-        props.onPressIn?.(e);
-      }}
-      onPressOut={(e) => {
-        scale.value = withSpring(1, { damping: 14, stiffness: 300 });
-        props.onPressOut?.(e);
-      }}
       onPress={(e) => {
         if (haptic) void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         onPress?.(e);
       }}
-      style={[style, animated]}
+      style={({ pressed }) => [
+        style,
+        pressed ? { transform: [{ scale: scaleTo }], opacity: 0.85 } : null,
+      ]}
     >
       {children}
-    </AnimatedPressable>
+    </Pressable>
   );
 }
 
@@ -166,7 +170,7 @@ export function Screen({
   const c = useColors();
   const header =
     title || back ? (
-      <Animated.View entering={FadeIn.duration(250)} style={{ gap: 2, marginBottom: 4 }}>
+      <Animated.View entering={enter.fade()} style={{ gap: 2, marginBottom: 4 }}>
         {back ? (
           <Touchable
             accessibilityRole="button"
@@ -194,6 +198,10 @@ export function Screen({
         <ScrollView
           contentContainerStyle={styles.grow}
           showsVerticalScrollIndicator={false}
+          // Com o teclado aberto, o toque num botão (ex.: "Adicionar foto") vale na primeira
+          // vez, em vez de só fechar o teclado.
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
           refreshControl={
             onRefresh ? (
               <RefreshControl
@@ -227,9 +235,8 @@ export function Card({
   const c = useColors();
   return (
     <Animated.View
-      entering={FadeInDown.delay(Math.min(index, 8) * 60)
-        .springify()
-        .damping(18)}
+      // Só os primeiros cartões da lista entram animados; os demais aparecem direto.
+      entering={index < 6 ? enter.up(index * 40) : undefined}
       style={[styles.card, { backgroundColor: c.card, borderColor: c.border }, style]}
     >
       {children}
@@ -241,7 +248,7 @@ export function Card({
 export function Hero({ children, style }: { children: ReactNode; style?: ViewStyle }) {
   const c = useColors();
   return (
-    <Animated.View entering={FadeInDown.springify().damping(16)}>
+    <Animated.View entering={enter.up()}>
       <LinearGradient
         colors={c.gradient}
         start={{ x: 0, y: 0 }}
@@ -422,7 +429,7 @@ export function Banner({
   }[tone];
   return (
     <Animated.View
-      entering={FadeInDown.springify().damping(18)}
+      entering={enter.fade()}
       accessibilityRole="alert"
       style={[styles.banner, styles.row, { backgroundColor: palette.bg, alignItems: 'flex-start' }]}
     >
@@ -561,7 +568,7 @@ export function EmptyState({
 }) {
   return (
     <Animated.View
-      entering={FadeIn.duration(300)}
+      entering={enter.fade()}
       style={{ alignItems: 'center', gap: 10, paddingVertical: 28, paddingHorizontal: 16 }}
     >
       <IconCircle name={icon} size={64} />

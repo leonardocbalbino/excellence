@@ -104,7 +104,7 @@ export function Avatar({
       }}
     >
       {avatar.data ? (
-        <Animated.View entering={ZoomIn.springify()}>
+        <Animated.View entering={ZoomIn.duration(220)}>
           <Image
             source={{ uri: avatar.data.url }}
             style={{ width: size, height: size }}

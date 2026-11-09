@@ -2,7 +2,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import type { Tabs } from 'expo-router';
 import type { ComponentProps } from 'react';
 import { Text, View } from 'react-native';
-import Animated, { LinearTransition, ZoomIn } from 'react-native-reanimated';
+import Animated, { ZoomIn } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { type IconName, Touchable, useColors } from './ui';
 
@@ -60,11 +60,7 @@ export function TabBar({ state, navigation, items }: TabBarProps & { items: read
           if (!route) return null;
           const focused = current === item.name;
           return (
-            <Animated.View
-              key={item.name}
-              layout={LinearTransition.springify().damping(18)}
-              style={{ flex: focused ? 2.2 : 1 }}
-            >
+            <Animated.View key={item.name} style={{ flex: focused ? 2.2 : 1 }}>
               <Touchable
                 accessibilityRole="tab"
                 accessibilityLabel={item.label}
@@ -118,7 +114,7 @@ export function TabBar({ state, navigation, items }: TabBarProps & { items: read
                 </View>
                 {focused ? (
                   <Animated.Text
-                    entering={ZoomIn.springify().damping(16)}
+                    entering={ZoomIn.duration(220)}
                     numberOfLines={1}
                     style={{ color: c.primaryForeground, fontWeight: '700', fontSize: 14 }}
                   >

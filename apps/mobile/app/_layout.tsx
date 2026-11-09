@@ -183,7 +183,7 @@ function LockScreen({
             ]}
           />
           <Animated.View
-            entering={ZoomIn.springify().damping(12)}
+            entering={ZoomIn.duration(220)}
             style={{
               width: 120,
               height: 120,

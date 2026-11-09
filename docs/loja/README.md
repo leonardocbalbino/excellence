@@ -1,8 +1,11 @@
 # Publicar o app na Google Play
 
-O app sai pela **mesma conta de desenvolvedor da Google Play do Cartão Colaborativa**. A conta
-de serviço que o Cartão já usa para enviar versões pelo EAS serve também para o Excellence:
-falta só dar a ela acesso ao app novo.
+O app sai pela **conta de desenvolvedor própria da empresa** (conta de organização, verificada
+com D-U-N-S). Por ser conta de organização, não vale a regra do teste fechado com 12
+testadores por 14 dias: a produção é liberada depois da revisão da Google.
+
+A Play só aceita **AAB** (Android App Bundle), não APK. O APK do perfil `preview` serve só
+para instalar à mão em aparelhos de teste.
 
 Nesta pasta:
 
@@ -15,12 +18,13 @@ Nesta pasta:
 
 ## O que já está pronto no app
 
-- Pacote `br.com.excellence.app`, versão `1.0.0`. O `versionCode` é controlado pelo EAS e
+- Pacote `gestao.excellence`, versão `1.0.0`. O `versionCode` é controlado pelo EAS e
   sobe sozinho a cada build de produção.
 - Perfil `production` no `eas.json`: gera o AAB (`app-bundle`) apontando para a API de
   produção.
-- `eas submit` configurado para a faixa **teste interno**, como **rascunho**. Nenhuma versão
-  vai ao público sem você promover no Console.
+- `eas submit` (perfil `production`) envia direto para a faixa **produção**: a versão vai
+  para a revisão da Google e, aprovada, é liberada para todos. O perfil `internal` envia ao
+  **teste interno** como rascunho, para testar antes.
 - Chave de assinatura (keystore) gerada e guardada pelo EAS desde a primeira build.
 - Permissões só do que o app usa: câmera, localização, biometria, notificações e vibração.
   - Microfone, armazenamento e mídia estão bloqueados. Assim a revisão não pede a declaração
@@ -30,36 +34,31 @@ Nesta pasta:
 
 ## Passo a passo
 
-### 1. Chave da conta de serviço (uma vez)
+### 1. Criar o app no Play Console
 
-Copie a chave do Cartão Colaborativa para o app. O arquivo está no `.gitignore`: **não
-commite**.
-
-```powershell
-Copy-Item "C:\Users\leona\Projetos\cartao-colaborativa-monorepo\colaborativa-monorepo\apps\mobile\cartao-colaborativa-play-65b4114437a5.json" `
-  "C:\Users\leona\Projetos\excellence\apps\mobile\google-play-service-account.json"
-```
-
-### 2. Criar o app no Play Console
-
-1. Abra o Play Console da conta do Cartão Colaborativa e clique em **Criar app**.
+1. Abra o Play Console da conta da empresa e clique em **Criar app**.
 2. Preencha:
-   - **Nome:** Excellence
+   - **Nome:** Excellence: Ponto e Rondas
    - **Idioma padrão:** Português (Brasil)
    - **Tipo:** App
    - **Gratuito**
 3. Aceite as declarações.
 
-### 3. Dar acesso à conta de serviço
+### 2. Conta de serviço para o EAS enviar versões (uma vez)
 
-1. Abra **Usuários e permissões**.
-2. Escolha a conta de serviço que o Cartão já usa (o e-mail `…@…iam.gserviceaccount.com`).
-3. Em **Permissões do app**, adicione o Excellence com permissão para gerenciar versões de
-   teste e de produção.
+1. No [Google Cloud Console](https://console.cloud.google.com/), crie (ou escolha) um projeto
+   e ative a **Google Play Android Developer API**.
+2. Em **IAM e administrador › Contas de serviço**, crie uma conta de serviço (sem papel) e,
+   na aba **Chaves**, crie uma chave **JSON**.
+3. Salve o arquivo como `apps/mobile/google-play-service-account.json`. Ele está no
+   `.gitignore`: **não commite**.
+4. No Play Console, abra **Usuários e permissões › Convidar novos usuários**, informe o e-mail
+   da conta de serviço (`…@….iam.gserviceaccount.com`) e, em **Permissões do app**, adicione o
+   Excellence com permissão para lançar versões em teste e em produção.
 
-Sem isso, o `eas submit` responde "permissão negada".
+Sem o passo 4, o `eas submit` responde "permissão negada".
 
-### 4. Gerar o AAB
+### 3. Gerar o AAB
 
 Na pasta `apps/mobile`:
 
@@ -67,7 +66,7 @@ Na pasta `apps/mobile`:
 npx eas-cli@latest build --platform android --profile production
 ```
 
-### 5. Enviar o primeiro AAB à mão
+### 4. Enviar o primeiro AAB à mão
 
 A Google não aceita o primeiro envio de um app novo pela API. Ele é feito uma vez, à mão:
 
@@ -75,17 +74,17 @@ A Google não aceita o primeiro envio de um app novo pela API. Ele é feito uma 
 2. No Console, abra **Testar e lançar › Teste interno › Criar nova versão** e envie o arquivo.
 3. Adicione os testadores pelo e-mail da conta Google de cada um.
 
-### 6. Próximas versões pelo EAS
+### 5. Próximas versões pelo EAS
 
 ```powershell
 npx eas-cli@latest build --platform android --profile production
 npx eas-cli@latest submit --platform android --profile production --latest
 ```
 
-A versão chega ao teste interno como rascunho. Para publicar, abra a versão no Console e
-promova para teste fechado ou para produção.
+A versão vai direto para a produção (revisão da Google e, aprovada, liberada para todos).
+Para testar antes no teste interno, envie com `--profile internal` e promova no Console.
 
-### 7. Conteúdo do app (obrigatório antes de produção)
+### 6. Conteúdo do app (obrigatório antes de produção)
 
 Em **Política › Conteúdo do app**:
 
@@ -103,7 +102,7 @@ Em **Política › Conteúdo do app**:
 | Saúde                    | Nenhum                                                                                                                                                                                                                                                                                            |
 | Permissão de localização | Só em primeiro plano. O formulário de localização em segundo plano não se aplica.                                                                                                                                                                                                                 |
 
-### 8. Ficha da loja
+### 7. Ficha da loja
 
 Preencha com os textos de `ficha-da-loja.md`. Imagens obrigatórias:
 
@@ -113,12 +112,10 @@ Preencha com os textos de `ficha-da-loja.md`. Imagens obrigatórias:
 
 ## Pontos de atenção
 
-- **Teste fechado antes da produção:** contas pessoais de desenvolvedor criadas depois de
-  novembro de 2023 precisam de um teste fechado com 12 testadores por 14 dias antes de
-  liberar a produção. Se a conta do Cartão Colaborativa for de **organização**, essa regra não
-  vale. Confira em **Configurações › Detalhes da conta**.
+- **Primeira revisão:** app novo costuma levar de alguns dias a uma semana na primeira
+  revisão. As seguintes são mais rápidas.
 - **Nome do desenvolvedor:** na loja, o Excellence aparece com o nome de desenvolvedor da conta
-  do Cartão Colaborativa.
+  da empresa.
 - **Push:** a chave da Play serve só para publicar, não para entregar notificações. O push
   precisa de um projeto no Firebase e da chave de conta de serviço do FCM v1, enviada com:
 
@@ -129,7 +126,5 @@ Preencha com os textos de `ficha-da-loja.md`. Imagens obrigatórias:
   Escolha "Google Service Account Key for Push Notifications (FCM V1)". Sem essa chave, o app
   funciona, mas não recebe notificações.
 
-- **HTTPS (P-029):** a API ainda é HTTP. A Play aceita, mas o formulário "Segurança dos dados"
-  pergunta se os dados são criptografados em trânsito, e hoje a resposta é **não**. Com o
-  domínio e o certificado, troque a resposta e o endereço da API (`app.config.ts` e
-  `eas.json`).
+- **HTTPS:** a API de produção é `https://gestaoexcellence.com.br/api/v1`. No formulário
+  "Segurança dos dados", responda que os dados são **criptografados em trânsito**.

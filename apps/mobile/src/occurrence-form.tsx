@@ -80,7 +80,7 @@ export function OccurrenceForm({ run }: { run: PatrolRun }) {
   }
 
   return (
-    <Animated.View entering={FadeInDown.springify().damping(18)}>
+    <Animated.View entering={FadeInDown.duration(220)}>
       <Card>
         <Title style={{ fontSize: 18 }}>Nova ocorrência</Title>
         <Label tone="muted">Onde foi?</Label>

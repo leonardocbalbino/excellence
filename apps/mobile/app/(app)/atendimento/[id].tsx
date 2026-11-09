@@ -58,7 +58,7 @@ function Bubble({
   };
   return (
     <Animated.View
-      entering={FadeInUp.springify().damping(18)}
+      entering={FadeInUp.duration(220)}
       style={{ alignItems: mine ? 'flex-end' : 'flex-start' }}
     >
       <View
