@@ -1,3 +1,11 @@
+import {
+  CLOCK_BLOCK_MESSAGES,
+  clockBlock,
+  nextPunch,
+  PUNCH_ACTIONS,
+  punchLabel,
+} from '@excellence/shared';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { useQuery } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
@@ -8,7 +16,7 @@ import { ClockButton, type ClockButtonState } from '@/clock-button';
 import { useClock } from '@/clock';
 import { localTime, todayIso } from '@/format';
 import { offlineQueue, useOfflineQueue } from '@/offline-queue';
-import { todayEntriesKey } from '@/query-keys';
+import { clockDayKey, todayEntriesKey } from '@/query-keys';
 import { errorMessage, useApi, useSession } from '@/services';
 import {
   Banner,
@@ -58,6 +66,9 @@ export default function ClockScreen() {
     queryKey: [...todayEntriesKey, today],
     queryFn: () => api.time.mine(today, today),
   });
+  // Dia de trabalho: escala, marcações do dia (o turno que vira a meia-noite fica no dia em
+  // que começou) e as regras da empresa (almoço, folga).
+  const day = useQuery({ queryKey: clockDayKey, queryFn: () => api.time.myDay() });
   const session = useSession();
   const queue = useOfflineQueue(session.status === 'authenticated' ? session.user.id : null).filter(
     (i) => i.kind === 'clock',
@@ -75,8 +86,21 @@ export default function ClockScreen() {
   const usePhoto = photoRequired || withPhoto;
   const effective = (entries.data ?? []).filter((e) => e.kind !== 'disregard' && !e.disregarded);
   const pendingQueue = queue.filter((i) => i.status === 'pending');
-  const count = effective.length + pendingQueue.length;
-  const nextLabel = count % 2 === 0 ? 'Registrar entrada' : 'Registrar saída';
+  const breakPunches = day.data?.breakPunches ?? false;
+  const count = (day.data?.entries.length ?? effective.length) + pendingQueue.length;
+  const next = nextPunch(breakPunches, count) ?? (count % 2 === 1 ? 'exit' : 'entry');
+  const nextLabel = PUNCH_ACTIONS[next];
+  // Recalculado aqui (e não só o da API) para contar as marcações que estão na fila offline.
+  const blocked = day.data
+    ? clockBlock({
+        planned: day.data.planned,
+        count,
+        breakPunches,
+        blockOffDay: day.data.blockOffDay,
+      })
+    : null;
+  const shift = day.data?.planned.shift ?? null;
+  const returnAt = next === 'break_end' ? (day.data?.expectedBreakEnd ?? null) : null;
   const offline = session.status === 'authenticated' && session.offline;
 
   const submit = async () => {
@@ -111,8 +135,11 @@ export default function ClockScreen() {
     <Screen
       title="Ponto"
       subtitle={now.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}
-      refreshing={entries.isFetching}
-      onRefresh={() => void entries.refetch()}
+      refreshing={entries.isFetching || day.isFetching}
+      onRefresh={() => {
+        void entries.refetch();
+        void day.refetch();
+      }}
     >
       <Hero style={{ alignItems: 'center', gap: 6 }}>
         <Text
@@ -137,15 +164,37 @@ export default function ClockScreen() {
           {photoRequired ? <Chip tone="inverse" icon="camera" label="Foto exigida" /> : null}
           {offline ? <Chip tone="inverse" icon="cloud-offline" label="Sem conexão" /> : null}
         </View>
+        {shift ? (
+          <Label tone="inverse" style={{ opacity: 0.9, fontSize: 15, textAlign: 'center' }}>
+            Turno {shift.start}–{shift.end} ·{' '}
+            <Text style={{ fontWeight: '800', color: BRAND.goldLight }}>
+              {returnAt ? `Retorno previsto ${returnAt}` : `Saída prevista ${shift.end}`}
+            </Text>
+          </Label>
+        ) : null}
 
-        {usePhoto && !photo ? (
+        {blocked ? (
+          <View style={{ alignItems: 'center', gap: 8, paddingVertical: 18, paddingHorizontal: 8 }}>
+            <Ionicons
+              name={blocked === 'day_off' ? 'cafe-outline' : 'checkmark-done-circle-outline'}
+              size={56}
+              color={BRAND.gold}
+            />
+            <Text style={{ color: '#fff', fontSize: 20, fontWeight: '800' }}>
+              {blocked === 'day_off' ? 'Hoje é sua folga' : 'Jornada de hoje encerrada'}
+            </Text>
+            <Label tone="inverse" style={{ opacity: 0.85, textAlign: 'center' }}>
+              {CLOCK_BLOCK_MESSAGES[blocked]}
+            </Label>
+          </View>
+        ) : usePhoto && !photo ? (
           <View style={{ width: '100%', marginTop: 8 }}>
             <SelfieCapture onChange={setPhoto} />
           </View>
         ) : (
           <ClockButton label={nextLabel} state={state} onPress={() => void submit()} />
         )}
-        {usePhoto && photo ? (
+        {!blocked && usePhoto && photo ? (
           <Label tone="inverse" style={{ opacity: 0.85, fontSize: 13 }}>
             Foto pronta. Toque no botão para registrar.
           </Label>
@@ -157,7 +206,7 @@ export default function ClockScreen() {
 
       {message ? <Banner tone={message.tone}>{message.text}</Banner> : null}
 
-      {photoRequired ? null : (
+      {photoRequired || blocked ? null : (
         <Card>
           <View style={styles.row}>
             <View style={{ flex: 1 }}>
@@ -216,7 +265,7 @@ export default function ClockScreen() {
                   {entry.localTime}
                 </Label>
                 <Label tone="muted" style={{ fontSize: 13 }}>
-                  {index % 2 === 0 ? 'Entrada' : 'Saída'}
+                  {punchLabel(breakPunches, index)}
                 </Label>
               </View>
               <View style={{ alignItems: 'flex-end', gap: 4 }}>

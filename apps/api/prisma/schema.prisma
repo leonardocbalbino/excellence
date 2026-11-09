@@ -705,6 +705,10 @@ model ClockSettings {
   // Janela (minutos) após o fim de um turno que vira a meia-noite em que a marcação ainda
   // pertence ao dia de trabalho anterior (atribuição ao dia no espelho).
   overnightGraceMin Int                  @default(240) @map("overnight_grace_minutes") @db.SmallInt
+  // Marcar saída e retorno do almoço (4 marcações por dia). Desligado: entrada e saída.
+  breakPunches      Boolean              @default(false) @map("break_punches")
+  // Recusar a marcação que abriria a jornada num dia de folga da escala.
+  blockOffDay       Boolean              @default(true) @map("block_off_day")
   updatedAt         DateTime             @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   company Company @relation(fields: [companyId], references: [id])

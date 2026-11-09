@@ -16,20 +16,85 @@ const EMPLOYEE = {
   registrationNumber: '0004',
 };
 
+const CLOCK_SETTINGS = {
+  outsideGeofence: 'allow',
+  requireLocation: false,
+  requireSelfie: false,
+  overnightGraceMinutes: 240,
+  breakPunches: true,
+  blockOffDay: true,
+};
+
+const SHIFT = {
+  id: '01900000-0000-7000-8000-000000000901',
+  name: 'Diurno',
+  start: '07:00',
+  end: '19:00',
+  crossesMidnight: false,
+  breakMinutes: 60,
+  workMinutes: 660,
+};
+
+function workDay(overrides: Record<string, unknown> = {}) {
+  return {
+    workDate: '2026-11-09',
+    planned: {
+      date: '2026-11-09',
+      unassigned: false,
+      scheduleId: '01900000-0000-7000-8000-000000000902',
+      shift: SHIFT,
+      flexibleWeeklyMinutes: null,
+      holiday: null,
+    },
+    breakPunches: true,
+    blockOffDay: true,
+    entries: [{ localTime: '07:02', nextDay: false, offline: false }],
+    next: 'break_start',
+    blocked: null,
+    expectedExit: '19:00',
+    expectedBreakEnd: null,
+    ...overrides,
+  };
+}
+
+function clockHandlers(day: ReturnType<typeof workDay>) {
+  return [
+    ...sessionHandlers([], { hasEmployeeRecord: true }),
+    http.get(`${API}/clock-settings`, () => HttpResponse.json(CLOCK_SETTINGS)),
+    http.get(`${API}/me/time-entries`, () => HttpResponse.json([])),
+    http.get(`${API}/me/clock-day`, () => HttpResponse.json(day)),
+  ];
+}
+
 describe('Registrar ponto e espelho', () => {
-  it('o espelho fica dentro de "Registrar ponto", fora do menu', async () => {
+  it('com almoço ligado, a próxima marcação é a saída para almoço e mostra a saída prevista', async () => {
+    server.use(...clockHandlers(workDay()));
+    renderApp('/ponto');
+    expect(
+      await screen.findByRole('button', { name: 'Registrar saída para almoço' }),
+    ).toBeInTheDocument();
+    expect(screen.getByText('Saída prevista 19:00')).toBeInTheDocument();
+  });
+
+  it('na folga o ponto não abre', async () => {
     server.use(
-      ...sessionHandlers([], { hasEmployeeRecord: true }),
-      http.get(`${API}/clock-settings`, () =>
-        HttpResponse.json({
-          outsideGeofence: 'allow',
-          requireLocation: false,
-          requireSelfie: false,
-          overnightGraceMinutes: 240,
+      ...clockHandlers(
+        workDay({
+          planned: { ...workDay().planned, shift: null, scheduleId: null },
+          entries: [],
+          next: null,
+          blocked: 'day_off',
+          expectedExit: null,
         }),
       ),
-      http.get(`${API}/me/time-entries`, () => HttpResponse.json([])),
     );
+    renderApp('/ponto');
+    expect(await screen.findByText('Hoje é sua folga')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Registrar/ })).not.toBeInTheDocument();
+  });
+
+  it('o espelho fica dentro de "Registrar ponto", fora do menu', async () => {
+    server.use(...clockHandlers(workDay()));
     renderApp('/ponto');
     const link = await screen.findByRole('link', { name: 'Visualizar espelho de ponto' });
     expect(link).toHaveAttribute('href', '/ponto/espelho');

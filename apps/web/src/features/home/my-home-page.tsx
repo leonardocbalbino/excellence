@@ -1,4 +1,11 @@
-import type { MyAnnouncement, PlannedDay, TimeEntry } from '@excellence/shared';
+import {
+  type MyAnnouncement,
+  type PlannedDay,
+  PUNCH_ACTIONS,
+  PUNCH_LABELS,
+  punchSequence,
+  type TimeEntry,
+} from '@excellence/shared';
 import { useQuery } from '@tanstack/react-query';
 import {
   GiftIcon,
@@ -40,32 +47,22 @@ function useMinuteClock(): Date {
   return now;
 }
 
-const WITH_BREAK = ['Entrada', 'Início do intervalo', 'Fim do intervalo', 'Saída'];
-const WITHOUT_BREAK = ['Entrada', 'Saída'];
 const SHORT: Record<string, string> = {
-  'Início do intervalo': 'Intervalo',
-  'Fim do intervalo': 'Retorno',
+  [PUNCH_LABELS.break_start]: 'Almoço',
+  [PUNCH_LABELS.break_end]: 'Retorno',
 };
 
 /**
- * Rótulos das marcações do dia pela escala (com intervalo: 4; sem: 2). Marcações além do
- * previsto aparecem numeradas. É só orientação visual: o sistema não classifica marcações.
+ * Rótulos das marcações do dia pela configuração da empresa (com almoço: 4; sem: 2).
+ * Marcações além do previsto aparecem numeradas. O registro em si não tem tipo (ADR 0012).
  */
-function daySlots(planned: PlannedDay | undefined, entries: readonly TimeEntry[]) {
-  const base = (planned?.shift?.breakMinutes ?? 0) > 0 ? WITH_BREAK : WITHOUT_BREAK;
+function daySlots(breakPunches: boolean, entries: readonly TimeEntry[]) {
+  const base = punchSequence(breakPunches).map((kind) => PUNCH_LABELS[kind]);
   const total = Math.max(base.length, entries.length + (entries.length % 2));
   return Array.from({ length: total }, (_, i) => ({
     label: base[i] ?? `Marcação ${String(i + 1)}`,
     entry: entries[i] ?? null,
   }));
-}
-
-function nextActionLabel(slots: ReturnType<typeof daySlots>, count: number): string {
-  const next = slots[count]?.label;
-  if (!next || next.startsWith('Marcação')) {
-    return count % 2 === 0 ? 'Registrar entrada' : 'Registrar saída';
-  }
-  return `Registrar ${next.charAt(0).toLowerCase()}${next.slice(1)}`;
 }
 
 /** Início do funcionário: o ponto de hoje, a escala, os números do mês e os comunicados. */
@@ -82,6 +79,10 @@ export function MyHomePage() {
     queryFn: () => api.time.mine(today, today),
   });
   const employee = useQuery({ queryKey: ['me', 'employee'], queryFn: () => api.employees.mine() });
+  const day = useQuery({
+    queryKey: [...timeEntriesQueryKey, 'me', 'work-day'],
+    queryFn: () => api.time.myDay(),
+  });
   const planned = useQuery({
     queryKey: [...plannedQueryKey, 'me', 'home', today],
     queryFn: () => api.schedule.mine(today, addDaysIso(today, 13)),
@@ -101,8 +102,13 @@ export function MyHomePage() {
   const feed = useQuery({ queryKey: myFeedQueryKey, queryFn: () => api.announcements.feed() });
 
   const effective = (entries.data ?? []).filter((e) => e.kind !== 'disregard' && !e.disregarded);
-  const plannedToday = planned.data?.find((d) => d.date === today);
-  const slots = daySlots(plannedToday, effective);
+  const slots = daySlots(day.data?.breakPunches ?? false, effective);
+  const shift = day.data?.planned.shift ?? null;
+  const actionLabel = day.data?.blocked
+    ? day.data.blocked === 'day_off'
+      ? 'Hoje é sua folga'
+      : 'Jornada de hoje encerrada'
+    : PUNCH_ACTIONS[day.data?.next ?? (effective.length % 2 === 0 ? 'entry' : 'exit')];
   const time = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
   const date = formatLongToday(now);
   const monthName = now.toLocaleDateString('pt-BR', { month: 'long' });
@@ -141,8 +147,14 @@ export function MyHomePage() {
                   size="lg"
                   className="mt-5 w-full bg-card font-semibold text-primary hover:bg-card/90 md:w-auto"
                 >
-                  <Link to="/ponto">{nextActionLabel(slots, effective.length)}</Link>
+                  <Link to="/ponto">{actionLabel}</Link>
                 </Button>
+                {shift ? (
+                  <p className="mt-3 text-sm text-white/85">
+                    Turno {shift.start}–{shift.end} · Saída prevista{' '}
+                    <strong className="text-white">{shift.end}</strong>
+                  </p>
+                ) : null}
               </div>
 
               <div>

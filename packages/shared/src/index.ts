@@ -11,6 +11,7 @@ export * from './organization/organization.schemas.js';
 export * from './workforce/employees.schemas.js';
 export * from './scheduling/scheduling.schemas.js';
 export * from './time-tracking/time-tracking.schemas.js';
+export * from './time-tracking/clock-day.js';
 export * from './medical/medical-certificates.schemas.js';
 export * from './announcements/announcements.schemas.js';
 export * from './patrols/patrols.schemas.js';

@@ -6,6 +6,8 @@ import {
   adjustmentInputSchema,
   adjustmentListQuerySchema,
   adjustmentSchema,
+  type ClockDay,
+  clockDaySchema,
   type ClockReceipt,
   clockInputSchema,
   clockReceiptSchema,
@@ -80,6 +82,14 @@ export class MyTimeController {
   @ZodResponse(HttpStatus.OK, z.array(timeEntrySchema))
   mine(@ZodQuery(rangeQuery) query: Range, @Access() grant: AccessGrant): Promise<TimeEntry[]> {
     return this.time.mine(grant.userId, query.from, query.to);
+  }
+
+  @Get('clock-day')
+  @AnyAuthenticated()
+  @ApiOperation({ summary: 'Meu dia de trabalho: próxima marcação, saída prevista e folga' })
+  @ZodResponse(HttpStatus.OK, clockDaySchema)
+  clockDay(@Access() grant: AccessGrant): Promise<ClockDay> {
+    return this.time.clockDay(grant.userId);
   }
 
   @Get('timesheet')

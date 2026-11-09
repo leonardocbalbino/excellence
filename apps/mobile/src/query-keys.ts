@@ -1,6 +1,8 @@
 /** Chaves das consultas (compartilhadas entre as telas para reaproveitar o cache). */
 export const accessQueryKey = ['me', 'access'] as const;
 export const todayEntriesKey = ['me', 'time-entries', 'today'] as const;
+/** Dentro de todayEntriesKey: a marcação invalida as duas. */
+export const clockDayKey = [...todayEntriesKey, 'work-day'] as const;
 export const myPatrolsKey = ['me', 'patrols'] as const;
 export const feedKey = ['me', 'announcements'] as const;
 export const timesheetKey = ['me', 'timesheet'] as const;

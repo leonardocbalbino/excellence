@@ -1,8 +1,15 @@
 import { HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
 import {
+  CLOCK_BLOCK_MESSAGES,
+  type ClockDay,
   type ClockReceipt,
+  type ClockSettings,
+  clockBlock,
   type clockInputSchema,
   type DailyAttendance,
+  expectedBreakEnd,
+  nextPunch,
+  type PlannedDay,
   ProblemType,
   type TimeEntry,
   type Timesheet,
@@ -23,7 +30,7 @@ import { evaluateGeofence } from '../domain/geofence';
 import { OFFLINE_SOURCE, resolveOfflineTime } from '../domain/offline';
 import { verifyChain } from '../domain/hash-chain';
 import { attendanceStatus } from '../domain/attendance';
-import { buildTimesheetDays } from '../domain/timesheet';
+import { buildTimesheetDays, workDateOf } from '../domain/timesheet';
 import { fromZoned, toZoned } from '../domain/zoned-time';
 import { ClockSettingsService } from './clock-settings.service';
 import { contentOf, TimeEntryWriter } from './time-entry-writer';
@@ -150,6 +157,28 @@ export class TimeTrackingService {
       );
     }
 
+    // Folga e dia completo (P-030): pelo dia de trabalho do horário da marcação (sem conexão:
+    // o do aparelho; online: agora, já que o oficial é gravado pelo banco).
+    const day = await this.workDay(
+      employee,
+      grant.userId,
+      official.recordedAt ?? new Date(),
+      settings,
+    );
+    const blocked = clockBlock({
+      planned: day.planned,
+      count: day.entries.length,
+      breakPunches: settings.breakPunches,
+      blockOffDay: settings.blockOffDay,
+    });
+    if (blocked) {
+      throw fail(
+        blocked === 'day_off' ? ProblemType.ClockDayOff : ProblemType.ClockDayComplete,
+        HttpStatus.UNPROCESSABLE_ENTITY,
+        CLOCK_BLOCK_MESSAGES[blocked],
+      );
+    }
+
     const fence = evaluateGeofence(employee.unit, position);
     if (fence.status === 'outside' && settings.outsideGeofence === 'block') {
       throw fail(
@@ -243,6 +272,37 @@ export class TimeTrackingService {
       localTime: toZonedSeconds(row.recordedAt, timezone),
       timezone,
       hash: row.hash,
+    };
+  }
+
+  /** Meu dia de trabalho agora: escala, marcações, próxima marcação e saída prevista. */
+  async clockDay(userId: string): Promise<ClockDay> {
+    const employee = await this.ownEmployee(userId);
+    const settings = await this.settings.get();
+    const day = await this.workDay(employee, userId, new Date(), settings);
+    const count = day.entries.length;
+    const blocked = clockBlock({
+      planned: day.planned,
+      count,
+      breakPunches: settings.breakPunches,
+      blockOffDay: settings.blockOffDay,
+    });
+    return {
+      workDate: day.workDate,
+      planned: day.planned,
+      breakPunches: settings.breakPunches,
+      blockOffDay: settings.blockOffDay,
+      entries: day.entries,
+      next: blocked
+        ? null
+        : (nextPunch(settings.breakPunches, count) ?? (count % 2 === 1 ? 'exit' : 'entry')),
+      blocked,
+      expectedExit: day.planned.shift?.end ?? null,
+      expectedBreakEnd: expectedBreakEnd({
+        breakPunches: settings.breakPunches,
+        planned: day.planned,
+        breakStartTime: day.entries[1]?.localTime ?? null,
+      }),
     };
   }
 
@@ -472,6 +532,62 @@ export class TimeTrackingService {
         plannedMinutes: days.reduce((sum, d) => sum + (d.planned.shift?.workMinutes ?? 0), 0),
       },
     };
+  }
+
+  /**
+   * Dia de trabalho a que pertence o instante `at` (o turno que vira a meia-noite fica no dia
+   * em que começou, mesma regra do espelho) e as marcações efetivas desse dia.
+   */
+  private async workDay(
+    employee: { id: string; unit: { timezone: string | null } },
+    userId: string,
+    at: Date,
+    settings: ClockSettings,
+  ) {
+    const timezone = employee.unit.timezone ?? (await this.company.timezone());
+    const local = toZoned(at, timezone);
+    const planned = await this.assignments.mine(
+      userId,
+      addDays(local.date, -2),
+      addDays(local.date, 1),
+    );
+    const plannedByDate = new Map(planned.map((d) => [d.date, d]));
+    const grace = settings.overnightGraceMinutes;
+    const workDate = workDateOf(local, plannedByDate, grace);
+
+    const rows = await this.db.client.timeEntry.findMany({
+      where: {
+        employeeId: employee.id,
+        recordedAt: {
+          gte: fromZoned(workDate, '00:00', timezone),
+          lt: fromZoned(addDays(workDate, 2), '00:00', timezone),
+        },
+      },
+      orderBy: { recordedAt: 'asc' },
+      select: { id: true, kind: true, recordedAt: true, referencesEntryId: true, source: true },
+    });
+    const disregarded = new Set(
+      rows.filter((r) => r.kind === 'disregard').map((r) => r.referencesEntryId),
+    );
+    const entries = rows
+      .filter((r) => r.kind !== 'disregard' && !disregarded.has(r.id))
+      .map((r) => ({ row: r, local: toZoned(r.recordedAt, timezone) }))
+      .filter(({ local: l }) => workDateOf(l, plannedByDate, grace) === workDate)
+      .map(({ row, local: l }) => ({
+        localTime: l.time,
+        nextDay: l.date !== workDate,
+        offline: row.source === OFFLINE_SOURCE,
+      }));
+
+    const unassigned: PlannedDay = {
+      date: workDate,
+      unassigned: true,
+      scheduleId: null,
+      shift: null,
+      flexibleWeeklyMinutes: null,
+      holiday: null,
+    };
+    return { workDate, planned: plannedByDate.get(workDate) ?? unassigned, entries };
   }
 
   private async listFor(
