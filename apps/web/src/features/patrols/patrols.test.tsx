@@ -46,6 +46,7 @@ function run(checked: number, overrides: Partial<PatrolRun> = {}): PatrolRun {
     required: POINTS.length,
     lateMinutes: 0,
     nextPoint: POINTS[checked] ?? null,
+    photos: [],
     ...overrides,
   };
 }
@@ -121,8 +122,42 @@ describe('Rondas: área pessoal', () => {
     expect(await screen.findByText('1 de 2 pontos')).toBeInTheDocument();
     expect(checkinBody).toMatchObject({ code: 'EXR1.codigo-do-portao' });
     expect(idempotencyKey).toMatch(/^[0-9a-f-]{36}$/);
-    // Encerrar faltando pontos exige o motivo.
-    expect(screen.getByRole('button', { name: 'Encerrar ronda' })).toBeDisabled();
+    // Concluir faltando pontos exige o motivo.
+    expect(screen.getByRole('button', { name: 'Concluir ronda' })).toBeDisabled();
+  });
+
+  it('o último ponto não encerra: quem fez conclui com comentário', async () => {
+    let finishBody: unknown;
+    let current: PatrolRun | null = run(1);
+    server.use(
+      ...sessionHandlers([], { hasEmployeeRecord: true, hasPatrolRoutes: true }),
+      http.get(`${API}/me/patrols`, () => HttpResponse.json({ ...MINE, current })),
+      http.post(`${API}/me/patrol-runs/:id/checkins`, () => {
+        current = run(2);
+        return HttpResponse.json(current, { status: 201 });
+      }),
+      http.post(`${API}/me/patrol-runs/:id/finish`, async ({ request }) => {
+        finishBody = await request.json();
+        const done = run(2, {
+          status: 'completed',
+          finishedAt: '2026-09-28T22:30:00.000Z',
+          finishNote: 'Tudo em ordem.',
+        });
+        current = null;
+        return HttpResponse.json(done, { status: 201 });
+      }),
+    );
+    const user = userEvent.setup();
+    renderApp('/rondas');
+
+    await user.type(await screen.findByLabelText('Código do ponto'), 'EXR1.codigo-do-galpao');
+    await user.click(screen.getByRole('button', { name: 'Registrar ponto' }));
+    expect(await screen.findByText('2 de 2 pontos')).toBeInTheDocument();
+
+    await user.type(screen.getByLabelText('Comentário (opcional)'), 'Tudo em ordem.');
+    await user.click(screen.getByRole('button', { name: 'Concluir ronda' }));
+    await screen.findByRole('button', { name: 'Iniciar e ler QR code' });
+    expect(finishBody).toEqual({ note: 'Tudo em ordem.' });
   });
 });
 

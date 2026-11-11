@@ -13,6 +13,8 @@ export const FILE_PURPOSES = {
   /** Foto de perfil do usuário (app do funcionário). */
   avatar: { contentTypes: ['image/jpeg', 'image/png', 'image/webp'], maxBytes: 5 * MB },
   patrol_occurrence: { contentTypes: IMAGES, maxBytes: 10 * MB },
+  /** Foto de presença na ronda (mostra que o funcionário esteve no local). */
+  patrol_photo: { contentTypes: IMAGES, maxBytes: 10 * MB },
   document: { contentTypes: ['application/pdf'], maxBytes: 20 * MB },
   conversation_attachment: { contentTypes: ['application/pdf', ...IMAGES], maxBytes: 10 * MB },
   spreadsheet_import: {

@@ -10,6 +10,7 @@ import { localTime } from '@/format';
 import { OccurrenceForm } from '@/occurrence-form';
 import { offlineQueue, type QueueItem, useOfflineQueue } from '@/offline-queue';
 import { myPatrolsKey } from '@/query-keys';
+import { RunPhotos } from '@/run-photos';
 import { errorMessage, isRetryable, useApi, useSession } from '@/services';
 import {
   Banner,
@@ -47,6 +48,8 @@ type CheckinItem = Extract<QueueItem, { kind: 'checkin' }>;
 export default function PatrolsScreen() {
   const api = useApi();
   const mine = useQuery({ queryKey: myPatrolsKey, queryFn: () => api.patrols.mine() });
+  // Última ronda concluída aqui: confirmação na lista de rotas.
+  const [concluded, setConcluded] = useState<PatrolRun | null>(null);
 
   return (
     <Screen
@@ -57,9 +60,18 @@ export default function PatrolsScreen() {
     >
       {mine.isError ? <Banner tone="warning">{errorMessage(mine.error)}</Banner> : null}
       {mine.data?.current ? (
-        <RunInProgress run={mine.data.current} />
+        <RunInProgress run={mine.data.current} onConcluded={setConcluded} />
       ) : (
-        <RouteList routes={mine.data?.routes ?? []} loading={mine.isPending} />
+        <>
+          {concluded ? (
+            <Banner tone="success">
+              {concluded.status === 'completed' ? 'Ronda concluída' : 'Ronda encerrada'}:{' '}
+              {concluded.route.name}
+              {concluded.finishedAt ? `, às ${localTime(concluded.finishedAt)}` : ''}.
+            </Banner>
+          ) : null}
+          <RouteList routes={mine.data?.routes ?? []} loading={mine.isPending} />
+        </>
       )}
     </Screen>
   );
@@ -159,7 +171,13 @@ function RouteList({ routes, loading }: { routes: MyPatrols['routes']; loading: 
   );
 }
 
-function RunInProgress({ run }: { run: PatrolRun }) {
+function RunInProgress({
+  run,
+  onConcluded,
+}: {
+  run: PatrolRun;
+  onConcluded: (run: PatrolRun) => void;
+}) {
   const api = useApi();
   const queryClient = useQueryClient();
   const c = useColors();
@@ -200,15 +218,15 @@ function RunInProgress({ run }: { run: PatrolRun }) {
       setRun(next);
       haptics.success();
       setFeedback({ tone: 'success', at: Date.now() });
+      // Último ponto: a ronda continua aberta para a foto, o comentário e o "Concluir".
+      const allDone = next.checked >= next.total;
+      if (allDone) setScanning(false);
       setMessage({
         tone: 'success',
-        text:
-          next.status === 'completed'
-            ? `Ronda concluída: ${String(next.total)} pontos.`
-            : `Ponto registrado. Próximo: ${next.nextPoint?.name ?? '—'}.`,
+        text: allDone
+          ? 'Todos os pontos lidos. Se quiser, tire uma foto ou escreva um comentário e toque em Concluir ronda.'
+          : `Ponto registrado. Próximo: ${next.nextPoint?.name ?? '—'}.`,
       });
-      if (next.status === 'completed')
-        await queryClient.invalidateQueries({ queryKey: myPatrolsKey });
     } catch (error) {
       if (isRetryable(error) && userId) {
         await offlineQueue.enqueue({
@@ -245,6 +263,7 @@ function RunInProgress({ run }: { run: PatrolRun }) {
       if (userId) await offlineQueue.flush(api, userId);
       const next = await api.patrols.finish(run.id, { note: note.trim() || null });
       haptics.success();
+      onConcluded(next);
       setRun(next);
       await queryClient.invalidateQueries({ queryKey: myPatrolsKey });
     } catch (error) {
@@ -376,11 +395,13 @@ function RunInProgress({ run }: { run: PatrolRun }) {
           ))}
       </Card>
 
+      <RunPhotos run={run} onRun={setRun} />
+
       <OccurrenceForm run={run} />
 
       <Animated.View entering={FadeInDown.delay(150)}>
         <Card>
-          <Title style={{ fontSize: 18 }}>Encerrar ronda</Title>
+          <Title style={{ fontSize: 18 }}>Concluir ronda</Title>
           {missing > 0 ? (
             <TextField
               label={`Faltam ${String(missing)} ponto(s). Explique o motivo`}
@@ -390,14 +411,23 @@ function RunInProgress({ run }: { run: PatrolRun }) {
               placeholder="Ex.: acesso ao galpão bloqueado."
             />
           ) : (
-            <Label tone="success" style={{ fontWeight: '700' }}>
-              {allRead
-                ? 'Todos os pontos foram lidos.'
-                : `Mínimo atingido (${String(done)} de ${String(run.total)}). Pode encerrar.`}
-            </Label>
+            <>
+              <Label tone="success" style={{ fontWeight: '700' }}>
+                {allRead
+                  ? 'Todos os pontos foram lidos.'
+                  : `Mínimo atingido (${String(done)} de ${String(run.total)}). Pode concluir.`}
+              </Label>
+              <TextField
+                label="Comentário (opcional)"
+                value={note}
+                onChangeText={setNote}
+                multiline
+                placeholder="Ex.: tudo em ordem; lâmpada da garagem queimada."
+              />
+            </>
           )}
           <Button
-            label="Encerrar ronda"
+            label="Concluir ronda"
             variant={missing > 0 ? 'outline' : 'primary'}
             icon="flag"
             onPress={() => void finish()}

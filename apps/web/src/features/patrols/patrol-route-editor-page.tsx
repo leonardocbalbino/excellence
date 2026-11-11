@@ -40,7 +40,9 @@ interface Draft {
   unitId: string;
   name: string;
   description: string;
-  expectedMinutes: string;
+  /** Tempo previsto em horas e minutos (a API guarda o total em minutos). */
+  expectedHours: string;
+  expectedMins: string;
   enforceOrder: boolean;
   /** Vazio = todos os pontos. */
   minPoints: string;
@@ -56,7 +58,8 @@ function toDraft(route: PatrolRoute | undefined, defaultUnit: string): Draft {
     unitId: route?.unit.id ?? defaultUnit,
     name: route?.name ?? '',
     description: route?.description ?? '',
-    expectedMinutes: String(route?.expectedMinutes ?? 30),
+    expectedHours: String(Math.floor((route?.expectedMinutes ?? 30) / 60)),
+    expectedMins: String((route?.expectedMinutes ?? 30) % 60),
     enforceOrder: route?.enforceOrder ?? false,
     minPoints: route?.minPoints ? String(route.minPoints) : '',
     isActive: route?.isActive ?? true,
@@ -72,7 +75,7 @@ function toInput(draft: Draft): PatrolRouteInput {
     unitId: draft.unitId,
     name: draft.name,
     description: draft.description.trim() || null,
-    expectedMinutes: Number(draft.expectedMinutes),
+    expectedMinutes: Number(draft.expectedHours || 0) * 60 + Number(draft.expectedMins || 0),
     enforceOrder: draft.enforceOrder,
     minPoints: draft.minPoints.trim() ? Number(draft.minPoints) : null,
     isActive: draft.isActive,
@@ -239,18 +242,37 @@ function RouteForm({ route, units }: { route: PatrolRoute | undefined; units: Na
             onChange={(e) => set({ description: e.target.value })}
           />
         </div>
-        <div className="grid gap-1.5">
-          <Label htmlFor="route-minutes">Tempo previsto (minutos)</Label>
-          <Input
-            id="route-minutes"
-            inputMode="numeric"
-            value={draft.expectedMinutes}
-            onChange={(e) => set({ expectedMinutes: e.target.value })}
-            aria-invalid={Boolean(errors.expectedMinutes)}
-          />
+        <fieldset className="grid gap-1.5">
+          <legend className="mb-1.5 text-sm font-medium">Tempo previsto</legend>
+          <div className="flex items-center gap-2">
+            <Input
+              id="route-hours"
+              inputMode="numeric"
+              maxLength={2}
+              className="w-20"
+              aria-label="Horas"
+              value={draft.expectedHours}
+              onChange={(e) => set({ expectedHours: e.target.value.replace(/D/g, '') })}
+              aria-invalid={Boolean(errors.expectedMinutes)}
+            />
+            <span className="text-sm text-muted-foreground">h</span>
+            <Input
+              id="route-minutes"
+              inputMode="numeric"
+              maxLength={2}
+              className="w-20"
+              aria-label="Minutos"
+              value={draft.expectedMins}
+              onChange={(e) => set({ expectedMins: e.target.value.replace(/D/g, '') })}
+              aria-invalid={Boolean(errors.expectedMinutes)}
+            />
+            <span className="text-sm text-muted-foreground">min</span>
+          </div>
           {fieldError('expectedMinutes')}
-          <p className="text-xs text-muted-foreground">Passou disso, a ronda aparece atrasada.</p>
-        </div>
+          <p className="text-xs text-muted-foreground">
+            De 5 minutos a 12 horas. Passou disso, a ronda aparece atrasada.
+          </p>
+        </fieldset>
         <div className="grid gap-1.5">
           <Label htmlFor="route-min-points">Pontos obrigatórios por ronda</Label>
           <Input
@@ -361,7 +383,8 @@ function RouteForm({ route, units }: { route: PatrolRoute | undefined; units: Na
           Horários de início
         </h2>
         <p className="text-sm text-muted-foreground">
-          No fuso do posto. Sem horários, a rota pode ser feita a qualquer momento.
+          Adicione quantos horários quiser (ex.: 09:00, 16:00, 23:00 e 02:00), um de cada vez. No
+          fuso do posto. Sem horários, a rota pode ser feita a qualquer momento.
         </p>
         {fieldError('startTimes')}
         <ul className="mt-3 flex flex-wrap gap-2" aria-label="Horários">
@@ -387,6 +410,12 @@ function RouteForm({ route, units }: { route: PatrolRoute | undefined; units: Na
               type="time"
               value={time}
               onChange={(e) => setTime(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  addTime();
+                }
+              }}
               className="w-36"
             />
           </div>

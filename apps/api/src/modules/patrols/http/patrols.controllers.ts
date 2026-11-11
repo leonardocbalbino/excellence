@@ -1,6 +1,8 @@
 import { Controller, Delete, Get, HttpCode, HttpStatus, Post, Put, Req } from '@nestjs/common';
 import { ApiBearerAuth, ApiHeader, ApiOperation, ApiTags } from '@nestjs/swagger';
 import {
+  type DownloadLink,
+  downloadLinkSchema,
   includeInactiveQuerySchema,
   type MyPatrols,
   myPatrolsSchema,
@@ -16,6 +18,7 @@ import {
   patrolRouteSchema,
   type PatrolRun,
   patrolRunFinishSchema,
+  patrolRunPhotoInputSchema,
   patrolRunSchema,
   patrolRunStartSchema,
 } from '@excellence/shared';
@@ -203,7 +206,9 @@ export class MyPatrolsController {
 
   @Post('patrol-runs/:id/finish')
   @AnyAuthenticated()
-  @ApiOperation({ summary: 'Encerra a ronda; faltando pontos, exige o motivo' })
+  @ApiOperation({
+    summary: 'Conclui a ronda (comentário opcional; faltando pontos, exige o motivo)',
+  })
   @ZodResponse(HttpStatus.CREATED, patrolRunSchema)
   finish(
     @ZodParam('id', idParam) id: string,
@@ -211,6 +216,18 @@ export class MyPatrolsController {
     @Access() grant: AccessGrant,
   ): Promise<PatrolRun> {
     return this.runs.finish(id, body.note, grant);
+  }
+
+  @Post('patrol-runs/:id/photos')
+  @AnyAuthenticated()
+  @ApiOperation({ summary: 'Foto de presença na ronda em andamento (não é ocorrência)' })
+  @ZodResponse(HttpStatus.CREATED, patrolRunSchema)
+  addPhoto(
+    @ZodParam('id', idParam) id: string,
+    @ZodBody(patrolRunPhotoInputSchema) body: z.output<typeof patrolRunPhotoInputSchema>,
+    @Access() grant: AccessGrant,
+  ): Promise<PatrolRun> {
+    return this.runs.addPhoto(id, body, grant);
   }
 }
 
@@ -236,5 +253,17 @@ export class PatrolRunsController {
   @ZodResponse(HttpStatus.OK, patrolRunSchema)
   get(@ZodParam('id', idParam) id: string, @Access() grant: AccessGrant): Promise<PatrolRun> {
     return this.runs.get(id, grant);
+  }
+
+  @Get(':id/photos/:photoId')
+  @RequirePermission('patrols:read')
+  @ApiOperation({ summary: 'Link para ver uma foto de presença da ronda' })
+  @ZodResponse(HttpStatus.OK, downloadLinkSchema)
+  photo(
+    @ZodParam('id', idParam) id: string,
+    @ZodParam('photoId', idParam) photoId: string,
+    @Access() grant: AccessGrant,
+  ): Promise<DownloadLink> {
+    return this.runs.photo(id, photoId, grant);
   }
 }

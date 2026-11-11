@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
-import { CheckCircle2Icon, ChevronLeftIcon, CircleIcon } from 'lucide-react';
+import type { PatrolRun } from '@excellence/shared';
+import { CameraIcon, CheckCircle2Icon, ChevronLeftIcon, CircleIcon } from 'lucide-react';
 import { Link, useParams } from 'react-router';
 import { Alert } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
@@ -7,7 +8,7 @@ import { Skeleton } from '@/components/ui/feedback';
 import { errorMessage, useApi } from '@/lib/services';
 import { CHECKIN_LOCATION, localTime, patrolRunQueryKey, runStatusText } from './labels';
 
-/** Detalhe de uma ronda: quem fez, quando e o check-in de cada ponto. */
+/** Detalhe de uma ronda: quem fez, quando, o check-in de cada ponto e as fotos no local. */
 export function PatrolRunPage() {
   const api = useApi();
   const { id = '' } = useParams();
@@ -74,8 +75,11 @@ export function PatrolRunPage() {
       </dl>
 
       {data.finishNote ? (
-        <Alert variant="warning">
-          <strong>Motivo do encerramento:</strong> {data.finishNote}
+        <Alert variant={data.status === 'incomplete' ? 'warning' : 'default'}>
+          <strong>
+            {data.status === 'incomplete' ? 'Motivo do encerramento:' : 'Comentário de quem fez:'}
+          </strong>{' '}
+          {data.finishNote}
         </Alert>
       ) : null}
 
@@ -115,6 +119,55 @@ export function PatrolRunPage() {
           ))}
         </ol>
       </section>
+
+      {data.photos.length > 0 ? (
+        <section className="rounded-2xl border bg-card p-5" aria-labelledby="run-photos">
+          <h2 id="run-photos" className="flex items-center gap-2 text-xl font-bold">
+            <CameraIcon className="size-5" aria-hidden="true" />
+            Fotos no local ({data.photos.length})
+          </h2>
+          <p className="text-sm text-muted-foreground">
+            Tiradas pelo funcionário durante a ronda para mostrar que esteve no ponto.
+          </p>
+          <ul className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
+            {data.photos.map((photo) => (
+              <RunPhoto key={photo.id} runId={data.id} photo={photo} />
+            ))}
+          </ul>
+        </section>
+      ) : null}
     </div>
+  );
+}
+
+function RunPhoto({ runId, photo }: { runId: string; photo: PatrolRun['photos'][number] }) {
+  const api = useApi();
+  const link = useQuery({
+    queryKey: [...patrolRunQueryKey, runId, 'photo', photo.id],
+    queryFn: () => api.patrols.runPhoto(runId, photo.id),
+    // O link é temporário: renova antes de vencer.
+    staleTime: 4 * 60_000,
+  });
+  const caption = `${photo.localTime} · ${photo.point?.name ?? 'Fora dos pontos'}`;
+  return (
+    <li className="overflow-hidden rounded-xl border">
+      {link.data ? (
+        <a href={link.data.url} target="_blank" rel="noreferrer">
+          <img
+            src={link.data.url}
+            alt={`Foto no local, ${caption}`}
+            className="aspect-square w-full object-cover"
+          />
+        </a>
+      ) : link.isError ? (
+        <p className="p-3 text-sm text-destructive">Não foi possível abrir a foto.</p>
+      ) : (
+        <Skeleton className="aspect-square w-full" />
+      )}
+      <p className="px-3 py-2 text-sm">
+        <span className="font-mono font-semibold">{photo.localTime}</span> ·{' '}
+        {photo.point?.name ?? 'Fora dos pontos'}
+      </p>
+    </li>
   );
 }

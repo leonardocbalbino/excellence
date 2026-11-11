@@ -48,8 +48,16 @@ passagem não pode ser alterado depois (regra 2).
   - fora de ordem é recusado se a rota exige ordem; senão, é aceito e sinalizado;
   - a localização do aparelho é opcional e conferida com a do ponto, quando ele tem uma. O
     resultado (dentro, fora, sem localização) fica registrado.
-- O último ponto encerra a ronda como `completed`.
-- Encerrar faltando pontos exige motivo e marca `incomplete`.
+- O último ponto **não** encerra a ronda: quem fez toca em "Concluir ronda" e pode deixar um
+  comentário (`finish_note`). Antes ela se encerrava sozinha e o app saía da tela sem dar tempo
+  de comentar (alterado em 2026-11-11). O atraso conta até a última leitura, então concluir
+  depois não atrasa a ronda.
+- Se o funcionário esquecer de concluir, a ronda com os pontos exigidos lidos fecha como
+  `completed` (no horário da última leitura) quando ele inicia a próxima.
+- Concluir faltando pontos exige motivo e marca `incomplete`.
+- Foto no local (`POST /me/patrol-runs/:id/photos`): prova de presença, separada da
+  ocorrência (não gera número nem e-mail). Só pela câmera no app, com o ponto (sugerido: o
+  último lido). `patrol_run_photos` é append-only; a gestão vê as fotos no detalhe da ronda.
 - No web, o QR é lido pela câmera traseira com `jsqr`. O `BarcodeDetector` não existe no
   Safari do iOS. Se a câmera falhar, dá para digitar o código impresso abaixo do QR.
 

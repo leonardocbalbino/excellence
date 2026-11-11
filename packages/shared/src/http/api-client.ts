@@ -128,6 +128,8 @@ import {
   patrolRouteSchema,
   type PatrolRunFinish,
   patrolRunFinishSchema,
+  type PatrolRunPhotoInput,
+  patrolRunPhotoInputSchema,
   patrolRunSchema,
   patrolRunStartSchema,
   unitPatrolSummarySchema,
@@ -580,6 +582,19 @@ export function createApiClient(options: ApiClientOptions) {
           bodySchema: patrolRunFinishSchema,
           schema: patrolRunSchema,
         }),
+      /** Foto de presença na ronda em andamento (o arquivo vai antes, finalidade patrol_photo). */
+      addPhoto: (runId: string, input: PatrolRunPhotoInput) =>
+        request('POST', `/me/patrol-runs/${encodeURIComponent(runId)}/photos`, {
+          body: input,
+          bodySchema: patrolRunPhotoInputSchema,
+          schema: patrolRunSchema,
+        }),
+      runPhoto: (runId: string, photoId: string) =>
+        request(
+          'GET',
+          `/patrol-runs/${encodeURIComponent(runId)}/photos/${encodeURIComponent(photoId)}`,
+          { schema: downloadLinkSchema },
+        ),
       board: (date: string) =>
         request('GET', '/patrol-runs/board', { query: { date }, schema: patrolBoardSchema }),
       get: (runId: string) =>

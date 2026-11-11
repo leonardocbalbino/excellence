@@ -1,9 +1,11 @@
 import { HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
 import {
+  type DownloadLink,
   type MyPatrols,
   type PatrolBoard,
   type patrolCheckinInputSchema,
   type PatrolRun,
+  type PatrolRunPhotoInput,
   type PatrolSlot,
   parsePatrolCode,
   ProblemType,
@@ -19,6 +21,7 @@ import { addDays } from '../../scheduling/domain/planner';
 import { evaluateGeofence } from '../../time-tracking/domain/geofence';
 import { OFFLINE_SOURCE, resolveOfflineTime } from '../../time-tracking/domain/offline';
 import { toZoned } from '../../time-tracking/domain/zoned-time';
+import { FilesService } from '../../files/application/files.service';
 import { EmployeesService } from '../../workforce/application/employees.service';
 import { fromCalendarDate, todayIn } from '../../workforce/domain/calendar';
 import { employeeScopeWhere } from '../../workforce/domain/employee-scope';
@@ -60,6 +63,10 @@ const RUN_SELECT = {
       source: true,
     },
   },
+  photos: {
+    orderBy: { takenAt: 'asc' },
+    select: { id: true, pointId: true, takenAt: true },
+  },
 } as const;
 
 type RunRow = Prisma.PatrolRunGetPayload<{ select: typeof RUN_SELECT }>;
@@ -78,8 +85,9 @@ function isUniqueViolation(error: unknown): boolean {
 }
 
 /**
- * Rondas (ADR 0016): o funcionário inicia uma rota atribuída a ele, lê o QR de cada ponto e
- * encerra. Os check-ins são append-only; a ronda só muda ao ser encerrada.
+ * Rondas (ADR 0016): o funcionário inicia uma rota atribuída a ele, lê o QR de cada ponto,
+ * pode tirar fotos de presença e conclui a ronda (com comentário, se quiser). Check-ins e
+ * fotos são append-only; a ronda só muda ao ser encerrada.
  */
 @Injectable()
 export class PatrolRunsService {
@@ -87,6 +95,7 @@ export class PatrolRunsService {
     private readonly db: TenantPrismaService,
     private readonly company: CompanyService,
     private readonly employees: EmployeesService,
+    private readonly files: FilesService,
   ) {}
 
   // ─── Área pessoal ─────────────────────────────────────────────────────────────────
@@ -168,10 +177,22 @@ export class PatrolRunsService {
     if (route.points.length === 0) {
       throw invalidReference('routeId', 'A rota não tem pontos ativos.');
     }
-    const open = await this.db.client.patrolRun.count({
+    // Ronda com os pontos exigidos lidos e não concluída (o funcionário esqueceu de tocar em
+    // "Concluir"): fecha como feita no horário da última leitura. Faltando pontos, bloqueia.
+    const open = await this.db.client.patrolRun.findFirst({
       where: { employeeId: employee.id, status: 'in_progress' },
+      select: RUN_SELECT,
     });
-    if (open > 0) throw runOpen();
+    if (open) {
+      const lastAt = lastCheckinAt(open);
+      if (!lastAt || open.checkins.length < requiredPoints(open.minPoints, open.pointIds.length)) {
+        throw runOpen();
+      }
+      await this.db.client.patrolRun.update({
+        where: { id: open.id },
+        data: { status: 'completed', finishedAt: lastAt },
+      });
+    }
 
     // Horário previsto que esta ronda cumpre (hoje ou o fim da noite anterior).
     const now = new Date();
@@ -305,9 +326,10 @@ export class PatrolRunsService {
       );
     }
     const now = official.recordedAt ?? new Date();
-    const complete = checked.size + 1 === run.pointIds.length;
 
     try {
+      // A ronda continua aberta mesmo depois do último ponto: quem fez conclui (com comentário,
+      // se quiser). Antes ela se encerrava sozinha e o app saía da tela sem dar tempo.
       await this.db.client.$transaction(async (tx) => {
         await tx.patrolCheckin.create({
           data: {
@@ -329,13 +351,6 @@ export class PatrolRunsService {
             userAgent: client.userAgent,
           },
         });
-        // Último ponto: a ronda se encerra sozinha.
-        if (complete) {
-          await tx.patrolRun.update({
-            where: { id: run.id },
-            data: { status: 'completed', finishedAt: now },
-          });
-        }
       });
     } catch (error) {
       if (isUniqueViolation(error)) throw alreadyChecked();
@@ -360,6 +375,38 @@ export class PatrolRunsService {
         finishNote: note,
       },
     });
+    return this.toRun(await this.load(run.id), await this.company.timezone());
+  }
+
+  /** Foto de presença na ronda em andamento: mostra que o funcionário esteve no local. */
+  async addPhoto(
+    runId: string,
+    input: PatrolRunPhotoInput,
+    grant: AccessGrant,
+  ): Promise<PatrolRun> {
+    const run = await this.ownRun(runId, grant.userId);
+    if (run.status !== 'in_progress') throw runFinished();
+    if (input.pointId && !run.pointIds.includes(input.pointId)) {
+      throw invalidReference('pointId', 'Este ponto não faz parte da ronda.');
+    }
+    const file = await this.files.getOwn(input.fileId).catch(() => null);
+    if (file?.status !== 'uploaded' || file.purpose !== 'patrol_photo') {
+      throw invalidReference('fileId', 'Foto não encontrada ou ainda não enviada.');
+    }
+    try {
+      await this.db.client.patrolRunPhoto.create({
+        data: {
+          companyId: grant.companyId,
+          runId: run.id,
+          pointId: input.pointId ?? null,
+          employeeId: run.employee.id,
+          fileId: input.fileId,
+        },
+      });
+    } catch (error) {
+      if (isUniqueViolation(error)) throw invalidReference('fileId', 'Esta foto já foi enviada.');
+      throw error;
+    }
     return this.toRun(await this.load(run.id), await this.company.timezone());
   }
 
@@ -436,6 +483,17 @@ export class PatrolRunsService {
     // Fora do escopo responde como inexistente.
     await this.employees.get(row.employee.id, grant);
     return this.toRun(row, await this.company.timezone());
+  }
+
+  /** Link para ver uma foto de presença (mesmo escopo de quem vê a ronda). */
+  async photo(runId: string, photoId: string, grant: AccessGrant): Promise<DownloadLink> {
+    await this.get(runId, grant);
+    const photo = await this.db.client.patrolRunPhoto.findFirst({
+      where: { id: photoId, runId },
+      select: { fileId: true },
+    });
+    if (!photo) throw new NotFoundException('Foto não encontrada.');
+    return this.files.createDownloadLink(photo.fileId, 'inline');
   }
 
   // ─── Interno ──────────────────────────────────────────────────────────────────────
@@ -531,6 +589,10 @@ export class PatrolRunsService {
       };
     });
     const next = row.status === 'in_progress' ? ordered.find((p) => !p.checkin) : undefined;
+    // Atraso pelo fim do trabalho: com todos os pontos lidos, conta a última leitura (concluir
+    // depois, para escrever o comentário, não atrasa a ronda).
+    const allRead = row.checkins.length >= row.pointIds.length;
+    const workEnd = allRead ? lastCheckinAt(row) : row.finishedAt;
     return {
       id: row.id,
       route: row.route,
@@ -548,10 +610,26 @@ export class PatrolRunsService {
       checked: row.checkins.length,
       total: row.pointIds.length,
       required: requiredPoints(row.minPoints, row.pointIds.length),
-      lateMinutes: lateMinutes(row.expectedEndAt, row.finishedAt, now),
+      lateMinutes: lateMinutes(row.expectedEndAt, workEnd, now),
       nextPoint: next ? { id: next.id, name: next.name } : null,
+      photos: row.photos.map((photo) => ({
+        id: photo.id,
+        point: photo.pointId
+          ? { id: photo.pointId, name: names.get(photo.pointId) ?? 'Ponto removido' }
+          : null,
+        takenAt: photo.takenAt.toISOString(),
+        localTime: toZoned(photo.takenAt, timezone).time,
+      })),
     };
   }
+}
+
+/** Horário da leitura mais recente da ronda (null: nenhuma). */
+function lastCheckinAt(run: Pick<RunRow, 'checkins'>): Date | null {
+  return run.checkins.reduce<Date | null>(
+    (latest, c) => (!latest || c.recordedAt > latest ? c.recordedAt : latest),
+    null,
+  );
 }
 
 function runOpen(): ProblemException {
