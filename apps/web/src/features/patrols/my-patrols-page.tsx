@@ -169,8 +169,10 @@ function RunInProgress({ run }: { run: PatrolRun }) {
         .sort((a, b) =>
           (b.checkin?.recordedAt ?? '').localeCompare(a.checkin?.recordedAt ?? ''),
         )[0];
-      if (next.status === 'completed') {
-        toast.success(`Ronda concluída: ${String(next.total)} pontos registrados.`);
+      if (next.checked >= next.total) {
+        // A ronda continua aberta: quem fez conclui (com comentário, se quiser).
+        setScanning(false);
+        toast.success('Todos os pontos lidos. Confira e toque em Concluir ronda.');
       } else if (latest?.checkin) {
         toast.success(`${latest.name} registrado às ${latest.checkin.localTime}.`);
       }
@@ -190,7 +192,8 @@ function RunInProgress({ run }: { run: PatrolRun }) {
     },
   });
 
-  const missing = run.total - run.checked;
+  // A rota pode exigir só parte dos pontos (mínimo); abaixo dele, concluir pede o motivo.
+  const missing = Math.max(0, run.required - run.checked);
   const ratio = run.total > 0 ? run.checked / run.total : 0;
   return (
     <div className="grid gap-6">
@@ -307,37 +310,39 @@ function RunInProgress({ run }: { run: PatrolRun }) {
       <section className="rounded-2xl border bg-card p-5" aria-labelledby="encerrar-ronda">
         <h2 id="encerrar-ronda" className="flex items-center gap-2 text-xl font-bold">
           <RouteIcon className="size-5" aria-hidden="true" />
-          Encerrar ronda
+          Concluir ronda
         </h2>
         <p className="mt-1 text-sm text-muted-foreground">
           {missing > 0
-            ? `Faltam ${String(missing)} ponto(s). Para encerrar assim, explique o motivo.`
-            : 'Todos os pontos foram registrados.'}
+            ? `Faltam ${String(missing)} ponto(s). Para concluir assim, explique o motivo.`
+            : 'Pontos exigidos registrados. Se quiser, deixe um comentário.'}
         </p>
-        {missing > 0 ? (
-          <div className="mt-3 grid gap-1.5">
-            <Label htmlFor="finish-note">Motivo</Label>
-            <Textarea
-              id="finish-note"
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              placeholder="Ex.: acesso ao galpão bloqueado pela manutenção."
-            />
-          </div>
-        ) : null}
+        <div className="mt-3 grid gap-1.5">
+          <Label htmlFor="finish-note">{missing > 0 ? 'Motivo' : 'Comentário (opcional)'}</Label>
+          <Textarea
+            id="finish-note"
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            placeholder={
+              missing > 0
+                ? 'Ex.: acesso ao galpão bloqueado pela manutenção.'
+                : 'Ex.: tudo em ordem; lâmpada da garagem queimada.'
+            }
+          />
+        </div>
         {finish.isError ? (
           <Alert variant="destructive" className="mt-3">
             {errorMessage(finish.error)}
           </Alert>
         ) : null}
         <Button
-          variant="outline"
+          variant={missing > 0 ? 'outline' : 'default'}
           className="mt-4"
           disabled={finish.isPending || (missing > 0 && !note.trim())}
           onClick={() => finish.mutate()}
         >
           {finish.isPending ? <Spinner /> : null}
-          Encerrar ronda
+          Concluir ronda
         </Button>
       </section>
     </div>

@@ -26,6 +26,8 @@ export const SLOT_STATUS: Record<PatrolSlotStatus, string> = {
 
 /** "Atrasada 12 min", "Concluída", "Em andamento"… */
 export function runStatusText(run: PatrolRun): string {
+  // Pontos todos lidos, falta só o funcionário tocar em "Concluir".
+  if (run.status === 'in_progress' && run.checked >= run.total) return 'Aguardando conclusão';
   if (run.status === 'in_progress' && run.lateMinutes > 0) {
     return `Atrasada ${String(run.lateMinutes)} min`;
   }

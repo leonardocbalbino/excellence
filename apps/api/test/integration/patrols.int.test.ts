@@ -90,6 +90,7 @@ describe('Rondas (integração)', () => {
       auth,
       unit,
       guard,
+      guardUserId: guardUser.id,
       guardAuth: await authHeader(http, guardUser.email),
       points,
       route,
@@ -146,7 +147,7 @@ describe('Rondas (integração)', () => {
       .expect(400);
   });
 
-  it('ronda: fora de ordem é sinalizado, QR adulterado recusado e o último ponto encerra', async () => {
+  it('ronda: fora de ordem é sinalizado, QR adulterado recusado e quem fez conclui', async () => {
     const { guardAuth, route, points } = await scenario();
     const [portao, patio, galpao] = points;
     if (!portao || !patio || !galpao) throw new Error('pontos');
@@ -192,11 +193,69 @@ describe('Rondas (integração)', () => {
     const done = patrolRunSchema.parse(
       (await checkin(guardAuth, run.id, galpao.code).expect(201)).body,
     );
-    expect(done).toMatchObject({ status: 'completed', checked: 3, nextPoint: null });
-    expect(done.finishedAt).not.toBeNull();
+    // O último ponto não encerra: a ronda espera o "Concluir" (com comentário opcional).
+    expect(done).toMatchObject({ status: 'in_progress', checked: 3, nextPoint: null });
+    expect(done.finishedAt).toBeNull();
+
+    const concluded = patrolRunSchema.parse(
+      (
+        await http()
+          .post(`/api/v1/me/patrol-runs/${run.id}/finish`)
+          .set(guardAuth)
+          .send({ note: 'Tudo em ordem.' })
+          .expect(201)
+      ).body,
+    );
+    expect(concluded).toMatchObject({ status: 'completed', finishNote: 'Tudo em ordem.' });
+    expect(concluded.finishedAt).not.toBeNull();
 
     const closed = await checkin(guardAuth, run.id, galpao.code).expect(409);
     expect(problemOf(closed.body).type).toBe(ProblemType.PatrolRunFinished);
+  });
+
+  it('ronda com todos os pontos e sem "Concluir" fecha sozinha ao iniciar a próxima', async () => {
+    const { guardAuth, route, points } = await scenario();
+    const run = await start(guardAuth, route.id);
+    for (const point of points) await checkin(guardAuth, run.id, point.code).expect(201);
+    const next = await start(guardAuth, route.id);
+    expect(next.id).not.toBe(run.id);
+    const previous = await prisma.patrolRun.findUniqueOrThrow({ where: { id: run.id } });
+    expect(previous.status).toBe('completed');
+  });
+
+  it('foto de presença: só da própria ronda em andamento, com arquivo patrol_photo', async () => {
+    const { companyId, guardUserId, guardAuth, route, points } = await scenario();
+    const run = await start(guardAuth, route.id);
+    const file = await prisma.storedFile.create({
+      data: {
+        companyId,
+        purpose: 'patrol_photo',
+        status: 'uploaded',
+        storageKey: `${companyId}/patrol_photo/teste`,
+        originalName: 'foto.jpg',
+        contentType: 'image/jpeg',
+        sizeBytes: 1000,
+        uploadedBy: guardUserId,
+      },
+    });
+    const withPhoto = patrolRunSchema.parse(
+      (
+        await http()
+          .post(`/api/v1/me/patrol-runs/${run.id}/photos`)
+          .set(guardAuth)
+          .send({ fileId: file.id, pointId: points[0]?.id })
+          .expect(201)
+      ).body,
+    );
+    expect(withPhoto.photos).toHaveLength(1);
+    expect(withPhoto.photos[0]?.point?.id).toBe(points[0]?.id);
+
+    const repeated = await http()
+      .post(`/api/v1/me/patrol-runs/${run.id}/photos`)
+      .set(guardAuth)
+      .send({ fileId: file.id })
+      .expect(422);
+    expect(problemOf(repeated.body).errors?.[0]?.path).toBe('fileId');
   });
 
   it('rota com ordem obrigatória recusa ponto fora de ordem', async () => {

@@ -84,7 +84,11 @@ export const patrolRouteInputSchema = z
     name: z.string().trim().min(2, 'Informe o nome').max(80),
     description: optionalText(500),
     /** Tempo previsto para percorrer a rota; passou disso, a ronda fica atrasada. */
-    expectedMinutes: z.number().int().min(5).max(720),
+    expectedMinutes: z
+      .number({ error: 'Informe o tempo previsto' })
+      .int('Use minutos inteiros')
+      .min(5, 'Mínimo de 5 minutos')
+      .max(720, 'Máximo de 12 horas'),
     /** Exige os pontos na ordem cadastrada. Sem isso, fora de ordem é aceito e sinalizado. */
     enforceOrder: z.boolean().default(false),
     pointIds: unique(z.uuid(), 'Ponto repetido na rota')
@@ -181,6 +185,15 @@ export const patrolRunSchema = z.object({
   /** Minutos além do previsto (em andamento: até agora; encerrada: no fim). 0 = no prazo. */
   lateMinutes: z.number().int(),
   nextPoint: namedRef.nullable(),
+  /** Fotos de presença tiradas na ronda (não são ocorrências). */
+  photos: z.array(
+    z.object({
+      id: z.uuid(),
+      point: namedRef.nullable(),
+      takenAt: isoInstant,
+      localTime: timeOfDaySchema,
+    }),
+  ),
 });
 export type PatrolRun = z.infer<typeof patrolRunSchema>;
 
@@ -204,10 +217,21 @@ export const patrolCheckinInputSchema = z.object({
 export type PatrolCheckinInput = z.input<typeof patrolCheckinInputSchema>;
 
 export const patrolRunFinishSchema = z.object({
-  /** Obrigatória quando faltam pontos: por que a ronda terminou incompleta. */
+  /**
+   * Comentário de quem fez a ronda. Obrigatório quando faltam pontos (por que terminou
+   * incompleta); com todos os pontos, opcional.
+   */
   note: optionalText(1000),
 });
 export type PatrolRunFinish = z.input<typeof patrolRunFinishSchema>;
+
+/** Foto de presença: o arquivo já enviado (finalidade `patrol_photo`) e o ponto onde foi tirada. */
+export const patrolRunPhotoInputSchema = z.object({
+  fileId: z.uuid(),
+  /** Ponto da rota; vazio = fora dos pontos. */
+  pointId: z.uuid().nullish(),
+});
+export type PatrolRunPhotoInput = z.input<typeof patrolRunPhotoInputSchema>;
 
 /**
  * Situação de um horário previsto de ronda:
