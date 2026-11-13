@@ -30,11 +30,12 @@ const config: ExpoConfig = {
     backgroundColor: '#12100c',
   },
   ios: {
-    bundleIdentifier: 'br.com.excellence.app',
+    // Igual ao Android (br.com.excellence.app pertence a outro desenvolvedor).
+    bundleIdentifier: 'gestao.excellence',
     supportsTablet: false,
     infoPlist: {
       NSCameraUsageDescription:
-        'A câmera lê o QR code dos pontos de ronda e tira a foto do registro de ponto.',
+        'A câmera lê o QR code dos pontos de ronda e tira as fotos do ponto, da ronda, das ocorrências, do perfil e dos chamados com o RH.',
       NSLocationWhenInUseUsageDescription:
         'A localização confere se o ponto e a ronda foram registrados no local de trabalho.',
       NSFaceIDUsageDescription: 'O Face ID destrava o app sem digitar a senha.',
@@ -87,7 +88,7 @@ const config: ExpoConfig = {
       'expo-camera',
       {
         cameraPermission:
-          'A câmera lê o QR code dos pontos de ronda e tira a foto do registro de ponto.',
+          'A câmera lê o QR code dos pontos de ronda e tira as fotos do ponto, da ronda, das ocorrências, do perfil e dos chamados com o RH.',
         recordAudioAndroid: false,
       },
     ],
@@ -102,8 +103,9 @@ const config: ExpoConfig = {
       'expo-image-picker',
       {
         photosPermission:
-          'A galeria é usada para escolher a foto de perfil e as fotos dos chamados com o RH.',
-        cameraPermission: 'A câmera tira a foto de perfil e as fotos dos chamados com o RH.',
+          'A galeria é usada para escolher a foto de perfil e as fotos das ocorrências e dos chamados com o RH.',
+        cameraPermission:
+          'A câmera lê o QR code dos pontos de ronda e tira as fotos do ponto, da ronda, das ocorrências, do perfil e dos chamados com o RH.',
         microphonePermission: false,
       },
     ],
