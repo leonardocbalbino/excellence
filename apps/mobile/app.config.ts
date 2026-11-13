@@ -32,6 +32,8 @@ const config: ExpoConfig = {
   ios: {
     // Igual ao Android (br.com.excellence.app pertence a outro desenvolvedor).
     bundleIdentifier: 'gestao.excellence',
+    // 1024x1024 sem transparência (exigência da App Store).
+    icon: './assets/icon-ios.png',
     supportsTablet: false,
     infoPlist: {
       NSCameraUsageDescription:
