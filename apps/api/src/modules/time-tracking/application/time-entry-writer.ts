@@ -21,6 +21,7 @@ export interface NewTimeEntry {
   distanceMeters?: number | null;
   geofenceStatus: GeofenceStatus;
   selfieFileId?: string | null;
+  lateReason?: string | null;
   source: 'web' | 'mobile' | 'mobile_offline' | 'adjustment';
   ipAddress?: string | null;
   userAgent?: string | null;
@@ -74,6 +75,7 @@ export class TimeEntryWriter {
       selfieFileId: entry.selfieFileId ?? null,
       source: entry.source,
       createdBy: entry.createdBy,
+      ...(entry.lateReason ? { lateReason: entry.lateReason } : {}),
     };
     const previousHash = previous?.hash ?? null;
 
@@ -94,6 +96,7 @@ export class TimeEntryWriter {
         distanceMeters: entry.distanceMeters ?? null,
         geofenceStatus: entry.geofenceStatus,
         selfieFileId: entry.selfieFileId ?? null,
+        lateReason: entry.lateReason ?? null,
         source: entry.source,
         ipAddress: entry.ipAddress ?? null,
         userAgent: entry.userAgent?.slice(0, 512) ?? null,
@@ -121,6 +124,7 @@ export function contentOf(row: {
   accuracyMeters: number | null;
   geofenceStatus: string;
   selfieFileId: string | null;
+  lateReason: string | null;
   source: string;
   createdBy: string;
 }): TimeEntryContent {
@@ -141,5 +145,6 @@ export function contentOf(row: {
     selfieFileId: row.selfieFileId,
     source: row.source,
     createdBy: row.createdBy,
+    ...(row.lateReason ? { lateReason: row.lateReason } : {}),
   };
 }

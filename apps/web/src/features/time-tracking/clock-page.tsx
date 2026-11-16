@@ -1,4 +1,10 @@
-import { ApiError, CLOCK_BLOCK_MESSAGES, PUNCH_ACTIONS } from '@excellence/shared';
+import {
+  ApiError,
+  CLOCK_BLOCK_MESSAGES,
+  CLOCK_PHOTO_HINT,
+  lateMinutesAt,
+  PUNCH_ACTIONS,
+} from '@excellence/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   CalendarCheckIcon,
@@ -15,9 +21,9 @@ import { Alert } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Skeleton, Spinner } from '@/components/ui/feedback';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import {
   type DevicePosition,
   GeolocationError,
@@ -57,13 +63,16 @@ export function ClockPage() {
   });
   const shift = day.data?.planned.shift ?? null;
   const returnAt = day.data?.next === 'break_end' ? day.data.expectedBreakEnd : null;
-  const [withSelfie, setWithSelfie] = useState(false);
   const [photo, setPhoto] = useState<Blob | null>(null);
+  const [lateReason, setLateReason] = useState('');
   const [locationNote, setLocationNote] = useState<string | null>(null);
   // Mesma chave enquanto a tentativa não tiver sucesso: reenviar não duplica a marcação.
   const attemptKey = useRef(randomId());
-  const selfieRequired = settings.data?.requireSelfie ?? false;
-  const useSelfie = selfieRequired || withSelfie;
+  // Foto pela cerca do posto: sem cerca, obrigatória; com cerca, não aparece.
+  const useSelfie = day.data?.photoRequired ?? false;
+  // Entrada depois do início do turno mais a tolerância: pede o motivo do atraso.
+  const late = day.data?.next === 'entry' ? lateMinutesAt(day.data.lateAfter, now) : 0;
+  const reasonMissing = late > 0 && lateReason.trim().length < 3;
 
   const clock = useMutation({
     mutationFn: async () => {
@@ -90,6 +99,7 @@ export function ClockPage() {
           accuracyMeters: position?.accuracyMeters ?? null,
           deviceTimestamp: new Date().toISOString(),
           selfieFileId,
+          lateReason: late > 0 ? lateReason.trim() : null,
         },
         attemptKey.current,
       );
@@ -97,6 +107,7 @@ export function ClockPage() {
     onSuccess: async () => {
       attemptKey.current = randomId();
       setPhoto(null);
+      setLateReason('');
       await queryClient.invalidateQueries({ queryKey: timeEntriesQueryKey });
     },
   });
@@ -155,22 +166,31 @@ export function ClockPage() {
             </div>
           ) : (
             <>
-              {selfieRequired ? null : (
-                <div className="flex items-center justify-center gap-2">
-                  <Checkbox
-                    id="with-selfie"
-                    checked={withSelfie}
-                    onCheckedChange={(checked) => setWithSelfie(checked === true)}
-                  />
-                  <Label htmlFor="with-selfie">Registrar com foto</Label>
+              {useSelfie ? (
+                <div className="grid gap-2">
+                  <p className="text-sm font-medium">Foto obrigatória. {CLOCK_PHOTO_HINT}</p>
+                  <CameraCapture onChange={setPhoto} />
                 </div>
-              )}
-              {useSelfie ? <CameraCapture onChange={setPhoto} /> : null}
+              ) : null}
+              {late > 0 ? (
+                <div className="grid gap-1.5 text-left">
+                  <Label htmlFor="late-reason">
+                    Você está {late} min atrasado. Motivo do atraso
+                  </Label>
+                  <Textarea
+                    id="late-reason"
+                    value={lateReason}
+                    maxLength={500}
+                    onChange={(e) => setLateReason(e.target.value)}
+                    placeholder="Ex.: ônibus atrasou; consulta médica."
+                  />
+                </div>
+              ) : null}
               <Button
                 size="lg"
                 className="h-16 text-lg"
                 onClick={() => clock.mutate()}
-                disabled={clock.isPending || (useSelfie && !photo)}
+                disabled={clock.isPending || (useSelfie && !photo) || reasonMissing}
               >
                 {clock.isPending ? <Spinner /> : <FingerprintIcon className="size-6" />}
                 {day.data?.next ? PUNCH_ACTIONS[day.data.next] : 'Registrar ponto'}

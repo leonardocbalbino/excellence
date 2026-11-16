@@ -58,6 +58,18 @@ passagem não pode ser alterado depois (regra 2).
 - Foto no local (`POST /me/patrol-runs/:id/photos`): prova de presença, separada da
   ocorrência (não gera número nem e-mail). Só pela câmera no app, com o ponto (sugerido: o
   último lido). `patrol_run_photos` é append-only; a gestão vê as fotos no detalhe da ronda.
+- Modo de registro por rota (`patrol_routes.checkin_mode`, copiado na ronda ao iniciar),
+  escolhido pela gestão (alterado em 2026-11-16):
+  - `qr` (padrão): lê o QR code do ponto;
+  - `photo`: sem QR code; o funcionário escolhe o ponto e tira a foto;
+  - `qr_and_photo`: lê o QR code e tira a foto em seguida.
+
+  Com foto, o check-in guarda o arquivo (`patrol_checkins.photo_file_id`, finalidade
+  `patrol_photo`) e a mesma foto entra em `patrol_run_photos` com o ponto, onde a gestão já
+  vê as fotos. Sem conexão, o app guarda a foto e a envia antes do check-in. Só com foto, a
+  prova de presença é a foto e a localização (quando o ponto tem raio): não há o QR para
+  conferir.
+
 - No web, o QR é lido pela câmera traseira com `jsqr`. O `BarcodeDetector` não existe no
   Safari do iOS. Se a câmera falhar, dá para digitar o código impresso abaixo do QR.
 

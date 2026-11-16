@@ -43,7 +43,9 @@ describe('Rondas (integração)', () => {
   const key = () => ({ 'Idempotency-Key': randomUUID() });
 
   /** Empresa com gestão total, uma unidade, 3 pontos e um vigilante com conta. */
-  async function scenario(options: { enforceOrder?: boolean } = {}) {
+  async function scenario(
+    options: { enforceOrder?: boolean; checkinMode?: 'qr' | 'photo' | 'qr_and_photo' } = {},
+  ) {
     const admin = await createTestUser(prisma);
     const companyId = admin.companyId;
     await grantRole(
@@ -79,6 +81,7 @@ describe('Rondas (integração)', () => {
             name: 'Perímetro',
             expectedMinutes: 30,
             enforceOrder: options.enforceOrder ?? false,
+            checkinMode: options.checkinMode ?? 'qr',
             pointIds: points.map((p) => p.id),
             assigneeIds: [guard.id],
           })
@@ -256,6 +259,47 @@ describe('Rondas (integração)', () => {
       .send({ fileId: file.id })
       .expect(422);
     expect(problemOf(repeated.body).errors?.[0]?.path).toBe('fileId');
+  });
+
+  it('rota por foto: escolhe o ponto e manda a foto, que entra nas fotos da ronda', async () => {
+    const { companyId, guardUserId, guardAuth, route, points } = await scenario({
+      checkinMode: 'photo',
+    });
+    expect(route.checkinMode).toBe('photo');
+    const run = await start(guardAuth, route.id);
+    expect(run.checkinMode).toBe('photo');
+    const photo = await prisma.storedFile.create({
+      data: {
+        companyId,
+        purpose: 'patrol_photo',
+        status: 'uploaded',
+        storageKey: `${companyId}/patrol_photo/ponto`,
+        originalName: 'ponto.jpg',
+        contentType: 'image/jpeg',
+        sizeBytes: 1000,
+        uploadedBy: guardUserId,
+      },
+    });
+    const send = (body: object) =>
+      http().post(`/api/v1/me/patrol-runs/${run.id}/checkins`).set(guardAuth).set(key()).send(body);
+
+    // QR code numa rota por foto (app antigo) e ponto sem foto: recusados.
+    await send({ code: points[0]?.code }).expect(422);
+    const noPhoto = await send({ pointId: points[0]?.id }).expect(422);
+    expect(problemOf(noPhoto.body).type).toBe(ProblemType.PatrolPhotoRequired);
+
+    const done = patrolRunSchema.parse(
+      (await send({ pointId: points[0]?.id, photoFileId: photo.id }).expect(201)).body,
+    );
+    expect(done.points[0]?.checkin?.hasPhoto).toBe(true);
+    expect(done.photos.map((p) => p.point?.id)).toEqual([points[0]?.id]);
+  });
+
+  it('rota com QR code e foto: o QR sozinho não basta', async () => {
+    const { guardAuth, route, points } = await scenario({ checkinMode: 'qr_and_photo' });
+    const run = await start(guardAuth, route.id);
+    const res = await checkin(guardAuth, run.id, points[0]?.code ?? '').expect(422);
+    expect(problemOf(res.body).type).toBe(ProblemType.PatrolPhotoRequired);
   });
 
   it('rota com ordem obrigatória recusa ponto fora de ordem', async () => {

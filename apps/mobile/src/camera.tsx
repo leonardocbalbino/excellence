@@ -200,13 +200,17 @@ export function QrScanner({
   );
 }
 
-/** Foto do registro de ponto (câmera frontal). Devolve o endereço local da foto. */
+/**
+ * Foto do registro de ponto: selfie (frontal) ou o local de trabalho (traseira, em "Virar
+ * câmera"). Devolve o endereço local da foto.
+ */
 export function SelfieCapture({ onChange }: { onChange: (uri: string | null) => void }) {
   const cameraPermission = useCameraPermissions();
   const [permission] = cameraPermission;
   const camera = useRef<CameraView>(null);
   const [photo, setPhoto] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [facing, setFacing] = useState<'front' | 'back'>('front');
   if (!permission?.granted) {
     return (
       <PermissionRequest
@@ -245,23 +249,31 @@ export function SelfieCapture({ onChange }: { onChange: (uri: string | null) => 
           backgroundColor: '#000',
         }}
       >
-        <CameraView ref={camera} style={{ flex: 1 }} facing="front" />
-        {/* Moldura do rosto. */}
-        <View
-          pointerEvents="none"
-          style={{
-            position: 'absolute',
-            top: '14%',
-            left: '20%',
-            right: '20%',
-            bottom: '22%',
-            borderRadius: 999,
-            borderWidth: 3,
-            borderColor: '#ffffffcc',
-            borderStyle: 'dashed',
-          }}
-        />
+        <CameraView ref={camera} style={{ flex: 1 }} facing={facing} />
+        {/* Moldura do rosto (só na selfie). */}
+        {facing === 'front' ? (
+          <View
+            pointerEvents="none"
+            style={{
+              position: 'absolute',
+              top: '14%',
+              left: '20%',
+              right: '20%',
+              bottom: '22%',
+              borderRadius: 999,
+              borderWidth: 3,
+              borderColor: '#ffffffcc',
+              borderStyle: 'dashed',
+            }}
+          />
+        ) : null}
       </View>
+      <Button
+        label={facing === 'front' ? 'Fotografar o local' : 'Tirar selfie'}
+        variant="outline"
+        icon="camera-reverse-outline"
+        onPress={() => setFacing((f) => (f === 'front' ? 'back' : 'front'))}
+      />
       <Button
         label="Capturar foto"
         icon="camera"

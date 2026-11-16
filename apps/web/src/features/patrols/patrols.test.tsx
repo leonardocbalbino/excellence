@@ -26,6 +26,7 @@ function run(checked: number, overrides: Partial<PatrolRun> = {}): PatrolRun {
     status: 'in_progress',
     finishNote: null,
     enforceOrder: false,
+    checkinMode: 'qr',
     points: POINTS.map((p, i) => ({
       ...p,
       checkin:
@@ -38,6 +39,7 @@ function run(checked: number, overrides: Partial<PatrolRun> = {}): PatrolRun {
               distanceMeters: null,
               outOfOrder: false,
               offline: false,
+              hasPhoto: false,
             }
           : null,
     })),
@@ -59,6 +61,7 @@ const MINE: MyPatrols = {
       unit: UNIT,
       expectedMinutes: 40,
       pointsCount: 2,
+      checkinMode: 'qr',
       slots: [
         {
           route: ROUTE,
@@ -158,6 +161,20 @@ describe('Rondas: área pessoal', () => {
     await user.click(screen.getByRole('button', { name: 'Concluir ronda' }));
     await screen.findByRole('button', { name: 'Iniciar e ler QR code' });
     expect(finishBody).toEqual({ note: 'Tudo em ordem.' });
+  });
+
+  it('rota por foto: sem leitor de QR, escolhe o ponto e tira a foto', async () => {
+    const current = run(0, { checkinMode: 'photo' });
+    server.use(
+      ...sessionHandlers([], { hasEmployeeRecord: true, hasPatrolRoutes: true }),
+      http.get(`${API}/me/patrols`, () => HttpResponse.json({ ...MINE, current })),
+    );
+    renderApp('/rondas');
+    const point = await screen.findByLabelText('Ponto');
+    expect(point).toHaveValue(POINTS[0]?.id);
+    expect(screen.queryByLabelText('Código do ponto')).not.toBeInTheDocument();
+    // Sem foto, o registro não sai.
+    expect(screen.getByRole('button', { name: /Registrar ponto/ })).toBeDisabled();
   });
 });
 

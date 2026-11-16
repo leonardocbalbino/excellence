@@ -18,6 +18,11 @@ export interface TimeEntryContent {
   selfieFileId: string | null;
   source: string;
   createdBy: string;
+  /**
+   * Motivo do atraso. Só entra no conteúdo quando existe: as marcações sem motivo (todas as
+   * anteriores a ele) continuam com o mesmo texto e o mesmo hash.
+   */
+  lateReason?: string;
 }
 
 /** JSON com chaves em ordem alfabética: a mesma marcação sempre gera o mesmo texto. */

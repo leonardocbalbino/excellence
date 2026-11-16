@@ -1,6 +1,8 @@
 import { HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
 import {
   type DownloadLink,
+  modeNeedsPhoto,
+  modeNeedsQr,
   type MyPatrols,
   type PatrolBoard,
   type patrolCheckinInputSchema,
@@ -42,6 +44,7 @@ const RUN_SELECT = {
   routeId: true,
   pointIds: true,
   enforceOrder: true,
+  checkinMode: true,
   minPoints: true,
   scheduledFor: true,
   startedAt: true,
@@ -60,6 +63,7 @@ const RUN_SELECT = {
       geofenceStatus: true,
       distanceMeters: true,
       outOfOrder: true,
+      photoFileId: true,
       source: true,
     },
   },
@@ -111,6 +115,7 @@ export class PatrolRunsService {
         id: true,
         name: true,
         expectedMinutes: true,
+        checkinMode: true,
         startMinutes: true,
         weekdays: true,
         unit: { select: { id: true, name: true, timezone: true } },
@@ -132,6 +137,7 @@ export class PatrolRunsService {
         unit: { id: route.unit.id, name: route.unit.name },
         expectedMinutes: route.expectedMinutes,
         pointsCount: route._count.points,
+        checkinMode: route.checkinMode,
         slots,
       });
     }
@@ -156,6 +162,7 @@ export class PatrolRunsService {
         unitId: true,
         expectedMinutes: true,
         enforceOrder: true,
+        checkinMode: true,
         minPoints: true,
         startMinutes: true,
         weekdays: true,
@@ -222,6 +229,7 @@ export class PatrolRunsService {
           unitId: route.unitId,
           pointIds: route.points.map((p) => p.pointId),
           enforceOrder: route.enforceOrder,
+          checkinMode: route.checkinMode,
           minPoints: route.minPoints,
           scheduledFor: slot,
           startedAt: now,
@@ -251,9 +259,29 @@ export class PatrolRunsService {
     const run = await this.ownRun(runId, grant.userId);
     if (run.status !== 'in_progress') throw runFinished();
 
-    const parsed = parsePatrolCode(input.code);
-    if (!parsed) throw invalidCode('Este QR code não é de um ponto de ronda.');
-    if (!run.pointIds.includes(parsed.pointId)) {
+    // Modo da rota (cópia no início): QR code, foto ou os dois.
+    const needsQr = modeNeedsQr(run.checkinMode);
+    const needsPhoto = modeNeedsPhoto(run.checkinMode);
+    let pointId: string;
+    let token: string | null = null;
+    if (needsQr) {
+      if (!input.code) throw invalidCode('Leia o QR code do ponto.');
+      const parsed = parsePatrolCode(input.code);
+      if (!parsed) throw invalidCode('Este QR code não é de um ponto de ronda.');
+      pointId = parsed.pointId;
+      token = parsed.token;
+    } else {
+      if (!input.pointId) {
+        throw invalidReference(
+          'pointId',
+          input.code
+            ? 'Esta rota registra os pontos por foto, não por QR code. Atualize o app.'
+            : 'Escolha o ponto da foto.',
+        );
+      }
+      pointId = input.pointId;
+    }
+    if (!run.pointIds.includes(pointId)) {
       throw problem(
         ProblemType.PatrolPointNotInRun,
         HttpStatus.UNPROCESSABLE_ENTITY,
@@ -261,7 +289,7 @@ export class PatrolRunsService {
       );
     }
     const point = await this.db.client.patrolPoint.findUnique({
-      where: { id: parsed.pointId },
+      where: { id: pointId },
       select: {
         codeToken: true,
         codeVersion: true,
@@ -270,14 +298,27 @@ export class PatrolRunsService {
         radiusMeters: true,
       },
     });
-    if (!point || !tokensMatch(point.codeToken, parsed.token)) {
+    if (!point || (token !== null && !tokensMatch(point.codeToken, token))) {
       throw invalidCode('QR code desatualizado ou inválido. Avise a gestão para reimprimir.');
     }
     const checked = new Set(run.checkins.map((c) => c.pointId));
-    if (checked.has(parsed.pointId)) throw alreadyChecked();
+    if (checked.has(pointId)) throw alreadyChecked();
+    if (needsPhoto) {
+      if (!input.photoFileId) {
+        throw problem(
+          ProblemType.PatrolPhotoRequired,
+          HttpStatus.UNPROCESSABLE_ENTITY,
+          'Esta rota pede uma foto em cada ponto. Tire a foto para registrar (se o botão não aparecer, atualize o app).',
+        );
+      }
+      const file = await this.files.getOwn(input.photoFileId).catch(() => null);
+      if (file?.status !== 'uploaded' || file.purpose !== 'patrol_photo') {
+        throw invalidReference('photoFileId', 'Foto não encontrada ou ainda não enviada.');
+      }
+    }
 
     const expected = run.pointIds.find((id) => !checked.has(id));
-    const outOfOrder = expected !== parsed.pointId;
+    const outOfOrder = expected !== pointId;
     if (outOfOrder && run.enforceOrder) {
       throw problem(
         ProblemType.PatrolOutOfOrder,
@@ -335,7 +376,7 @@ export class PatrolRunsService {
           data: {
             companyId: grant.companyId,
             runId: run.id,
-            pointId: parsed.pointId,
+            pointId,
             employeeId: run.employee.id,
             recordedAt: now,
             deviceRecordedAt: input.deviceTimestamp ? new Date(input.deviceTimestamp) : null,
@@ -346,11 +387,25 @@ export class PatrolRunsService {
             distanceMeters: fence.distanceMeters,
             geofenceStatus: fence.status,
             outOfOrder,
+            photoFileId: needsPhoto ? (input.photoFileId ?? null) : null,
             source: official.offline ? OFFLINE_SOURCE : client.source,
             ipAddress: client.ip,
             userAgent: client.userAgent,
           },
         });
+        // A foto do ponto também entra nas fotos da ronda, onde a gestão já vê as fotos.
+        if (needsPhoto && input.photoFileId) {
+          await tx.patrolRunPhoto.create({
+            data: {
+              companyId: grant.companyId,
+              runId: run.id,
+              pointId,
+              employeeId: run.employee.id,
+              fileId: input.photoFileId,
+              takenAt: now,
+            },
+          });
+        }
       });
     } catch (error) {
       if (isUniqueViolation(error)) throw alreadyChecked();
@@ -584,6 +639,7 @@ export class PatrolRunsService {
               distanceMeters: checkin.distanceMeters,
               outOfOrder: checkin.outOfOrder,
               offline: checkin.source === OFFLINE_SOURCE,
+              hasPhoto: checkin.photoFileId !== null,
             }
           : null,
       };
@@ -606,6 +662,7 @@ export class PatrolRunsService {
       status: row.status,
       finishNote: row.finishNote,
       enforceOrder: row.enforceOrder,
+      checkinMode: row.checkinMode,
       points: ordered,
       checked: row.checkins.length,
       total: row.pointIds.length,

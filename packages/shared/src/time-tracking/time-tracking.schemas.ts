@@ -10,6 +10,11 @@ export const clockSettingsSchema = z.object({
   /** Marcação fora da cerca virtual: `allow` aceita e sinaliza; `block` recusa (P-008). */
   outsideGeofence: z.enum(['allow', 'block']),
   requireLocation: z.boolean(),
+  /**
+   * Obsoleto: a foto agora segue a cerca da unidade (com cerca, sem foto; sem cerca, foto
+   * obrigatória; ver `ClockDay.photoRequired`). A API devolve `true` para os apps até a
+   * versão 1.0 (8), que leem este campo, sempre pedirem a foto; o valor enviado é ignorado.
+   */
   requireSelfie: z.boolean(),
   /**
    * Minutos, após o fim de um turno que atravessa a meia-noite, em que uma marcação ainda
@@ -22,6 +27,14 @@ export const clockSettingsSchema = z.object({
   breakPunches: z.boolean(),
   /** Recusa a marcação que abriria a jornada num dia de folga da escala. */
   blockOffDay: z.boolean(),
+  /** Entrada depois do início do turno mais esta tolerância conta como atraso (P-031). */
+  lateToleranceMinutes: z
+    .number({ error: 'Informe a tolerância' })
+    .int('Use minutos inteiros')
+    .min(0, 'Mínimo de 0 minutos')
+    .max(120, 'Máximo de 120 minutos'),
+  /** Entrada atrasada só é aceita com o motivo informado pelo funcionário. */
+  lateReasonRequired: z.boolean(),
 });
 export type ClockSettings = z.infer<typeof clockSettingsSchema>;
 
@@ -39,6 +52,13 @@ export const clockInputSchema = z.object({
    * nunca no futuro; fica sinalizado como offline (ADR 0019, pendência P-026).
    */
   offlineRecordedAt: isoInstant.nullish(),
+  /** Motivo do atraso, quando a entrada passa da tolerância (P-031). */
+  lateReason: z
+    .string()
+    .trim()
+    .min(3, 'Explique o motivo do atraso')
+    .max(500, 'Use até 500 caracteres')
+    .nullish(),
 });
 export type ClockInput = z.input<typeof clockInputSchema>;
 
@@ -69,6 +89,8 @@ export const timeEntrySchema = z.object({
   disregarded: z.boolean(),
   /** Feita sem conexão no app, com o horário do aparelho (ADR 0019). */
   offline: z.boolean().default(false),
+  /** Motivo informado pelo funcionário na entrada atrasada. */
+  lateReason: z.string().nullable().default(null),
   hash: z.string(),
 });
 export type TimeEntry = z.infer<typeof timeEntrySchema>;
@@ -112,6 +134,8 @@ export const timesheetDaySchema = z.object({
       nextDay: z.boolean(),
       kind: timeEntryKindSchema,
       geofenceStatus: geofenceStatusSchema,
+      /** Motivo do atraso informado na entrada. */
+      lateReason: z.string().nullable().default(null),
     }),
   ),
   /** Soma dos pares entrada/saída, em minutos. Sem regras legais (motor de cálculo, 1B.4). */

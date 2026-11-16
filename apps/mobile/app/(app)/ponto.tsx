@@ -1,6 +1,8 @@
 import {
   CLOCK_BLOCK_MESSAGES,
+  CLOCK_PHOTO_HINT,
   clockBlock,
+  lateMinutesAt,
   nextPunch,
   PUNCH_ACTIONS,
   punchLabel,
@@ -9,7 +11,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { useQuery } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Switch, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 import Animated, { FadeInDown, FadeInRight } from 'react-native-reanimated';
 import { SelfieCapture } from '@/camera';
 import { ClockButton, type ClockButtonState } from '@/clock-button';
@@ -30,6 +32,7 @@ import {
   Screen,
   SectionTitle,
   styles,
+  TextField,
   Touchable,
   useColors,
 } from '@/ui';
@@ -53,8 +56,9 @@ function useNow(): Date {
 /**
  * Registro de ponto (ADR 0012, ADR 0019). O horário oficial é o do servidor; sem conexão, a
  * marcação fica no aparelho com o horário em que foi feita e é enviada depois (sinalizada
- * como offline, até 72 h). Localização e foto seguem a configuração da empresa: com a
- * localização exigida, sem GPS não registra; com a foto exigida, a selfie vem antes.
+ * como offline, até 72 h). Com a localização exigida, sem GPS não registra. A foto segue a
+ * cerca do posto: sem cerca, é obrigatória (do local ou selfie); com cerca, não aparece. A
+ * entrada depois da tolerância pede o motivo do atraso.
  */
 export default function ClockScreen() {
   const api = useApi();
@@ -73,17 +77,17 @@ export default function ClockScreen() {
   const queue = useOfflineQueue(session.status === 'authenticated' ? session.user.id : null).filter(
     (i) => i.kind === 'clock',
   );
-  const [withPhoto, setWithPhoto] = useState(false);
   const [photo, setPhoto] = useState<string | null>(null);
+  const [lateReason, setLateReason] = useState('');
   const [state, setState] = useState<ClockButtonState>('idle');
   const [message, setMessage] = useState<{
     tone: 'success' | 'info' | 'warning';
     text: string;
   } | null>(null);
 
-  const photoRequired = settings.data?.requireSelfie ?? false;
+  // Sem o dia (sem conexão desde a abertura), pede a foto: o servidor aceita com ou sem cerca.
+  const usePhoto = day.data ? day.data.photoRequired : day.isError;
   const locationRequired = settings.data?.requireLocation ?? false;
-  const usePhoto = photoRequired || withPhoto;
   const effective = (entries.data ?? []).filter((e) => e.kind !== 'disregard' && !e.disregarded);
   const pendingQueue = queue.filter((i) => i.status === 'pending');
   const breakPunches = day.data?.breakPunches ?? false;
@@ -101,14 +105,18 @@ export default function ClockScreen() {
     : null;
   const shift = day.data?.planned.shift ?? null;
   const returnAt = next === 'break_end' ? (day.data?.expectedBreakEnd ?? null) : null;
+  // Entrada depois do início do turno mais a tolerância: pede o motivo (marcação na fila conta).
+  const late = count === 0 ? lateMinutesAt(day.data?.lateAfter ?? null, now) : 0;
+  const reasonMissing = late > 0 && lateReason.trim().length < 3;
   const offline = session.status === 'authenticated' && session.offline;
 
   const submit = async () => {
     setState('busy');
     setMessage(null);
     try {
-      const result = await register(usePhoto ? photo : null);
+      const result = await register(usePhoto ? photo : null, late > 0 ? lateReason.trim() : null);
       setPhoto(null);
+      setLateReason('');
       setState('success');
       haptics.success();
       setMessage(
@@ -161,7 +169,10 @@ export default function ClockScreen() {
           {locationRequired ? (
             <Chip tone="inverse" icon="location" label="Localização exigida" />
           ) : null}
-          {photoRequired ? <Chip tone="inverse" icon="camera" label="Foto exigida" /> : null}
+          {usePhoto ? <Chip tone="inverse" icon="camera" label="Foto exigida" /> : null}
+          {late > 0 ? (
+            <Chip tone="inverse" icon="alarm" label={`${String(late)} min de atraso`} />
+          ) : null}
           {offline ? <Chip tone="inverse" icon="cloud-offline" label="Sem conexão" /> : null}
         </View>
         {shift ? (
@@ -188,11 +199,38 @@ export default function ClockScreen() {
             </Label>
           </View>
         ) : usePhoto && !photo ? (
-          <View style={{ width: '100%', marginTop: 8 }}>
+          <View style={{ width: '100%', marginTop: 8, gap: 8 }}>
+            <Label tone="inverse" style={{ textAlign: 'center', fontWeight: '700' }}>
+              {CLOCK_PHOTO_HINT}
+            </Label>
             <SelfieCapture onChange={setPhoto} />
           </View>
         ) : (
-          <ClockButton label={nextLabel} state={state} onPress={() => void submit()} />
+          <>
+            {late > 0 ? (
+              <View style={{ width: '100%', marginTop: 8 }}>
+                <TextField
+                  label={`Você está ${String(late)} min atrasado. Motivo do atraso`}
+                  value={lateReason}
+                  onChangeText={setLateReason}
+                  multiline
+                  maxLength={500}
+                  placeholder="Ex.: ônibus atrasou; consulta médica."
+                />
+              </View>
+            ) : null}
+            <ClockButton
+              label={nextLabel}
+              state={state}
+              disabled={reasonMissing}
+              onPress={() => void submit()}
+            />
+            {reasonMissing ? (
+              <Label tone="inverse" style={{ opacity: 0.85, fontSize: 13 }}>
+                Escreva o motivo do atraso para registrar a entrada.
+              </Label>
+            ) : null}
+          </>
         )}
         {!blocked && usePhoto && photo ? (
           <Label tone="inverse" style={{ opacity: 0.85, fontSize: 13 }}>
@@ -205,28 +243,6 @@ export default function ClockScreen() {
       </Hero>
 
       {message ? <Banner tone={message.tone}>{message.text}</Banner> : null}
-
-      {photoRequired || blocked ? null : (
-        <Card>
-          <View style={styles.row}>
-            <View style={{ flex: 1 }}>
-              <Label style={{ fontWeight: '700' }}>Registrar com foto</Label>
-              <Label tone="muted" style={{ fontSize: 13 }}>
-                Opcional. Tira uma selfie junto com a marcação.
-              </Label>
-            </View>
-            <Switch
-              value={withPhoto}
-              onValueChange={(value) => {
-                setWithPhoto(value);
-                if (!value) setPhoto(null);
-              }}
-              trackColor={{ true: c.primary }}
-              accessibilityLabel="Registrar com foto"
-            />
-          </View>
-        </Card>
-      )}
 
       <SectionTitle
         action={

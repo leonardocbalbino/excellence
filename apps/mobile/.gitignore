@@ -22,3 +22,6 @@ fcm-service-account.json
 credentials.json
 *.aab
 *.apk
+
+# Ficha da App Store (eas metadata): tem o login de teste e o contato do revisor.
+store.config.json

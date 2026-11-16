@@ -78,6 +78,25 @@ export const weekdaySchema = z.number().int().min(0).max(6);
 
 export const WEEKDAY_LABELS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'] as const;
 
+/**
+ * Como o funcionário registra cada ponto da rota:
+ * - `qr`: lê o QR code afixado no ponto;
+ * - `photo`: tira uma foto no ponto (sem QR code);
+ * - `qr_and_photo`: lê o QR code e tira a foto.
+ */
+export const patrolCheckinModeSchema = z.enum(['qr', 'photo', 'qr_and_photo']);
+export type PatrolCheckinMode = z.infer<typeof patrolCheckinModeSchema>;
+
+export const PATROL_CHECKIN_MODES: Record<PatrolCheckinMode, string> = {
+  qr: 'Ler o QR code',
+  photo: 'Tirar uma foto',
+  qr_and_photo: 'Ler o QR code e tirar uma foto',
+};
+
+/** O modo pede a leitura do QR code / a foto. */
+export const modeNeedsQr = (mode: PatrolCheckinMode) => mode !== 'photo';
+export const modeNeedsPhoto = (mode: PatrolCheckinMode) => mode !== 'qr';
+
 export const patrolRouteInputSchema = z
   .object({
     unitId: z.uuid(),
@@ -91,6 +110,8 @@ export const patrolRouteInputSchema = z
       .max(720, 'Máximo de 12 horas'),
     /** Exige os pontos na ordem cadastrada. Sem isso, fora de ordem é aceito e sinalizado. */
     enforceOrder: z.boolean().default(false),
+    /** Como cada ponto é registrado: QR code, foto ou os dois. */
+    checkinMode: patrolCheckinModeSchema.default('qr'),
     pointIds: unique(z.uuid(), 'Ponto repetido na rota')
       .min(1, 'Inclua ao menos um ponto')
       .max(100),
@@ -131,6 +152,7 @@ export const patrolRouteSchema = z.object({
   description: z.string().nullable(),
   expectedMinutes: z.number().int(),
   enforceOrder: z.boolean(),
+  checkinMode: patrolCheckinModeSchema.default('qr'),
   /** Pontos que a ronda precisa ler; null = todos. */
   minPoints: z.number().int().nullable(),
   points: z.array(namedRef),
@@ -157,6 +179,8 @@ export const patrolCheckinSchema = z.object({
   outOfOrder: z.boolean(),
   /** Lido sem conexão no app e enviado depois (ADR 0019). */
   offline: z.boolean().default(false),
+  /** Registrado com foto (a foto aparece nas fotos da ronda, com o ponto). */
+  hasPhoto: z.boolean().default(false),
 });
 export type PatrolCheckin = z.infer<typeof patrolCheckinSchema>;
 
@@ -174,6 +198,8 @@ export const patrolRunSchema = z.object({
   status: patrolRunStatusSchema,
   finishNote: z.string().nullable(),
   enforceOrder: z.boolean(),
+  /** Como cada ponto é registrado (cópia da rota no início). */
+  checkinMode: patrolCheckinModeSchema.default('qr'),
   /** Pontos como estavam na rota ao iniciar, em ordem, com o check-in de cada um. */
   points: z.array(
     z.object({ id: z.uuid(), name: z.string(), checkin: patrolCheckinSchema.nullable() }),
@@ -200,20 +226,29 @@ export type PatrolRun = z.infer<typeof patrolRunSchema>;
 export const patrolRunStartSchema = z.object({ routeId: z.uuid() });
 export type PatrolRunStart = z.input<typeof patrolRunStartSchema>;
 
-export const patrolCheckinInputSchema = z.object({
-  /** Conteúdo lido do QR code (ou digitado, se a câmera falhar). */
-  code: z.string().trim().min(1, 'Leia o QR code').max(200),
-  latitude: z.number().min(-90).max(90).nullish(),
-  longitude: z.number().min(-180).max(180).nullish(),
-  accuracyMeters: z.number().min(0).max(100_000).nullish(),
-  /** Horário do dispositivo: só auditoria (o oficial é o do servidor). */
-  deviceTimestamp: isoInstant.nullish(),
-  /**
-   * Feito sem conexão no app: momento do registro no aparelho. Aceito até 72 h para trás e
-   * nunca no futuro; fica sinalizado como offline (ADR 0019, pendência P-026).
-   */
-  offlineRecordedAt: isoInstant.nullish(),
-});
+export const patrolCheckinInputSchema = z
+  .object({
+    /** Conteúdo lido do QR code (ou digitado, se a câmera falhar). Rotas por QR code. */
+    code: z.string().trim().min(1, 'Leia o QR code').max(200).nullish(),
+    /** Ponto registrado por foto (rota só com foto, sem QR code). */
+    pointId: z.uuid().nullish(),
+    /** Foto do ponto já enviada (finalidade `patrol_photo`). Rotas com foto. */
+    photoFileId: z.uuid().nullish(),
+    latitude: z.number().min(-90).max(90).nullish(),
+    longitude: z.number().min(-180).max(180).nullish(),
+    accuracyMeters: z.number().min(0).max(100_000).nullish(),
+    /** Horário do dispositivo: só auditoria (o oficial é o do servidor). */
+    deviceTimestamp: isoInstant.nullish(),
+    /**
+     * Feito sem conexão no app: momento do registro no aparelho. Aceito até 72 h para trás e
+     * nunca no futuro; fica sinalizado como offline (ADR 0019, pendência P-026).
+     */
+    offlineRecordedAt: isoInstant.nullish(),
+  })
+  .refine((input) => Boolean(input.code) || Boolean(input.pointId), {
+    path: ['code'],
+    message: 'Leia o QR code ou escolha o ponto',
+  });
 export type PatrolCheckinInput = z.input<typeof patrolCheckinInputSchema>;
 
 export const patrolRunFinishSchema = z.object({
@@ -262,6 +297,7 @@ export const myPatrolsSchema = z.object({
       unit: namedRef,
       expectedMinutes: z.number().int(),
       pointsCount: z.number().int(),
+      checkinMode: patrolCheckinModeSchema.default('qr'),
       slots: z.array(patrolSlotSchema),
     }),
   ),

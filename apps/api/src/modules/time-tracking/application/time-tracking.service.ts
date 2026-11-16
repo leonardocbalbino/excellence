@@ -1,6 +1,7 @@
 import { HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
 import {
   CLOCK_BLOCK_MESSAGES,
+  CLOCK_PHOTO_HINT,
   type ClockDay,
   type ClockReceipt,
   type ClockSettings,
@@ -8,6 +9,7 @@ import {
   type clockInputSchema,
   type DailyAttendance,
   expectedBreakEnd,
+  lateMinutesAt,
   nextPunch,
   type PlannedDay,
   ProblemType,
@@ -26,7 +28,7 @@ import { addDays } from '../../scheduling/domain/planner';
 import { EmployeesService } from '../../workforce/application/employees.service';
 import { fromCalendarDate, toCalendarDate, todayIn } from '../../workforce/domain/calendar';
 import { employeeScopeWhere } from '../../workforce/domain/employee-scope';
-import { evaluateGeofence } from '../domain/geofence';
+import { evaluateGeofence, hasFence } from '../domain/geofence';
 import { OFFLINE_SOURCE, resolveOfflineTime } from '../domain/offline';
 import { verifyChain } from '../domain/hash-chain';
 import { attendanceStatus } from '../domain/attendance';
@@ -60,6 +62,7 @@ const ENTRY_SELECT = {
   distanceMeters: true,
   geofenceStatus: true,
   selfieFileId: true,
+  lateReason: true,
   source: true,
   createdBy: true,
   previousHash: true,
@@ -126,11 +129,13 @@ export class TimeTrackingService {
         'A localização é obrigatória para registrar o ponto.',
       );
     }
-    if (settings.requireSelfie && !input.selfieFileId) {
+    // Foto pela cerca: com cerca, a localização confere o posto e a foto não é pedida; sem
+    // cerca, a foto é a prova do local (aceita também quando vem com cerca, de apps antigos).
+    if (!hasFence(employee.unit) && !input.selfieFileId) {
       throw fail(
         ProblemType.SelfieRequired,
         HttpStatus.UNPROCESSABLE_ENTITY,
-        'A foto é obrigatória para registrar o ponto.',
+        `O seu posto não tem cerca virtual, então a foto é obrigatória. ${CLOCK_PHOTO_HINT}`,
       );
     }
     if (input.selfieFileId) {
@@ -178,6 +183,18 @@ export class TimeTrackingService {
         CLOCK_BLOCK_MESSAGES[blocked],
       );
     }
+    // Entrada atrasada (P-031): pelo mesmo horário da folga (sem conexão, o do aparelho).
+    const late = lateMinutesAt(entryLateAfter(day, settings), official.recordedAt ?? new Date());
+    // O app até a versão 1.0 (8) não conhece o campo e não o envia: segue aceito até atualizar.
+    // O web e o app novo sempre enviam `lateReason` (null quando não há atraso).
+    const knowsLateReason = client.source === 'web' || input.lateReason !== undefined;
+    if (late > 0 && !input.lateReason && knowsLateReason) {
+      throw fail(
+        ProblemType.ClockLateReasonRequired,
+        HttpStatus.UNPROCESSABLE_ENTITY,
+        `Entrada com ${String(late)} min de atraso. Informe o motivo para registrar.`,
+      );
+    }
 
     const fence = evaluateGeofence(employee.unit, position);
     if (fence.status === 'outside' && settings.outsideGeofence === 'block') {
@@ -202,6 +219,8 @@ export class TimeTrackingService {
         distanceMeters: fence.distanceMeters,
         geofenceStatus: fence.status,
         selfieFileId: input.selfieFileId ?? null,
+        // Só na entrada: nas outras marcações o motivo não se aplica.
+        lateReason: day.entries.length === 0 ? (input.lateReason ?? null) : null,
         source: official.offline ? OFFLINE_SOURCE : client.source,
         ipAddress: client.ip,
         userAgent: client.userAgent,
@@ -303,6 +322,10 @@ export class TimeTrackingService {
         planned: day.planned,
         breakStartTime: day.entries[1]?.localTime ?? null,
       }),
+      fence: hasFence(employee.unit),
+      photoRequired: !hasFence(employee.unit),
+      lateAfter: blocked ? null : entryLateAfter(day, settings),
+      lateToleranceMinutes: settings.lateToleranceMinutes,
     };
   }
 
@@ -400,6 +423,7 @@ export class TimeTrackingService {
           kind: true,
           recordedAt: true,
           geofenceStatus: true,
+          lateReason: true,
           referencesEntryId: true,
         },
       }),
@@ -486,6 +510,7 @@ export class TimeTrackingService {
         kind: true,
         recordedAt: true,
         geofenceStatus: true,
+        lateReason: true,
         referencesEntryId: true,
       },
     });
@@ -587,7 +612,12 @@ export class TimeTrackingService {
       flexibleWeeklyMinutes: null,
       holiday: null,
     };
-    return { workDate, planned: plannedByDate.get(workDate) ?? unassigned, entries };
+    return {
+      workDate,
+      timezone,
+      planned: plannedByDate.get(workDate) ?? unassigned,
+      entries,
+    };
   }
 
   private async listFor(
@@ -644,6 +674,7 @@ export class TimeTrackingService {
         distanceMeters: row.distanceMeters,
         accuracyMeters: row.accuracyMeters,
         hasSelfie: row.selfieFileId !== null,
+        lateReason: row.lateReason,
         referencesEntryId: row.referencesEntryId,
         disregarded: disregarded.has(row.id),
         offline: row.source === OFFLINE_SOURCE,
@@ -697,6 +728,21 @@ export class TimeTrackingService {
       },
     });
   }
+}
+
+/**
+ * Instante a partir do qual a entrada do dia é atraso (início do turno mais a tolerância), em
+ * ISO; null quando a próxima marcação não é a entrada, não há turno ou a empresa não exige o
+ * motivo.
+ */
+function entryLateAfter(
+  day: { workDate: string; timezone: string; planned: PlannedDay; entries: readonly unknown[] },
+  settings: ClockSettings,
+): string | null {
+  const shift = day.planned.shift;
+  if (!settings.lateReasonRequired || !shift || day.entries.length > 0) return null;
+  const start = fromZoned(day.workDate, shift.start, day.timezone);
+  return new Date(start.getTime() + settings.lateToleranceMinutes * 60_000).toISOString();
 }
 
 /** HH:MM:SS no fuso (o comprovante mostra os segundos). */

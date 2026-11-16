@@ -23,6 +23,7 @@ const entry = {
   nextDay: false,
   kind: 'clock' as const,
   geofenceStatus: 'inside' as const,
+  lateReason: null,
 };
 
 function day(

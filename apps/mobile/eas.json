@@ -33,6 +33,10 @@
       },
       "env": {
         "EXPO_PUBLIC_API_URL": "https://gestaoexcellence.com.br/api/v1"
+      },
+      "ios": {
+        "node": "22.20.0",
+        "pnpm": "12.6.0"
       }
     }
   },
@@ -42,6 +46,9 @@
         "serviceAccountKeyPath": "./google-play-service-account.json",
         "track": "production",
         "releaseStatus": "completed"
+      },
+      "ios": {
+        "ascAppId": "6834197398"
       }
     },
     "internal": {

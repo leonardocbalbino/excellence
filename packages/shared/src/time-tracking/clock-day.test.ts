@@ -3,6 +3,7 @@ import {
   addMinutesToTime,
   clockBlock,
   expectedBreakEnd,
+  lateMinutesAt,
   nextPunch,
   punchLabel,
 } from './clock-day.js';
@@ -87,5 +88,19 @@ describe('horários previstos', () => {
 
   it('soma minutos dando a volta na meia-noite', () => {
     expect(addMinutesToTime('23:30', 60)).toBe('00:30');
+  });
+});
+
+describe('atraso na entrada', () => {
+  const lateAfter = '2026-11-16T10:10:00.000Z';
+
+  it('dentro da tolerância não é atraso', () => {
+    expect(lateMinutesAt(lateAfter, new Date('2026-11-16T10:10:00.000Z'))).toBe(0);
+    expect(lateMinutesAt(null, new Date('2026-11-16T12:00:00.000Z'))).toBe(0);
+  });
+
+  it('conta os minutos depois da tolerância, arredondando para cima', () => {
+    expect(lateMinutesAt(lateAfter, new Date('2026-11-16T10:10:01.000Z'))).toBe(1);
+    expect(lateMinutesAt(lateAfter, new Date('2026-11-16T10:25:00.000Z'))).toBe(15);
   });
 });

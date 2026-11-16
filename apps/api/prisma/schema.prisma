@@ -700,19 +700,22 @@ enum ClockOutsideGeofence {
 
 /// Parâmetros do ponto por empresa (regras que dependem de decisão: pendências P-008/P-015).
 model ClockSettings {
-  companyId         String               @id @map("company_id") @db.Uuid
+  companyId          String               @id @map("company_id") @db.Uuid
   // Marcação fora da cerca virtual: aceitar e sinalizar, ou recusar.
-  outsideGeofence   ClockOutsideGeofence @default(allow) @map("outside_geofence")
-  requireLocation   Boolean              @default(false) @map("require_location")
-  requireSelfie     Boolean              @default(false) @map("require_selfie")
+  outsideGeofence    ClockOutsideGeofence @default(allow) @map("outside_geofence")
+  requireLocation    Boolean              @default(false) @map("require_location")
+  requireSelfie      Boolean              @default(false) @map("require_selfie")
   // Janela (minutos) após o fim de um turno que vira a meia-noite em que a marcação ainda
   // pertence ao dia de trabalho anterior (atribuição ao dia no espelho).
-  overnightGraceMin Int                  @default(240) @map("overnight_grace_minutes") @db.SmallInt
+  overnightGraceMin  Int                  @default(240) @map("overnight_grace_minutes") @db.SmallInt
   // Marcar saída e retorno do almoço (4 marcações por dia). Desligado: entrada e saída.
-  breakPunches      Boolean              @default(false) @map("break_punches")
+  breakPunches       Boolean              @default(false) @map("break_punches")
   // Recusar a marcação que abriria a jornada num dia de folga da escala.
-  blockOffDay       Boolean              @default(true) @map("block_off_day")
-  updatedAt         DateTime             @updatedAt @map("updated_at") @db.Timestamptz(6)
+  blockOffDay        Boolean              @default(true) @map("block_off_day")
+  // Entrada depois do início do turno mais a tolerância é atraso e pede o motivo (P-031).
+  lateToleranceMin   Int                  @default(10) @map("late_tolerance_minutes") @db.SmallInt
+  lateReasonRequired Boolean              @default(true) @map("late_reason_required")
+  updatedAt          DateTime             @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   company Company @relation(fields: [companyId], references: [id])
 
@@ -771,6 +774,8 @@ model TimeEntry {
   distanceMeters      Float?         @map("distance_meters")
   geofenceStatus      GeofenceStatus @map("geofence_status")
   selfieFileId        String?        @map("selfie_file_id") @db.Uuid
+  // Motivo do atraso informado pelo funcionário na entrada (entra no hash quando presente).
+  lateReason          String?        @map("late_reason")
   source              String
   ipAddress           String?        @map("ip_address")
   userAgent           String?        @map("user_agent")
@@ -1030,23 +1035,33 @@ model PatrolPoint {
   @@map("patrol_points")
 }
 
+/// Como cada ponto da rota é registrado.
+enum PatrolCheckinMode {
+  qr
+  photo
+  qr_and_photo
+
+  @@map("patrol_checkin_mode")
+}
+
 /// Rota: sequência de pontos, tempo previsto e horários de início.
 model PatrolRoute {
-  id              String   @id @default(uuid(7)) @db.Uuid
-  companyId       String   @map("company_id") @db.Uuid
-  unitId          String   @map("unit_id") @db.Uuid
-  name            String   @db.Citext
+  id              String            @id @default(uuid(7)) @db.Uuid
+  companyId       String            @map("company_id") @db.Uuid
+  unitId          String            @map("unit_id") @db.Uuid
+  name            String            @db.Citext
   description     String?
-  expectedMinutes Int      @map("expected_minutes") @db.SmallInt
-  enforceOrder    Boolean  @default(false) @map("enforce_order")
+  expectedMinutes Int               @map("expected_minutes") @db.SmallInt
+  enforceOrder    Boolean           @default(false) @map("enforce_order")
+  checkinMode     PatrolCheckinMode @default(qr) @map("checkin_mode")
   // Pontos que a ronda precisa ler para contar como feita; null = todos (ADR 0024).
-  minPoints       Int?     @map("min_points") @db.SmallInt
+  minPoints       Int?              @map("min_points") @db.SmallInt
   // Horários de início em minutos do dia (fuso da unidade) e dias da semana (0 = domingo).
-  startMinutes    Int[]    @map("start_minutes") @db.SmallInt
-  weekdays        Int[]    @db.SmallInt
-  isActive        Boolean  @default(true) @map("is_active")
-  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  startMinutes    Int[]             @map("start_minutes") @db.SmallInt
+  weekdays        Int[]             @db.SmallInt
+  isActive        Boolean           @default(true) @map("is_active")
+  createdAt       DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime          @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   company   Company               @relation(fields: [companyId], references: [id])
   unit      Unit                  @relation(fields: [unitId, companyId], references: [id, companyId], onDelete: Restrict)
@@ -1098,23 +1113,25 @@ enum PatrolRunStatus {
 
 /// Ronda feita. Só o encerramento altera o registro (trigger), uma única vez.
 model PatrolRun {
-  id            String          @id @default(uuid(7)) @db.Uuid
-  companyId     String          @map("company_id") @db.Uuid
-  routeId       String          @map("route_id") @db.Uuid
-  employeeId    String          @map("employee_id") @db.Uuid
-  unitId        String          @map("unit_id") @db.Uuid
+  id            String            @id @default(uuid(7)) @db.Uuid
+  companyId     String            @map("company_id") @db.Uuid
+  routeId       String            @map("route_id") @db.Uuid
+  employeeId    String            @map("employee_id") @db.Uuid
+  unitId        String            @map("unit_id") @db.Uuid
   // Pontos da rota no início, em ordem: mudar a rota depois não altera a ronda.
-  pointIds      String[]        @map("point_ids") @db.Uuid
-  enforceOrder  Boolean         @map("enforce_order")
+  pointIds      String[]          @map("point_ids") @db.Uuid
+  enforceOrder  Boolean           @map("enforce_order")
+  // Cópia da rota no início.
+  checkinMode   PatrolCheckinMode @default(qr) @map("checkin_mode")
   // Cópia da rota no início (null = todos os pontos).
-  minPoints     Int?            @map("min_points") @db.SmallInt
-  scheduledFor  DateTime?       @map("scheduled_for") @db.Timestamptz(6)
-  startedAt     DateTime        @map("started_at") @db.Timestamptz(6)
-  expectedEndAt DateTime        @map("expected_end_at") @db.Timestamptz(6)
-  status        PatrolRunStatus @default(in_progress)
-  finishedAt    DateTime?       @map("finished_at") @db.Timestamptz(6)
-  finishNote    String?         @map("finish_note")
-  createdAt     DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  minPoints     Int?              @map("min_points") @db.SmallInt
+  scheduledFor  DateTime?         @map("scheduled_for") @db.Timestamptz(6)
+  startedAt     DateTime          @map("started_at") @db.Timestamptz(6)
+  expectedEndAt DateTime          @map("expected_end_at") @db.Timestamptz(6)
+  status        PatrolRunStatus   @default(in_progress)
+  finishedAt    DateTime?         @map("finished_at") @db.Timestamptz(6)
+  finishNote    String?           @map("finish_note")
+  createdAt     DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
 
   company     Company            @relation(fields: [companyId], references: [id])
   route       PatrolRoute        @relation(fields: [routeId, companyId], references: [id, companyId], onDelete: Restrict)
@@ -1147,6 +1164,8 @@ model PatrolCheckin {
   distanceMeters   Float?         @map("distance_meters")
   geofenceStatus   GeofenceStatus @map("geofence_status")
   outOfOrder       Boolean        @map("out_of_order")
+  // Foto do ponto (rotas com foto); também aparece nas fotos da ronda.
+  photoFileId      String?        @map("photo_file_id") @db.Uuid
   source           String
   ipAddress        String?        @map("ip_address")
   userAgent        String?        @map("user_agent")

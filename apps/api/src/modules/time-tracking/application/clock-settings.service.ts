@@ -8,15 +8,18 @@ import { AuditService, toAuditJson } from '../../audit/application/audit.service
 
 /**
  * Padrões enquanto a empresa não configura (P-008: fora da cerca, aceita e sinaliza). Sem
- * almoço: só entrada e saída. Folga: não abre jornada (P-030).
+ * almoço: só entrada e saída. Folga: não abre jornada (P-030). Atraso: 10 min de tolerância e
+ * motivo obrigatório (P-031). A foto segue a cerca da unidade (`requireSelfie` é obsoleto).
  */
 export const DEFAULT_CLOCK_SETTINGS: ClockSettings = {
   outsideGeofence: 'allow',
   requireLocation: false,
-  requireSelfie: false,
+  requireSelfie: true,
   overnightGraceMinutes: 240,
   breakPunches: false,
   blockOffDay: true,
+  lateToleranceMinutes: 10,
+  lateReasonRequired: true,
 };
 
 @Injectable()
@@ -34,10 +37,14 @@ export class ClockSettingsService {
     return {
       outsideGeofence: row.outsideGeofence,
       requireLocation: row.requireLocation,
-      requireSelfie: row.requireSelfie,
+      // Obsoleto: os apps até a versão 1.0 (8) leem este campo; true faz eles sempre pedirem a
+      // foto, que o servidor aceita com ou sem cerca.
+      requireSelfie: true,
       overnightGraceMinutes: row.overnightGraceMin,
       breakPunches: row.breakPunches,
       blockOffDay: row.blockOffDay,
+      lateToleranceMinutes: row.lateToleranceMin,
+      lateReasonRequired: row.lateReasonRequired,
     };
   }
 
@@ -47,10 +54,11 @@ export class ClockSettingsService {
     const data = {
       outsideGeofence: input.outsideGeofence,
       requireLocation: input.requireLocation,
-      requireSelfie: input.requireSelfie,
       overnightGraceMin: input.overnightGraceMinutes,
       breakPunches: input.breakPunches,
       blockOffDay: input.blockOffDay,
+      lateToleranceMin: input.lateToleranceMinutes,
+      lateReasonRequired: input.lateReasonRequired,
     };
     await this.db.client.$transaction(async (tx) => {
       await tx.clockSettings.upsert({
@@ -68,6 +76,6 @@ export class ClockSettingsService {
         tx,
       );
     });
-    return input;
+    return { ...input, requireSelfie: true };
   }
 }

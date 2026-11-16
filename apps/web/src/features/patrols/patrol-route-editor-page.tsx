@@ -1,5 +1,7 @@
 import {
   ApiError,
+  PATROL_CHECKIN_MODES,
+  type PatrolCheckinMode,
   type PatrolRoute,
   type PatrolRouteInput,
   patrolRouteInputSchema,
@@ -44,6 +46,7 @@ interface Draft {
   expectedHours: string;
   expectedMins: string;
   enforceOrder: boolean;
+  checkinMode: PatrolCheckinMode;
   /** Vazio = todos os pontos. */
   minPoints: string;
   isActive: boolean;
@@ -61,6 +64,7 @@ function toDraft(route: PatrolRoute | undefined, defaultUnit: string): Draft {
     expectedHours: String(Math.floor((route?.expectedMinutes ?? 30) / 60)),
     expectedMins: String((route?.expectedMinutes ?? 30) % 60),
     enforceOrder: route?.enforceOrder ?? false,
+    checkinMode: route?.checkinMode ?? 'qr',
     minPoints: route?.minPoints ? String(route.minPoints) : '',
     isActive: route?.isActive ?? true,
     points: route?.points ?? [],
@@ -77,6 +81,7 @@ function toInput(draft: Draft): PatrolRouteInput {
     description: draft.description.trim() || null,
     expectedMinutes: Number(draft.expectedHours || 0) * 60 + Number(draft.expectedMins || 0),
     enforceOrder: draft.enforceOrder,
+    checkinMode: draft.checkinMode,
     minPoints: draft.minPoints.trim() ? Number(draft.minPoints) : null,
     isActive: draft.isActive,
     pointIds: draft.points.map((p) => p.id),
@@ -274,6 +279,27 @@ function RouteForm({ route, units }: { route: PatrolRoute | undefined; units: Na
           </p>
         </fieldset>
         <div className="grid gap-1.5">
+          <Label htmlFor="route-mode">Em cada ponto, o funcionário deve</Label>
+          <Select
+            id="route-mode"
+            value={draft.checkinMode}
+            onChange={(e) => set({ checkinMode: e.target.value as PatrolCheckinMode })}
+          >
+            {(Object.keys(PATROL_CHECKIN_MODES) as PatrolCheckinMode[]).map((mode) => (
+              <option key={mode} value={mode}>
+                {PATROL_CHECKIN_MODES[mode]}
+              </option>
+            ))}
+          </Select>
+          <p className="text-xs text-muted-foreground">
+            {draft.checkinMode === 'photo'
+              ? 'Sem QR code: o funcionário escolhe o ponto no app e tira a foto. As fotos aparecem na ronda.'
+              : draft.checkinMode === 'qr_and_photo'
+                ? 'Lê o QR code e, em seguida, tira a foto do ponto. As fotos aparecem na ronda.'
+                : 'Lê o QR code afixado em cada ponto. A foto no local continua opcional.'}
+          </p>
+        </div>
+        <div className="grid gap-1.5">
           <Label htmlFor="route-min-points">Pontos obrigatórios por ronda</Label>
           <Input
             id="route-min-points"
@@ -285,7 +311,7 @@ function RouteForm({ route, units }: { route: PatrolRoute | undefined; units: Na
           />
           {fieldError('minPoints')}
           <p className="text-xs text-muted-foreground">
-            Quantos QR codes a ronda precisa ler em cada horário. Vazio = todos. Com menos, o
+            Quantos pontos a ronda precisa registrar em cada horário. Vazio = todos. Com menos, o
             funcionário só encerra explicando o motivo.
           </p>
         </div>
