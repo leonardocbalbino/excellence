@@ -48,6 +48,7 @@ export const ProblemType = {
   OutsideGeofence: 'urn:excellence:problem:outside-geofence',
   ClockDayOff: 'urn:excellence:problem:clock-day-off',
   ClockDayComplete: 'urn:excellence:problem:clock-day-complete',
+  ClockLateReasonRequired: 'urn:excellence:problem:clock-late-reason-required',
   IdempotencyMismatch: 'urn:excellence:problem:idempotency-mismatch',
   OfflineEntryRejected: 'urn:excellence:problem:offline-entry-rejected',
   AdjustmentNotPending: 'urn:excellence:problem:adjustment-not-pending',
@@ -66,6 +67,7 @@ export const ProblemType = {
   PatrolPointNotInRun: 'urn:excellence:problem:patrol-point-not-in-run',
   PatrolPointAlreadyChecked: 'urn:excellence:problem:patrol-point-already-checked',
   PatrolPointTooFar: 'urn:excellence:problem:patrol-point-too-far',
+  PatrolPhotoRequired: 'urn:excellence:problem:patrol-photo-required',
   PatrolOutOfOrder: 'urn:excellence:problem:patrol-out-of-order',
 } as const;
 

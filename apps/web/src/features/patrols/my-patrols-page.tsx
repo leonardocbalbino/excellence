@@ -1,8 +1,17 @@
-import type { MyPatrols, PatrolRun } from '@excellence/shared';
+import {
+  modeNeedsPhoto,
+  modeNeedsQr,
+  type MyPatrols,
+  type PatrolCheckinInput,
+  type PatrolRun,
+  parsePatrolCode,
+} from '@excellence/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
+  CameraIcon,
   CheckCircle2Icon,
   CircleIcon,
+  ImageIcon,
   MapPinOffIcon,
   QrCodeIcon,
   RouteIcon,
@@ -15,11 +24,14 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton, Spinner } from '@/components/ui/feedback';
 import { Label } from '@/components/ui/label';
+import { Select } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { getCurrentPosition } from '@/lib/device/geolocation';
 import { randomId } from '@/lib/random-id';
 import { errorMessage, useApi } from '@/lib/services';
+import { uploadFile } from '@/lib/upload';
 import { cn } from '@/lib/utils';
+import { CameraCapture } from '../time-tracking/camera-capture';
 import { localTime, myPatrolsQueryKey, runStatusText, SLOT_STATUS } from './labels';
 import { QrScanner } from './qr-scanner';
 
@@ -33,7 +45,8 @@ export function MyPatrolsPage() {
       <div>
         <h1 className="text-3xl font-bold">Rondas</h1>
         <p className="text-muted-foreground">
-          Inicie a rota e leia o QR code de cada ponto. O horário registrado é o do servidor.
+          Inicie a rota e registre cada ponto (QR code, foto ou os dois, conforme a rota). O horário
+          registrado é o do servidor.
         </p>
       </div>
       {mine.isError ? <Alert variant="destructive">{errorMessage(mine.error)}</Alert> : null}
@@ -117,8 +130,14 @@ function RouteList({ routes }: { routes: MyPatrols['routes'] }) {
               disabled={start.isPending}
               onClick={() => start.mutate(route.id)}
             >
-              {start.isPending && start.variables === route.id ? <Spinner /> : <QrCodeIcon />}
-              Iniciar e ler QR code
+              {start.isPending && start.variables === route.id ? (
+                <Spinner />
+              ) : route.checkinMode === 'photo' ? (
+                <CameraIcon />
+              ) : (
+                <QrCodeIcon />
+              )}
+              {route.checkinMode === 'photo' ? 'Iniciar ronda' : 'Iniciar e ler QR code'}
             </Button>
           </section>
         );
@@ -147,13 +166,33 @@ function RunInProgress({ run }: { run: PatrolRun }) {
       old ? { ...old, current: next.status === 'in_progress' ? next : null } : old,
     );
 
+  const needsQr = modeNeedsQr(run.checkinMode);
+  const needsPhoto = modeNeedsPhoto(run.checkinMode);
+  // QR e foto: o QR lido espera a foto do ponto antes do registro.
+  const [scannedCode, setScannedCode] = useState<string | null>(null);
   const checkin = useMutation({
-    mutationFn: async (code: string) => {
+    mutationFn: async (target: {
+      code?: string | null;
+      pointId?: string | null;
+      photo?: Blob | null;
+    }) => {
       const position = await tryPosition();
+      const photoFileId = target.photo
+        ? await uploadFile(
+            api,
+            new File([target.photo], 'ponto.jpg', { type: 'image/jpeg' }),
+            'patrol_photo',
+          )
+        : null;
+      const input: PatrolCheckinInput = {
+        code: target.code ?? null,
+        pointId: target.pointId ?? null,
+        photoFileId,
+      };
       return api.patrols.checkin(
         run.id,
         {
-          code,
+          ...input,
           latitude: position?.latitude ?? null,
           longitude: position?.longitude ?? null,
           accuracyMeters: position?.accuracyMeters ?? null,
@@ -164,6 +203,7 @@ function RunInProgress({ run }: { run: PatrolRun }) {
     },
     onSuccess: (next) => {
       attemptKey.current = randomId();
+      setScannedCode(null);
       const latest = next.points
         .filter((p) => p.checkin)
         .sort((a, b) =>
@@ -243,21 +283,48 @@ function RunInProgress({ run }: { run: PatrolRun }) {
         ) : null}
       </section>
 
-      <section className="rounded-2xl border bg-card p-5" aria-label="Leitura do QR code">
+      <section
+        className="rounded-2xl border bg-card p-5"
+        aria-label={needsQr ? 'Leitura do QR code' : 'Foto do ponto'}
+      >
         {checkin.isError ? (
           <Alert variant="destructive" className="mb-4">
             {errorMessage(checkin.error)}
           </Alert>
         ) : null}
-        {scanning ? (
-          <QrScanner onCode={(code) => checkin.mutate(code)} disabled={checkin.isPending} />
+        {!needsQr ? (
+          <PhotoCheckin
+            run={run}
+            busy={checkin.isPending}
+            onSubmit={(pointId, photo) => checkin.mutate({ pointId, photo })}
+          />
+        ) : scannedCode ? (
+          <PhotoCheckin
+            run={run}
+            busy={checkin.isPending}
+            fixedPointId={parsePatrolCode(scannedCode)?.pointId ?? null}
+            onCancel={() => setScannedCode(null)}
+            onSubmit={(_pointId, photo) => checkin.mutate({ code: scannedCode, photo })}
+          />
+        ) : scanning ? (
+          <QrScanner
+            onCode={(code) => {
+              if (needsPhoto) {
+                setScannedCode(code);
+                setScanning(false);
+              } else {
+                checkin.mutate({ code });
+              }
+            }}
+            disabled={checkin.isPending}
+          />
         ) : (
           <Button size="lg" className="w-full" onClick={() => setScanning(true)}>
             <QrCodeIcon />
             Ler QR code
           </Button>
         )}
-        {scanning ? (
+        {needsQr && scanning && !scannedCode ? (
           <Button variant="outline" className="mt-3 w-full" onClick={() => setScanning(false)}>
             Fechar câmera
           </Button>
@@ -286,6 +353,9 @@ function RunInProgress({ run }: { run: PatrolRun }) {
               <span className="flex-1">
                 <span className="text-muted-foreground">{index + 1}.</span> {point.name}
               </span>
+              {point.checkin?.hasPhoto ? (
+                <ImageIcon className="size-4 text-muted-foreground" aria-label="com foto" />
+              ) : null}
               {point.checkin?.outOfOrder ? (
                 <Badge variant="outline">
                   <ShuffleIcon className="mr-1 size-3" aria-hidden="true" />
@@ -345,6 +415,77 @@ function RunInProgress({ run }: { run: PatrolRun }) {
           Concluir ronda
         </Button>
       </section>
+    </div>
+  );
+}
+
+/**
+ * Registro do ponto por foto (câmera traseira). Sem QR code, a pessoa escolhe o ponto (o
+ * próximo vem marcado); depois do QR, o ponto já vem do código.
+ */
+function PhotoCheckin({
+  run,
+  busy,
+  fixedPointId,
+  onSubmit,
+  onCancel,
+}: {
+  run: PatrolRun;
+  busy: boolean;
+  fixedPointId?: string | null;
+  onSubmit: (pointId: string, photo: Blob) => void;
+  onCancel?: () => void;
+}) {
+  const pending = run.points.filter((p) => !p.checkin);
+  const [choice, setChoice] = useState<string | null>(null);
+  const pointId = fixedPointId ?? choice ?? run.nextPoint?.id ?? pending[0]?.id ?? null;
+  const [photo, setPhoto] = useState<Blob | null>(null);
+  const name = run.points.find((p) => p.id === pointId)?.name;
+
+  if (pending.length === 0) {
+    return <p className="text-sm text-muted-foreground">Todos os pontos foram registrados.</p>;
+  }
+  return (
+    <div className="grid gap-4">
+      {fixedPointId === undefined ? (
+        <div className="grid gap-1.5">
+          <Label htmlFor="photo-point">Ponto</Label>
+          <Select
+            id="photo-point"
+            value={pointId ?? ''}
+            onChange={(e) => setChoice(e.target.value)}
+          >
+            {pending.map((point) => (
+              <option key={point.id} value={point.id}>
+                {point.name}
+              </option>
+            ))}
+          </Select>
+        </div>
+      ) : (
+        <p className="font-medium">
+          QR code lido{name ? ': ' + name : ''}. Agora tire a foto do ponto.
+        </p>
+      )}
+      <CameraCapture key={pointId ?? 'nenhum'} onChange={setPhoto} initialFacing="environment" />
+      <div className="flex flex-wrap gap-2">
+        <Button
+          size="lg"
+          className="flex-1"
+          disabled={busy || !photo || !pointId}
+          onClick={() => {
+            if (photo && pointId) onSubmit(pointId, photo);
+          }}
+        >
+          {busy ? <Spinner /> : <CameraIcon />}
+          Registrar ponto{name ? ' ' + name : ''}
+        </Button>
+        {onCancel ? (
+          <Button size="lg" variant="outline" onClick={onCancel} disabled={busy}>
+            Cancelar
+          </Button>
+        ) : null}
+      </div>
     </div>
   );
 }

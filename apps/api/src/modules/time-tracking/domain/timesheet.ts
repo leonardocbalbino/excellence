@@ -7,6 +7,7 @@ export interface EffectiveEntry {
   recordedAt: Date;
   kind: 'clock' | 'inclusion' | 'disregard';
   geofenceStatus: TimesheetDay['entries'][number]['geofenceStatus'];
+  lateReason?: string | null;
 }
 
 /**
@@ -79,6 +80,7 @@ export function buildTimesheetDays(input: {
         nextDay: local.date !== planned.date,
         kind: entry.kind,
         geofenceStatus: entry.geofenceStatus,
+        lateReason: entry.lateReason ?? null,
       })),
       workedMinutes,
       incomplete: items.length % 2 === 1,

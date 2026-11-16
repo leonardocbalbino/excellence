@@ -107,6 +107,19 @@ export function expectedBreakEnd(input: {
   return addMinutesToTime(input.breakStartTime, minutes);
 }
 
+/** Dica da foto do ponto (unidade sem cerca virtual). */
+export const CLOCK_PHOTO_HINT = 'Tire a foto do local de trabalho ou uma selfie.';
+
+/**
+ * Minutos de atraso da entrada feita em `at`, ou 0 (no horário, dentro da tolerância, ou
+ * sem prazo). `lateAfter` é o início do turno mais a tolerância (ver `ClockDay`).
+ */
+export function lateMinutesAt(lateAfter: string | null, at: Date): number {
+  if (!lateAfter) return 0;
+  const diff = at.getTime() - new Date(lateAfter).getTime();
+  return diff > 0 ? Math.ceil(diff / 60_000) : 0;
+}
+
 /** Dia de trabalho atual do funcionário, para a tela de ponto. */
 export const clockDaySchema = z.object({
   /** Dia de trabalho (o turno que vira a meia-noite fica no dia em que começou). */
@@ -123,5 +136,16 @@ export const clockDaySchema = z.object({
   /** Fim do turno da escala. */
   expectedExit: timeOfDaySchema.nullable(),
   expectedBreakEnd: timeOfDaySchema.nullable(),
+  /** A unidade do funcionário tem cerca virtual (localização e raio cadastrados). */
+  fence: z.boolean().default(false),
+  /** Foto obrigatória na marcação: só na unidade sem cerca (com cerca, a foto não aparece). */
+  photoRequired: z.boolean().default(false),
+  /**
+   * A próxima marcação é a entrada e, depois deste instante (início do turno mais a
+   * tolerância), ela exige o motivo do atraso. null: não é a entrada, sem turno, ou a empresa
+   * não exige o motivo.
+   */
+  lateAfter: z.iso.datetime({ offset: true }).nullable().default(null),
+  lateToleranceMinutes: z.number().int().default(10),
 });
 export type ClockDay = z.infer<typeof clockDaySchema>;

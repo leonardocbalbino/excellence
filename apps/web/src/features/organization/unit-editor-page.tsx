@@ -33,6 +33,7 @@ import { BRAZIL_TIMEZONES } from '@/lib/timezones';
 import { useCan } from '../access/access';
 import { ShiftsCatalog } from '../scheduling/shifts-page';
 import { WorkSchedulesList } from '../scheduling/work-schedules-page';
+import { GeofenceMap } from './geofence-map';
 import { unitsQueryKey } from './query-keys';
 import type { FolderTab } from './unit-folder-path';
 import { UnitEmployeesTab } from './unit-folder/employees-tab';
@@ -201,6 +202,35 @@ function UnitForm({ unit }: { unit: Unit | undefined }) {
     },
   });
   const isActive = useWatch({ control: form.control, name: 'isActive' });
+  const [latitude, longitude, radius, street, number, district, city, state] = useWatch({
+    control: form.control,
+    name: [
+      'latitude',
+      'longitude',
+      'geofenceRadiusMeters',
+      'street',
+      'number',
+      'district',
+      'city',
+      'state',
+    ],
+  });
+  const address = [
+    [street, number].filter(Boolean).join(', '),
+    district,
+    [city, state].filter(Boolean).join(' - '),
+  ]
+    .filter(Boolean)
+    .join(', ');
+
+  /** Ponto escolhido no mapa; sem raio ainda, sugere 100 m para a cerca valer. */
+  const pickOnMap = (lat: number, lng: number) => {
+    form.setValue('latitude', lat, { shouldDirty: true, shouldValidate: true });
+    form.setValue('longitude', lng, { shouldDirty: true, shouldValidate: true });
+    if (form.getValues('geofenceRadiusMeters') === null) {
+      form.setValue('geofenceRadiusMeters', 100, { shouldDirty: true, shouldValidate: true });
+    }
+  };
   const { errors, isSubmitting } = form.formState;
   // Erro do primeiro e-mail inválido da lista (ou da lista toda).
   const emailErrors = errors.occurrenceEmails;
@@ -318,9 +348,20 @@ function UnitForm({ unit }: { unit: Unit | undefined }) {
       <fieldset disabled={!canManage} className="grid gap-4 rounded-lg border p-4 sm:grid-cols-3">
         <legend className="px-1 text-sm font-medium">Localização e cerca virtual</legend>
         <p className="text-sm text-muted-foreground sm:col-span-3">
-          A cerca virtual é o raio, a partir das coordenadas, usado para conferir a localização das
-          marcações de ponto e dos check-ins de ronda.
+          A cerca virtual é o raio em volta do posto usado para conferir a localização das marcações
+          de ponto e dos check-ins de ronda. Com cerca, o ponto não pede foto; sem cerca (raio
+          vazio), a foto é obrigatória.
         </p>
+        <div className="sm:col-span-3">
+          <GeofenceMap
+            latitude={typeof latitude === 'number' ? latitude : null}
+            longitude={typeof longitude === 'number' ? longitude : null}
+            radiusMeters={typeof radius === 'number' ? radius : null}
+            address={address}
+            disabled={!canManage}
+            onPick={pickOnMap}
+          />
+        </div>
         <FormField label="Latitude" error={errors.latitude?.message}>
           {(field) => (
             <Input

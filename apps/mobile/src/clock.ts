@@ -21,7 +21,10 @@ export function useClock() {
   const session = useSession();
   const settings = useQuery({ queryKey: clockSettingsKey, queryFn: () => api.time.settings() });
 
-  const register = async (photoUri: string | null): Promise<ClockResult> => {
+  const register = async (
+    photoUri: string | null,
+    lateReason: string | null = null,
+  ): Promise<ClockResult> => {
     const at = new Date().toISOString();
     const position = await currentPosition();
     if (settings.data?.requireLocation && !position) {
@@ -32,10 +35,12 @@ export function useClock() {
       longitude: position?.longitude ?? null,
       accuracyMeters: position?.accuracyMeters ?? null,
       deviceTimestamp: at,
+      lateReason,
     };
     try {
       const selfieFileId = photoUri ? await uploadPhoto(api, photoUri) : null;
       const entry = await api.time.clock({ ...input, selfieFileId }, newKey());
+      // Prefixo comum: atualiza as marcações e o dia de trabalho (próxima marcação, atraso).
       await queryClient.invalidateQueries({ queryKey: todayEntriesKey });
       return { status: 'sent', entry };
     } catch (error) {

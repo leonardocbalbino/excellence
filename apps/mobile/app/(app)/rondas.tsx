@@ -1,13 +1,21 @@
-import type { MyPatrols, PatrolRun } from '@excellence/shared';
+import {
+  modeNeedsPhoto,
+  modeNeedsQr,
+  type MyPatrols,
+  type PatrolCheckinInput,
+  type PatrolRun,
+  parsePatrolCode,
+} from '@excellence/shared';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { View } from 'react-native';
 import Animated, { FadeInDown, ZoomIn } from 'react-native-reanimated';
 import { QrScanner, type ScanFeedback } from '@/camera';
-import { currentPosition, newKey } from '@/device';
+import { currentPosition, type LocalFile, newKey, uploadLocalFile } from '@/device';
 import { localTime } from '@/format';
 import { OccurrenceForm } from '@/occurrence-form';
+import { pickImage } from '@/pick-image';
 import { offlineQueue, type QueueItem, useOfflineQueue } from '@/offline-queue';
 import { myPatrolsKey } from '@/query-keys';
 import { RunPhotos } from '@/run-photos';
@@ -29,6 +37,7 @@ import {
   styles,
   TextField,
   Title,
+  Touchable,
   useColors,
 } from '@/ui';
 
@@ -44,6 +53,7 @@ type CheckinItem = Extract<QueueItem, { kind: 'checkin' }>;
 /**
  * Rondas (ADR 0016, ADR 0019): a ronda começa com conexão (o servidor cria a ronda); os
  * check-ins dos pontos podem ser feitos sem sinal e vão para a fila com o horário da leitura.
+ * A rota define como cada ponto é registrado: QR code, foto (escolhendo o ponto) ou os dois.
  */
 export default function PatrolsScreen() {
   const api = useApi();
@@ -160,7 +170,7 @@ function RouteList({ routes, loading }: { routes: MyPatrols['routes']; loading: 
             )}
             <Button
               label={next ? `Iniciar ronda das ${next.localTime}` : 'Iniciar ronda'}
-              icon="qr-code"
+              icon={route.checkinMode === 'photo' ? 'camera' : 'qr-code'}
               onPress={() => void start(route.id)}
               loading={starting === route.id}
             />
@@ -186,7 +196,9 @@ function RunInProgress({
   const queued = useOfflineQueue(userId).filter(
     (i): i is CheckinItem => i.kind === 'checkin' && i.runId === run.id,
   );
-  const [scanning, setScanning] = useState(true);
+  const needsQr = modeNeedsQr(run.checkinMode);
+  const needsPhoto = modeNeedsPhoto(run.checkinMode);
+  const [scanning, setScanning] = useState(needsQr);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState('');
   const [feedback, setFeedback] = useState<ScanFeedback>(null);
@@ -200,21 +212,49 @@ function RunInProgress({
       old ? { ...old, current: next.status === 'in_progress' ? next : null } : old,
     );
 
+  /** QR lido: registra; na rota com foto, abre a câmera antes. */
   const onCode = async (code: string) => {
     if (busy) return;
+    if (!needsPhoto) {
+      await register({ code }, null);
+      return;
+    }
+    setScanning(false);
+    const photo = await pickImage('camera');
+    if (!photo) {
+      setMessage({
+        tone: 'warning',
+        text: 'Sem a foto o ponto não é registrado. Leia o QR code de novo e tire a foto.',
+      });
+      setScanning(true);
+      return;
+    }
+    await register({ code }, photo);
+  };
+
+  /** Rota só com foto: o ponto escolhido e a foto tirada agora. */
+  const photographPoint = async (pointId: string) => {
+    if (busy) return;
+    const photo = await pickImage('camera');
+    if (photo) await register({ pointId }, photo);
+  };
+
+  const register = async (target: { code?: string; pointId?: string }, photo: LocalFile | null) => {
     setBusy(true);
     setMessage(null);
     const at = new Date().toISOString();
     const position = await currentPosition(6_000);
-    const input = {
-      code,
+    const input: PatrolCheckinInput = {
+      code: target.code ?? null,
+      pointId: target.pointId ?? null,
       latitude: position?.latitude ?? null,
       longitude: position?.longitude ?? null,
       accuracyMeters: position?.accuracyMeters ?? null,
       deviceTimestamp: at,
     };
     try {
-      const next = await api.patrols.checkin(run.id, input, newKey());
+      const photoFileId = photo ? await uploadLocalFile(api, photo, 'patrol_photo') : null;
+      const next = await api.patrols.checkin(run.id, { ...input, photoFileId }, newKey());
       setRun(next);
       haptics.success();
       setFeedback({ tone: 'success', at: Date.now() });
@@ -224,7 +264,7 @@ function RunInProgress({
       setMessage({
         tone: 'success',
         text: allDone
-          ? 'Todos os pontos lidos. Se quiser, tire uma foto ou escreva um comentário e toque em Concluir ronda.'
+          ? 'Todos os pontos registrados. Se quiser, escreva um comentário e toque em Concluir ronda.'
           : `Ponto registrado. Próximo: ${next.nextPoint?.name ?? '—'}.`,
       });
     } catch (error) {
@@ -239,12 +279,13 @@ function RunInProgress({
           status: 'pending',
           lastError: null,
           input: { ...input, offlineRecordedAt: at },
+          photoUri: photo?.uri ?? null,
         });
         haptics.warning();
         setFeedback({ tone: 'success', at: Date.now() });
         setMessage({
           tone: 'info',
-          text: `Sem sinal: leitura das ${localTime(at)} guardada. Ela é enviada quando a conexão voltar.`,
+          text: `Sem sinal: registro das ${localTime(at)} guardado${photo ? ' com a foto' : ''}. Ele é enviado quando a conexão voltar.`,
         });
       } else {
         haptics.error();
@@ -277,8 +318,13 @@ function RunInProgress({
     }
   };
 
-  const pendingCodes = queued.filter((q) => q.status === 'pending').map((q) => q.input.code);
-  const done = run.checked + pendingCodes.length;
+  // Pontos na fila (sem sinal): pelo QR lido ou pelo ponto escolhido na foto.
+  const pendingPoints = queued
+    .filter((q) => q.status === 'pending')
+    .map((q) => q.input.pointId ?? parsePatrolCode(q.input.code ?? '')?.pointId ?? null)
+    .filter((id): id is string => id !== null);
+  const done = run.checked + pendingPoints.length;
+  const nextToPhoto = run.points.find((p) => !p.checkin && !pendingPoints.includes(p.id)) ?? null;
   // A rota pode exigir só parte dos pontos (mínimo); abaixo dele, encerrar pede o motivo.
   const missing = Math.max(0, run.required - done);
   const allRead = done >= run.total;
@@ -320,21 +366,43 @@ function RunInProgress({
         </View>
       </Hero>
 
-      {scanning ? (
-        <QrScanner onCode={(code) => void onCode(code)} paused={busy} feedback={feedback} />
+      {needsQr ? (
+        <>
+          {needsPhoto ? (
+            <Label tone="muted" style={{ fontSize: 14 }}>
+              Em cada ponto: leia o QR code e, em seguida, tire a foto.
+            </Label>
+          ) : null}
+          {scanning ? (
+            <QrScanner onCode={(code) => void onCode(code)} paused={busy} feedback={feedback} />
+          ) : null}
+          <Button
+            label={scanning ? 'Fechar câmera' : 'Ler QR code'}
+            variant={scanning ? 'soft' : 'primary'}
+            icon={scanning ? 'close' : 'qr-code'}
+            onPress={() => setScanning((s) => !s)}
+          />
+        </>
+      ) : nextToPhoto ? (
+        <>
+          <Label tone="muted" style={{ fontSize: 14 }}>
+            Esta rota é registrada por foto: tire a foto de cada ponto. Para outro ponto, toque em
+            "Foto" na lista abaixo.
+          </Label>
+          <Button
+            label={`Fotografar: ${nextToPhoto.name}`}
+            icon="camera"
+            loading={busy}
+            onPress={() => void photographPoint(nextToPhoto.id)}
+          />
+        </>
       ) : null}
-      <Button
-        label={scanning ? 'Fechar câmera' : 'Ler QR code'}
-        variant={scanning ? 'soft' : 'primary'}
-        icon={scanning ? 'close' : 'qr-code'}
-        onPress={() => setScanning((s) => !s)}
-      />
       {message ? <Banner tone={message.tone}>{message.text}</Banner> : null}
 
       <SectionTitle>Pontos</SectionTitle>
       <Card>
         {run.points.map((point, index) => {
-          const isQueued = pendingCodes.some((code) => code.includes(point.id));
+          const isQueued = pendingPoints.includes(point.id);
           const checked = point.checkin !== null;
           const isNext = run.nextPoint?.id === point.id;
           return (
@@ -374,15 +442,30 @@ function RunInProgress({
                 )}
                 <Label style={{ flex: 1, fontWeight: isNext ? '700' : '500' }}>{point.name}</Label>
               </View>
-              <Label tone={checked ? 'success' : 'muted'} style={{ fontSize: 13 }}>
-                {point.checkin
-                  ? `${point.checkin.localTime}${point.checkin.offline ? ' · sem sinal' : ''}`
-                  : isQueued
-                    ? 'na fila'
-                    : isNext
-                      ? 'próximo'
-                      : '—'}
-              </Label>
+              {!needsQr && !checked && !isQueued ? (
+                <Touchable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Tirar foto do ponto ${point.name}`}
+                  disabled={busy}
+                  onPress={() => void photographPoint(point.id)}
+                  style={{ flexDirection: 'row', alignItems: 'center', gap: 4, padding: 4 }}
+                >
+                  <Ionicons name="camera-outline" size={18} color={c.primary} />
+                  <Label tone="primary" style={{ fontWeight: '700', fontSize: 13 }}>
+                    Foto
+                  </Label>
+                </Touchable>
+              ) : (
+                <Label tone={checked ? 'success' : 'muted'} style={{ fontSize: 13 }}>
+                  {point.checkin
+                    ? `${point.checkin.localTime}${point.checkin.hasPhoto ? ' · foto' : ''}${point.checkin.offline ? ' · sem sinal' : ''}`
+                    : isQueued
+                      ? 'na fila'
+                      : isNext
+                        ? 'próximo'
+                        : '—'}
+                </Label>
+              )}
             </View>
           );
         })}
@@ -390,12 +473,13 @@ function RunInProgress({
           .filter((q) => q.status === 'failed')
           .map((q) => (
             <Banner key={q.id} tone="warning">
-              Leitura das {localTime(q.createdAt)} não aceita: {q.lastError}
+              Registro das {localTime(q.createdAt)} não aceito: {q.lastError}
             </Banner>
           ))}
       </Card>
 
-      <RunPhotos run={run} onRun={setRun} />
+      {/* Nas rotas com foto, cada ponto já tem a sua; a foto avulsa fica para a rota por QR. */}
+      {needsPhoto ? null : <RunPhotos run={run} onRun={setRun} />}
 
       <OccurrenceForm run={run} />
 

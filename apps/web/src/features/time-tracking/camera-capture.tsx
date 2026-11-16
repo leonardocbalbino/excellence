@@ -1,12 +1,22 @@
-import { CameraIcon, RefreshCwIcon } from 'lucide-react';
+import { CameraIcon, RefreshCwIcon, SwitchCameraIcon } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/feedback';
 import { CameraError, captureFrame, openCamera, stopCamera } from '@/lib/device/camera';
 
-/** Câmera frontal para a selfie do ponto. Devolve a foto (JPEG sem EXIF) ou null. */
-export function CameraCapture({ onChange }: { onChange: (photo: Blob | null) => void }) {
+/**
+ * Foto do ponto: selfie (câmera frontal) ou o local de trabalho (traseira, em "Virar câmera").
+ * Devolve a foto (JPEG sem EXIF) ou null.
+ */
+export function CameraCapture({
+  onChange,
+  initialFacing = 'user',
+}: {
+  onChange: (photo: Blob | null) => void;
+  /** Câmera ao abrir: frontal (selfie) ou traseira (foto do local). */
+  initialFacing?: 'user' | 'environment';
+}) {
   const video = useRef<HTMLVideoElement>(null);
   const stream = useRef<MediaStream | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
@@ -15,10 +25,11 @@ export function CameraCapture({ onChange }: { onChange: (photo: Blob | null) => 
 
   // Cada tentativa (montagem ou "tirar outra") reabre a câmera.
   const [attempt, setAttempt] = useState(0);
+  const [facing, setFacing] = useState<'user' | 'environment'>(initialFacing);
 
   useEffect(() => {
     let cancelled = false;
-    openCamera('user')
+    openCamera(facing)
       .then(async (opened) => {
         if (cancelled) {
           stopCamera(opened);
@@ -43,7 +54,7 @@ export function CameraCapture({ onChange }: { onChange: (photo: Blob | null) => 
       if (stream.current) stopCamera(stream.current);
       stream.current = null;
     };
-  }, [attempt]);
+  }, [attempt, facing]);
 
   const capture = async () => {
     if (!video.current) return;
@@ -77,7 +88,11 @@ export function CameraCapture({ onChange }: { onChange: (photo: Blob | null) => 
           {/* A imagem é espelhada só na tela, como num espelho. */}
           <video
             ref={video}
-            className="h-full w-full -scale-x-100 object-cover"
+            className={
+              facing === 'user'
+                ? 'h-full w-full -scale-x-100 object-cover'
+                : 'h-full w-full object-cover'
+            }
             playsInline
             muted
           />
@@ -88,7 +103,21 @@ export function CameraCapture({ onChange }: { onChange: (photo: Blob | null) => 
           ) : null}
         </div>
       )}
-      <div className="flex justify-center">
+      <div className="flex flex-wrap justify-center gap-2">
+        {preview ? null : (
+          <Button
+            type="button"
+            variant="ghost"
+            disabled={starting}
+            onClick={() => {
+              setStarting(true);
+              setFacing((f) => (f === 'user' ? 'environment' : 'user'));
+            }}
+          >
+            <SwitchCameraIcon />
+            Virar câmera
+          </Button>
+        )}
         {preview ? (
           <Button type="button" variant="outline" onClick={retake}>
             <RefreshCwIcon />

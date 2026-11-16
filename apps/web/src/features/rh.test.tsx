@@ -4,7 +4,7 @@ import type {
   PayrollPeriodDetail,
   UsefulLink,
 } from '@excellence/shared';
-import { screen, within } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { renderApp } from '@/test/render-app';
@@ -23,6 +23,8 @@ const CLOCK_SETTINGS = {
   overnightGraceMinutes: 240,
   breakPunches: true,
   blockOffDay: true,
+  lateToleranceMinutes: 10,
+  lateReasonRequired: true,
 };
 
 const SHIFT = {
@@ -91,6 +93,46 @@ describe('Registrar ponto e espelho', () => {
     renderApp('/ponto');
     expect(await screen.findByText('Hoje é sua folga')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Registrar/ })).not.toBeInTheDocument();
+  });
+
+  it('entrada atrasada pede o motivo antes de registrar e o envia', async () => {
+    let sent: unknown = null;
+    server.use(
+      ...clockHandlers(
+        workDay({
+          entries: [],
+          next: 'entry',
+          // Tolerância vencida há 15 min (relógio real do teste).
+          lateAfter: new Date(Date.now() - 15 * 60_000).toISOString(),
+        }),
+      ),
+      http.post(`${API}/me/time-entries`, async ({ request }) => {
+        sent = await request.json();
+        return HttpResponse.json({ message: 'para o teste' }, { status: 500 });
+      }),
+    );
+    renderApp('/ponto');
+    const button = await screen.findByRole('button', { name: 'Registrar entrada' });
+    expect(screen.getByText(/min atrasado/)).toBeInTheDocument();
+    expect(button).toBeDisabled();
+    const user = userEvent.setup();
+    await user.type(screen.getByLabelText(/Motivo do atraso/), 'Ônibus atrasou');
+    expect(button).toBeEnabled();
+    await user.click(button);
+    await waitFor(() => expect(sent).toMatchObject({ lateReason: 'Ônibus atrasou' }));
+  });
+
+  it('posto sem cerca pede a foto com a dica; com cerca, a foto não aparece', async () => {
+    server.use(...clockHandlers(workDay({ photoRequired: true })));
+    const view = renderApp('/ponto');
+    expect(
+      await screen.findByText(/Tire a foto do local de trabalho ou uma selfie/),
+    ).toBeInTheDocument();
+    view.unmount();
+    server.use(...clockHandlers(workDay({ photoRequired: false, fence: true })));
+    renderApp('/ponto');
+    await screen.findByRole('button', { name: 'Registrar saída para almoço' });
+    expect(screen.queryByText(/Tire a foto do local/)).not.toBeInTheDocument();
   });
 
   it('o espelho fica dentro de "Registrar ponto", fora do menu', async () => {

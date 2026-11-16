@@ -42,3 +42,8 @@ export function evaluateGeofence(
     distanceMeters: Math.round(distance * 10) / 10,
   };
 }
+
+/** A unidade tem cerca virtual: localização e raio cadastrados. */
+export function hasFence(unit: FenceUnit): boolean {
+  return unit.latitude !== null && unit.longitude !== null && unit.geofenceRadiusMeters !== null;
+}

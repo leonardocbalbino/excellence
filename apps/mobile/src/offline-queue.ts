@@ -1,7 +1,7 @@
 import type { ApiClient, ClockInput, PatrolCheckinInput } from '@excellence/shared';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSyncExternalStore } from 'react';
-import { uploadPhoto } from './device';
+import { uploadLocalFile, uploadPhoto } from './device';
 import { errorMessage, isRetryable } from './services';
 
 const STORAGE_KEY = 'excellence.offlineQueue.v1';
@@ -28,6 +28,8 @@ export type QueueItem =
       runId: string;
       routeName: string;
       input: PatrolCheckinInput;
+      /** Foto do ponto tirada sem conexão (rotas com foto): enviada antes do check-in. */
+      photoUri?: string | null;
     });
 
 /**
@@ -97,7 +99,18 @@ class OfflineQueue {
           }
           await api.time.clock(input, item.id);
         } else {
-          await api.patrols.checkin(item.runId, item.input, item.id);
+          let input = item.input;
+          if (item.photoUri && !input.photoFileId) {
+            const photoFileId = await uploadLocalFile(
+              api,
+              { uri: item.photoUri, fileName: 'ponto.jpg', contentType: 'image/jpeg' },
+              'patrol_photo',
+            );
+            input = { ...input, photoFileId };
+            // Guarda o id da foto: se o check-in falhar, não envia a foto de novo.
+            await this.replace({ ...item, input });
+          }
+          await api.patrols.checkin(item.runId, input, item.id);
         }
         await this.save(this.items.filter((i) => i.id !== item.id));
       } catch (error) {

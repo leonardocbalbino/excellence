@@ -89,6 +89,18 @@ export function TimesheetTable({
                       </span>
                     );
                   })}
+                  {day.entries
+                    .filter((entry) => entry.lateReason)
+                    .map((entry) => (
+                      <Badge
+                        key={`atraso-${entry.id}`}
+                        variant="warning"
+                        className="max-w-72 whitespace-normal"
+                        title={entry.lateReason ?? undefined}
+                      >
+                        Atraso: {entry.lateReason}
+                      </Badge>
+                    ))}
                   {day.justifications.map((j) => (
                     <Badge key={j.id} variant="outline">
                       Atestado{j.startTime ? ` ${j.startTime}–${j.endTime ?? ''}` : ''}

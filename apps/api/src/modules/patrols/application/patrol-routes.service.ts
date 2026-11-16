@@ -22,6 +22,7 @@ export const ROUTE_SELECT = {
   description: true,
   expectedMinutes: true,
   enforceOrder: true,
+  checkinMode: true,
   minPoints: true,
   startMinutes: true,
   weekdays: true,
@@ -43,6 +44,7 @@ export interface RouteRow {
   description: string | null;
   expectedMinutes: number;
   enforceOrder: boolean;
+  checkinMode: PatrolRoute['checkinMode'];
   minPoints: number | null;
   startMinutes: number[];
   weekdays: number[];
@@ -60,6 +62,7 @@ export function toRoute(row: RouteRow): PatrolRoute {
     description: row.description,
     expectedMinutes: row.expectedMinutes,
     enforceOrder: row.enforceOrder,
+    checkinMode: row.checkinMode,
     minPoints: row.minPoints,
     points: row.points.map((p) => p.point),
     startTimes: [...row.startMinutes].sort((a, b) => a - b).map(minutesToTime),
@@ -114,6 +117,7 @@ export class PatrolRoutesService {
       description: input.description,
       expectedMinutes: input.expectedMinutes,
       enforceOrder: input.enforceOrder,
+      checkinMode: input.checkinMode,
       minPoints: input.minPoints ?? null,
       startMinutes: input.startTimes.map(timeToMinutes),
       weekdays: input.weekdays,
