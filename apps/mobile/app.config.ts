@@ -20,7 +20,7 @@ const config: ExpoConfig = {
   name: 'Excellence',
   slug: 'excellence',
   scheme: 'excellence',
-  version: '1.0.0',
+  version: '1.0.1',
   orientation: 'portrait',
   userInterfaceStyle: 'automatic',
   icon: '../web/public/icon-512.png',
