@@ -46,6 +46,10 @@ export function EmployeeSchedulePanel({
     enabled: canAssign,
   });
   const selected = schedules.data?.find((s) => s.id === scheduleId);
+  // Só o vínculo mais recente pode ser removido (o anterior volta a valer).
+  const latestId = [...(assignments.data ?? [])].sort((a, b) =>
+    b.startDate.localeCompare(a.startDate),
+  )[0]?.id;
 
   const refresh = async () => {
     await queryClient.invalidateQueries({ queryKey: [...assignmentsQueryKey, employeeId] });
@@ -92,14 +96,24 @@ export function EmployeeSchedulePanel({
                   <strong>{a.scheduleName}</strong> — de {formatDate(a.startDate)}
                   {a.endDate ? ` até ${formatDate(a.endDate)}` : ' em diante'}
                 </span>
-                {canAssign && a.startDate > today ? (
+                {canAssign && a.id === latestId ? (
                   <Button
                     variant="ghost"
-                    size="icon"
+                    size="sm"
                     aria-label={`Remover vínculo com ${a.scheduleName}`}
-                    onClick={() => unassign.mutate(a.id)}
+                    disabled={unassign.isPending}
+                    onClick={() => {
+                      const inEffect = a.startDate <= today;
+                      const ok = window.confirm(
+                        inEffect
+                          ? `Remover a escala "${a.scheduleName}" deste funcionário? A escala anterior (se houver) volta a valer e o previsto dos dias desde ${formatDate(a.startDate)} muda no espelho. As marcações de ponto não mudam.`
+                          : `Remover a escala "${a.scheduleName}" que começaria em ${formatDate(a.startDate)}?`,
+                      );
+                      if (ok) unassign.mutate(a.id);
+                    }}
                   >
                     <Trash2Icon />
+                    Remover
                   </Button>
                 ) : null}
               </li>
@@ -119,7 +133,8 @@ export function EmployeeSchedulePanel({
             }}
           >
             <p className="text-sm font-medium sm:col-span-3">
-              Nova escala (a atual é encerrada na véspera)
+              Nova escala (a atual é encerrada na véspera). Para trocar uma escala escolhida errada,
+              remova o vínculo acima e vincule de novo.
             </p>
             <div className="grid gap-2">
               <Label htmlFor="assign-schedule">Escala</Label>

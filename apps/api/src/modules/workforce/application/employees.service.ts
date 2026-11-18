@@ -223,6 +223,9 @@ export class EmployeesService {
         include: EMPLOYEE_INCLUDE,
       });
       const after = toEmployee(row, today);
+      if (after.terminationDate && after.terminationDate !== before.terminationDate) {
+        await closeOnTermination(tx, id, after.terminationDate, this.audit);
+      }
       await this.audit.record(
         {
           action: 'employee.updated',
@@ -371,4 +374,41 @@ export class EmployeesService {
 function requireScope(grant: AccessGrant) {
   if (!grant.scope) throw new Error('Rota de funcionários sem escopo de permissão');
   return grant.scope;
+}
+
+/**
+ * Desligamento registrado: a escala termina no dia do desligamento (vínculos que só começariam
+ * depois saem) e o funcionário deixa as rotas de ronda. Sem isso ele continuava aparecendo nas
+ * escalas e rotas. Voltar atrás no desligamento não reabre nada: o RH vincula de novo.
+ */
+async function closeOnTermination(
+  tx: Parameters<Parameters<TenantPrismaService['client']['$transaction']>[0]>[0],
+  employeeId: string,
+  terminationDate: string,
+  audit: AuditService,
+): Promise<void> {
+  const last = toCalendarDate(terminationDate);
+  const removed = await tx.employeeScheduleAssignment.deleteMany({
+    where: { employeeId, startDate: { gt: last } },
+  });
+  const closed = await tx.employeeScheduleAssignment.updateMany({
+    where: { employeeId, OR: [{ endDate: null }, { endDate: { gt: last } }] },
+    data: { endDate: last },
+  });
+  const routes = await tx.patrolRouteAssignee.deleteMany({ where: { employeeId } });
+  if (removed.count + closed.count + routes.count === 0) return;
+  await audit.record(
+    {
+      action: 'employee.termination_cleanup',
+      resourceType: 'employee',
+      resourceId: employeeId,
+      metadata: toAuditJson({
+        terminationDate,
+        scheduleAssignmentsClosed: closed.count,
+        scheduleAssignmentsRemoved: removed.count,
+        patrolRoutesLeft: routes.count,
+      }),
+    },
+    tx,
+  );
 }

@@ -33,13 +33,13 @@ describe('Postos de trabalho', () => {
     const user = userEvent.setup();
     await user.type(await screen.findByLabelText('Nome'), 'Posto Anil');
     // Raio sem coordenadas: a validação compartilhada recusa.
-    await user.type(screen.getByLabelText('Raio (metros)'), '150');
+    await user.type(screen.getByLabelText('Raio da cerca (metros)'), '150');
     await user.click(screen.getByRole('button', { name: 'Salvar posto' }));
     expect(
       await screen.findByText('A cerca virtual exige as coordenadas do posto'),
     ).toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: 'Usar minha localização atual' }));
+    await user.click(screen.getByRole('button', { name: 'Fincar onde estou agora' }));
     await waitFor(() => expect(screen.getByLabelText('Latitude')).toHaveValue('-2.549562'));
     await user.click(screen.getByRole('button', { name: 'Salvar posto' }));
     await waitFor(() =>

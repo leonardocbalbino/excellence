@@ -10,10 +10,9 @@ import { ProblemException } from '../../../common/errors/problem.exception';
 import { TenantPrismaService } from '../../../infrastructure/prisma/tenant-prisma.service';
 import type { AccessGrant } from '../../access-control/http/access.decorators';
 import { AuditService } from '../../audit/application/audit.service';
-import { CompanyService } from '../../organization/application/company.service';
 import { invalidReference } from '../../organization/application/catalog-rules';
 import { EmployeesService } from '../../workforce/application/employees.service';
-import { fromCalendarDate, toCalendarDate, todayIn } from '../../workforce/domain/calendar';
+import { fromCalendarDate, toCalendarDate } from '../../workforce/domain/calendar';
 import { addDays, planDays, type PlannerSchedule } from '../domain/planner';
 import { usableIn } from '../domain/unit-owner';
 
@@ -57,15 +56,14 @@ const ASSIGNMENT_SELECT = {
 
 /**
  * Vínculo do funcionário às escalas, com histórico. Um novo vínculo encerra o anterior na
- * véspera; vínculos já em vigor são histórico (o ponto é calculado sobre eles) e não se
- * apagam. O acesso ao funcionário respeita o escopo da permissão da rota.
+ * véspera; só o vínculo mais recente pode ser removido (o anterior volta a valer). O acesso ao
+ * funcionário respeita o escopo da permissão da rota.
  */
 @Injectable()
 export class AssignmentsService {
   constructor(
     private readonly db: TenantPrismaService,
     private readonly employees: EmployeesService,
-    private readonly company: CompanyService,
     private readonly audit: AuditService,
   ) {}
 
@@ -140,7 +138,12 @@ export class AssignmentsService {
     });
   }
 
-  /** Remove um vínculo que ainda não começou e reabre o anterior. */
+  /**
+   * Remove o vínculo mais recente do funcionário (mesmo já em vigor, para corrigir uma escala
+   * escolhida errada) e reabre o anterior. Os do meio do histórico não saem: deixariam um
+   * buraco entre as escalas. A remoção fica na auditoria; as marcações não mudam, só o previsto
+   * dos dias cobertos.
+   */
   async remove(employeeId: string, assignmentId: string, grant: AccessGrant): Promise<void> {
     await this.employees.get(employeeId, grant);
     const row = await this.db.client.employeeScheduleAssignment.findFirst({
@@ -149,9 +152,13 @@ export class AssignmentsService {
     });
     if (!row) throw new NotFoundException('Vínculo não encontrado.');
     const assignment = toAssignment(row);
-    const today = todayIn(await this.company.timezone());
-    if (assignment.startDate <= today) {
-      throw conflict('Vínculo já em vigor faz parte do histórico e não pode ser removido.');
+    const later = await this.db.client.employeeScheduleAssignment.count({
+      where: { employeeId, startDate: { gt: row.startDate } },
+    });
+    if (later > 0) {
+      throw conflict(
+        'Só o vínculo mais recente pode ser removido. Remova primeiro os posteriores.',
+      );
     }
 
     await this.db.client.$transaction(async (tx) => {

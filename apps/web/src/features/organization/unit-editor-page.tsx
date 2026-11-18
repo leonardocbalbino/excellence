@@ -246,7 +246,12 @@ function UnitForm({ unit }: { unit: Unit | undefined }) {
       const position = await getCurrentPosition();
       form.setValue('latitude', Number(position.latitude.toFixed(6)), { shouldDirty: true });
       form.setValue('longitude', Number(position.longitude.toFixed(6)), { shouldDirty: true });
-      toast.info(`Localização obtida com precisão de ${Math.round(position.accuracyMeters)} m.`);
+      if (form.getValues('geofenceRadiusMeters') === null) {
+        form.setValue('geofenceRadiusMeters', 100, { shouldDirty: true });
+      }
+      toast.info(
+        `Pino fincado onde você está (precisão de ${Math.round(position.accuracyMeters)} m).`,
+      );
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Não foi possível obter a localização.');
     } finally {
@@ -362,28 +367,10 @@ function UnitForm({ unit }: { unit: Unit | undefined }) {
             onPick={pickOnMap}
           />
         </div>
-        <FormField label="Latitude" error={errors.latitude?.message}>
-          {(field) => (
-            <Input
-              {...field}
-              {...form.register('latitude', { setValueAs: numberOrNull })}
-              inputMode="decimal"
-            />
-          )}
-        </FormField>
-        <FormField label="Longitude" error={errors.longitude?.message}>
-          {(field) => (
-            <Input
-              {...field}
-              {...form.register('longitude', { setValueAs: numberOrNull })}
-              inputMode="decimal"
-            />
-          )}
-        </FormField>
         <FormField
-          label="Raio (metros)"
+          label="Raio da cerca (metros)"
           error={errors.geofenceRadiusMeters?.message}
-          hint={`De ${GEOFENCE_RADIUS_LIMITS.min} a ${GEOFENCE_RADIUS_LIMITS.max} m. Vazio = sem cerca.`}
+          hint={`De ${GEOFENCE_RADIUS_LIMITS.min} a ${GEOFENCE_RADIUS_LIMITS.max} m. Vazio = sem cerca (o ponto pede foto).`}
         >
           {(field) => (
             <Input
@@ -393,12 +380,40 @@ function UnitForm({ unit }: { unit: Unit | undefined }) {
             />
           )}
         </FormField>
-        <div className="sm:col-span-3">
+        <div className="flex items-end sm:col-span-2">
           <Button type="button" variant="outline" onClick={() => void locate()} disabled={locating}>
             {locating ? <Spinner /> : <LocateFixedIcon />}
-            Usar minha localização atual
+            Fincar onde estou agora
           </Button>
         </div>
+        <details
+          className="rounded-md border px-3 py-2 sm:col-span-3"
+          open={errors.latitude || errors.longitude ? true : undefined}
+        >
+          <summary className="cursor-pointer text-sm text-muted-foreground">
+            Digitar coordenadas (opcional)
+          </summary>
+          <div className="mt-3 grid gap-4 sm:grid-cols-2">
+            <FormField label="Latitude" error={errors.latitude?.message}>
+              {(field) => (
+                <Input
+                  {...field}
+                  {...form.register('latitude', { setValueAs: numberOrNull })}
+                  inputMode="decimal"
+                />
+              )}
+            </FormField>
+            <FormField label="Longitude" error={errors.longitude?.message}>
+              {(field) => (
+                <Input
+                  {...field}
+                  {...form.register('longitude', { setValueAs: numberOrNull })}
+                  inputMode="decimal"
+                />
+              )}
+            </FormField>
+          </div>
+        </details>
       </fieldset>
 
       <fieldset className="grid gap-4" disabled={!canManage}>

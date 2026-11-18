@@ -1,5 +1,6 @@
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import {
+  employeeSchema,
   holidaySchema,
   PERMISSION_KEYS,
   plannedDaySchema,
@@ -228,6 +229,72 @@ describe('Jornada (integração)', () => {
       return { ...s, fiveTwo, twelveThirtySix, employee };
     }
 
+    it('desligamento encerra a escala no último dia e tira o funcionário das rotas', async () => {
+      const { auth, companyId, unit, fiveTwo, twelveThirtySix, employee } = await setup();
+      const base = `/api/v1/employees/${employee.id}/schedule-assignments`;
+      await http()
+        .post(base)
+        .set(auth)
+        .send({ scheduleId: fiveTwo.id, startDate: '2024-02-01' })
+        .expect(201);
+      await http()
+        .post(base)
+        .set(auth)
+        .send({ scheduleId: twelveThirtySix.id, startDate: '2099-01-10' })
+        .expect(201);
+      const route = await prisma.patrolRoute.create({
+        data: {
+          companyId,
+          unitId: unit.id,
+          name: 'Perímetro',
+          expectedMinutes: 30,
+          startMinutes: [],
+          weekdays: [],
+        },
+      });
+      await prisma.patrolRouteAssignee.create({
+        data: { companyId, routeId: route.id, employeeId: employee.id },
+      });
+
+      const current = employeeSchema.parse(
+        (await http().get(`/api/v1/employees/${employee.id}`).set(auth).expect(200)).body,
+      );
+      const {
+        id: _id,
+        status: _s,
+        unit: _u,
+        department: _d,
+        position: _p,
+        union: _un,
+        manager: _m,
+        userId: _uid,
+        ...rest
+      } = current;
+      await http()
+        .put(`/api/v1/employees/${employee.id}`)
+        .set(auth)
+        .send({
+          ...rest,
+          unitId: unit.id,
+          departmentId: null,
+          positionId: null,
+          unionId: null,
+          managerId: null,
+          terminationDate: '2024-06-30',
+        })
+        .expect(200);
+
+      const assignments = z
+        .array(scheduleAssignmentSchema)
+        .parse((await http().get(base).set(auth).expect(200)).body);
+      expect(assignments.map((a) => [a.startDate, a.endDate])).toEqual([
+        ['2024-02-01', '2024-06-30'],
+      ]);
+      expect(await prisma.patrolRouteAssignee.count({ where: { employeeId: employee.id } })).toBe(
+        0,
+      );
+    });
+
     it('troca de escala encerra a anterior; vínculo futuro pode ser removido e reabre a anterior', async () => {
       const { auth, fiveTwo, twelveThirtySix, employee } = await setup();
       const base = `/api/v1/employees/${employee.id}/schedule-assignments`;
@@ -262,17 +329,26 @@ describe('Jornada (integração)', () => {
         .expect(409);
       expect(problemOf(overlap.body).type).toBe(ProblemType.AssignmentOverlap);
 
+      // Do meio do histórico não sai: deixaria um buraco entre as escalas.
+      const middle = list.find((a) => a.scheduleName === '5x2');
+      const blocked = await http()
+        .delete(`${base}/${middle?.id ?? ''}`)
+        .set(auth)
+        .expect(409);
+      expect(problemOf(blocked.body).type).toBe(ProblemType.AssignmentOverlap);
+
       await http().delete(`${base}/${future.id}`).set(auth).expect(204);
       list = z.array(scheduleAssignmentSchema).parse((await http().get(base).set(auth)).body);
       expect(list.map((a) => [a.scheduleName, a.endDate])).toEqual([['5x2', null]]);
 
-      // Vínculo em vigor é histórico.
+      // O mais recente sai mesmo em vigor (escala escolhida errada).
       const current = list[0];
-      const past = await http()
+      await http()
         .delete(`${base}/${current?.id ?? ''}`)
         .set(auth)
-        .expect(409);
-      expect(problemOf(past.body).type).toBe(ProblemType.AssignmentOverlap);
+        .expect(204);
+      list = z.array(scheduleAssignmentSchema).parse((await http().get(base).set(auth)).body);
+      expect(list).toEqual([]);
 
       // Antes da admissão (2024-01-02), não.
       await http()
