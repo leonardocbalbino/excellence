@@ -48,8 +48,12 @@ dependem de lei e convenção coletiva.
 - O histórico fica em `employee_schedule_assignments`. Um novo vínculo encerra o vigente na
   véspera. Não é possível criar vínculo antes de um que já existe, nem antes da admissão.
 - O banco impede períodos sobrepostos com `EXCLUDE USING gist` (`btree_gist`).
-- Só um vínculo que ainda não começou pode ser removido, e isso reabre o anterior. Vínculos já
-  em vigor são histórico.
+- Só o vínculo mais recente pode ser removido, mesmo já em vigor (corrigir uma escala escolhida
+  errada; alterado em 2026-11-18), e isso reabre o anterior. Os do meio do histórico não saem,
+  para não deixar buraco entre as escalas. A remoção fica na auditoria; as marcações não mudam,
+  só o previsto dos dias cobertos.
+- O desligamento encerra a escala no dia do desligamento, apaga vínculos que começariam
+  depois e tira o funcionário das rotas de ronda.
 
 **Escala prevista**
 

@@ -1,12 +1,15 @@
 import 'leaflet/dist/leaflet.css';
 import type * as Leaflet from 'leaflet';
-import type { Circle, CircleMarker, Map as LeafletMap } from 'leaflet';
+import type { Circle, Map as LeafletMap, Marker } from 'leaflet';
 import { MapPinIcon, SearchIcon } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/feedback';
 import { Input } from '@/components/ui/input';
+
+/** Pino do posto (SVG embutido: o ícone padrão do Leaflet depende de imagens soltas). */
+const PIN_HTML = `<svg xmlns="http://www.w3.org/2000/svg" width="36" height="48" viewBox="0 0 36 48" aria-hidden="true"><path d="M18 1C8.6 1 1 8.6 1 18c0 12.4 15.2 27.6 15.9 28.3a1.5 1.5 0 0 0 2.2 0C19.8 45.6 35 30.4 35 18 35 8.6 27.4 1 18 1z" fill="#b8893b" stroke="#fff" stroke-width="2"/><circle cx="18" cy="18" r="6.5" fill="#fff"/></svg>`;
 
 /** Centro do Brasil, para quando o posto ainda não tem localização. */
 const BRAZIL: [number, number] = [-14.2, -51.9];
@@ -62,7 +65,7 @@ export function GeofenceMap({
 }) {
   const container = useRef<HTMLDivElement>(null);
   const map = useRef<LeafletMap | null>(null);
-  const marker = useRef<CircleMarker | null>(null);
+  const marker = useRef<Marker | null>(null);
   const circle = useRef<Circle | null>(null);
   const leaflet = useRef<typeof Leaflet | null>(null);
   // O clique no mapa usa sempre a versão atual do callback e do bloqueio.
@@ -98,6 +101,11 @@ export function GeofenceMap({
           if (locked.current) return;
           pick.current(round(event.latlng.lat), round(event.latlng.lng));
         });
+        // O mapa nasce dentro de abas e cartões: recalcula o tamanho quando o espaço muda
+        // (sem isso, parte dele fica cinza).
+        const observer = new ResizeObserver(() => instance.invalidateSize());
+        observer.observe(container.current);
+        instance.on('unload', () => observer.disconnect());
         map.current = instance;
         setReady(true);
       })
@@ -135,13 +143,18 @@ export function GeofenceMap({
         weight: 2,
       }).addTo(instance);
     }
-    marker.current = L.circleMarker(center, {
-      radius: 8,
-      color: '#ffffff',
-      weight: 3,
-      fillColor: '#b8893b',
-      fillOpacity: 1,
+    // Pino fincado no centro do posto; arrastar ajusta a posição.
+    const pin = L.marker(center, {
+      draggable: !locked.current,
+      autoPan: true,
+      title: 'Centro do posto',
+      icon: L.divIcon({ className: '', html: PIN_HTML, iconSize: [36, 48], iconAnchor: [18, 46] }),
     }).addTo(instance);
+    pin.on('dragend', () => {
+      const at = pin.getLatLng();
+      pick.current(round(at.lat), round(at.lng));
+    });
+    marker.current = pin;
   }, [ready, latitude, longitude, radiusMeters]);
 
   const flyTo = (lat: number, lng: number) => {
@@ -234,6 +247,13 @@ export function GeofenceMap({
             </ul>
           ) : null}
         </div>
+      )}
+      {disabled ? null : (
+        <p className="text-sm font-medium">
+          {latitude === null || longitude === null
+            ? 'Clique no mapa, no local do posto, para fincar o pino.'
+            : 'Arraste o pino ou clique em outro lugar para ajustar. O círculo é a área onde o ponto vale.'}
+        </p>
       )}
       {mapError ? (
         <Alert variant="destructive">{mapError}</Alert>
